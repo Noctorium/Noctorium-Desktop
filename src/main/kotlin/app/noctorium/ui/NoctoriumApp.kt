@@ -63,6 +63,9 @@ import app.noctorium.domain.*
 import app.noctorium.lyrics.LyricLine
 import app.noctorium.lyrics.LyricsProviderOutcome
 import app.noctorium.lyrics.LyricsProviderStatus
+import app.noctorium.lyrics.currentLine
+import app.noctorium.library.TrackEdit
+import androidx.compose.material.icons.outlined.PushPin
 import app.noctorium.playback.PlaybackToolInstaller
 import app.noctorium.playback.QueueState
 import app.noctorium.playback.PlaybackState
@@ -222,6 +225,16 @@ private fun HomeScreen(ui: AppUiState, state: AppState) {
         }
         ui.errorMessage?.let { message ->
             item { PlaybackError(message) }
+        }
+        // The listener's own row first: what they decided to keep within reach beats what happened to be
+        // played last, which beats anything the services suggest.
+        val pinned = ui.pinnedTracks.filter { track ->
+            ui.providerFilter == ProviderFilter.ALL || track.provider.name == ui.providerFilter.name
+        }
+        if (pinned.isNotEmpty()) {
+            item {
+                TrackRowSection("Pinned", "Kept here by you", pinned, state)
+            }
         }
         if (recent.isNotEmpty()) {
             item {
@@ -1169,9 +1182,12 @@ private fun LikeButton(track: Track, state: AppState, size: Dp = 36.dp) {
 private fun TrackMenu(track: Track, state: AppState) {
     var expanded by remember { mutableStateOf(false) }
     var addToPlaylistOpen by remember { mutableStateOf(false) }
+    var editOpen by remember { mutableStateOf(false) }
     val library by state.library.collectAsState()
     val likes by state.likes.collectAsState()
+    val ui by state.ui.collectAsState()
     val likedNow = likes.isLiked(track)
+    val pinned = ui.pinnedTracks.any { it.queueKey == track.queueKey }
     Box {
         IconButton({ expanded = true }, Modifier.size(36.dp)) {
             Icon(Icons.Default.MoreVert, "Track actions", tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1242,6 +1258,16 @@ private fun TrackMenu(track: Track, state: AppState) {
             )
             HorizontalDivider()
             DropdownMenuItem(
+                text = { Text(if (pinned) "Unpin from Home" else "Pin to Home") },
+                leadingIcon = { Icon(if (pinned) Icons.Default.PushPin else Icons.Outlined.PushPin, null) },
+                onClick = { state.togglePin(track); expanded = false },
+            )
+            DropdownMenuItem(
+                text = { Text("Edit details…") },
+                leadingIcon = { Icon(Icons.Default.Edit, null) },
+                onClick = { expanded = false; editOpen = true },
+            )
+            DropdownMenuItem(
                 text = { Text("Copy link") },
                 leadingIcon = { Icon(Icons.Default.Link, null) },
                 onClick = { state.copyTrackLink(track); expanded = false },
@@ -1256,7 +1282,58 @@ private fun TrackMenu(track: Track, state: AppState) {
         if (addToPlaylistOpen) {
             AddToPlaylistDialog(track, library.localPlaylists, state) { addToPlaylistOpen = false }
         }
+        if (editOpen) {
+            EditTrackDialog(track, ui.trackEdits[track.queueKey], state) { editOpen = false }
+        }
     }
+}
+
+/**
+ * Where the listener corrects what a service calls a track.
+ *
+ * Uploader titles are the reason this exists: "Artist - Song (Official Video) [4K]" credited to a channel.
+ * Both fields start as whatever is showing now; a field left blank keeps the service's own, and the
+ * third button forgets the edit altogether. Nothing here is sent anywhere -- it is this device's opinion.
+ */
+@Composable
+private fun EditTrackDialog(track: Track, existing: TrackEdit?, state: AppState, dismiss: () -> Unit) {
+    var title by remember { mutableStateOf(track.title) }
+    var artist by remember { mutableStateOf(track.artistLine) }
+    AlertDialog(
+        onDismissRequest = dismiss,
+        title = { Text("Edit details") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Changes what this track is called here, in the queue, in lyrics searches and in what is " +
+                        "scrobbled. Only on this device; the service is not told.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
+                OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(artist, { artist = it }, label = { Text("Artist") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton({
+                // A field the listener left as it was is not an edit; only what they changed is kept.
+                state.editTrack(
+                    track,
+                    title.takeIf { it.trim() != track.title.trim() || existing?.title != null },
+                    artist.takeIf { it.trim() != track.artistLine.trim() || existing?.artist != null },
+                )
+                dismiss()
+            }) { Text("Save") }
+        },
+        dismissButton = {
+            Row {
+                if (existing != null) {
+                    TextButton({ state.clearTrackEdit(track); dismiss() }) { Text("Use the service's") }
+                }
+                TextButton(dismiss) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 @Composable
@@ -1552,11 +1629,16 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 13.sp,
                         )
+                        val lyricLine = barLyricLine(playback, state)
                         Text(
-                            playback.errorMessage ?: current?.artistLine ?: "Choose a track to start",
+                            playback.errorMessage ?: lyricLine ?: current?.artistLine ?: "Choose a track to start",
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = when {
+                                playback.errorMessage != null -> MaterialTheme.colorScheme.error
+                                lyricLine != null -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                             fontSize = 11.sp,
                         )
                     }
@@ -1590,6 +1672,21 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
             if (atTop) HorizontalDivider(color = rule)
         }
     }
+}
+
+/**
+ * The line being sung, for the player bar, or null to show the artist instead.
+ *
+ * Only while playing and only when the lyrics are timed and the listener has not switched it off. The
+ * artist is one click away on the now playing screen; the lyric is only ever now. The idea of a lyric
+ * that follows you around the application is SpMp's.
+ */
+@Composable
+private fun barLyricLine(playback: PlaybackState, state: AppState): String? {
+    val preferences = state.settings.collectAsState().value.preferences
+    if (!preferences.lyricsInPlayerBar || !playback.isPlaying) return null
+    val lyrics by state.lyrics.collectAsState()
+    return lyrics.currentLine(playback.positionMs)
 }
 
 @Composable
@@ -1648,11 +1745,16 @@ private fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppStat
                                 overflow = TextOverflow.Ellipsis,
                                 fontWeight = FontWeight.SemiBold,
                             )
+                            val lyricLine = barLyricLine(playback, state)
                             Text(
-                                playback.errorMessage ?: current?.artistLine ?: "Choose a track to start",
+                                playback.errorMessage ?: lyricLine ?: current?.artistLine ?: "Choose a track to start",
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = when {
+                                    playback.errorMessage != null -> MaterialTheme.colorScheme.error
+                                    lyricLine != null -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                                 fontSize = 12.sp,
                             )
                         }
@@ -3046,6 +3148,25 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
                 "Tints the screen with colours sampled from the cover.",
                 preferences.ambientBackdrop,
                 state::setAmbientBackdrop,
+            )
+            Spacer(Modifier.height(10.dp))
+            ToggleRow(
+                "Lyrics in the player bar",
+                "Shows the line being sung in place of the artist, while the lyrics are timed.",
+                preferences.lyricsInPlayerBar,
+                state::setLyricsInPlayerBar,
+            )
+        }
+
+        SettingsPanelCard {
+            CardHeading(Icons.Default.PlayCircle, "Playback")
+            Spacer(Modifier.height(12.dp))
+            ToggleRow(
+                "Skip the parts of a YouTube video that are not the music",
+                "Intros, outros, sponsor reads and talking, as marked by SponsorBlock's contributors. " +
+                    "YouTube Music tracks are never touched. Asks sponsor.ajay.app by a hash of the video id.",
+                preferences.skipNonMusic,
+                state::setSkipNonMusic,
             )
         }
 
