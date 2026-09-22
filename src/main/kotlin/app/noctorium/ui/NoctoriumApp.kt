@@ -35,7 +35,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -158,11 +160,14 @@ private fun NavigationRail(selected: Destination, navigate: (Destination) -> Uni
         Modifier.width(176.dp).fillMaxHeight().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 18.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(36.dp).clip(RoundedCornerShape(12.dp))
-                    .background(Brush.linearGradient(listOf(NoctoriumLavender, NoctoriumPurpleStrong))),
-                contentAlignment = Alignment.Center,
-            ) { Text("N", color = Color.White, fontWeight = FontWeight.Black, fontSize = 21.sp) }
+            // The same artwork the window, the taskbar and the phone's launcher show, so the mark beside
+            // the name and the mark in the title bar are recognisably one thing.
+            Image(
+                painterResource("noctorium-mark.png"),
+                null,
+                Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop,
+            )
             Spacer(Modifier.width(10.dp))
             Text("Noctorium", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }

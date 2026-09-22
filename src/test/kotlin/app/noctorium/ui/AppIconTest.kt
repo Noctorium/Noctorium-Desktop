@@ -1,17 +1,20 @@
 package app.noctorium.ui
 
+import java.awt.image.BufferedImage
+import java.io.ByteArrayInputStream
 import java.io.File
+import javax.imageio.ImageIO
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
  * The application's mark.
  *
- * Drawn rather than loaded, so it is worth checking that what comes out is actually an icon: a coloured
- * square with rounded corners and a legible letter, at every size Windows might ask for. A blank or
- * transparent image would still compile, still be set on the window, and simply show as nothing.
+ * Scaled from one piece of artwork, so what is worth checking is that it arrives: that every size is
+ * actually the picture rather than a blank square, a black square or a smear, and that the files the
+ * packagers read still show what the code draws. A transparent image would compile, be set on the window,
+ * and show as nothing.
  */
 class AppIconTest {
     @Test
@@ -43,57 +46,30 @@ class AppIconTest {
         }
     }
 
+    /**
+     * The artwork is a bright figure on a near-black field, so both have to survive the scaling.
+     *
+     * At sixteen pixels a careless downscale averages the two into an even grey, which is the failure
+     * this guards: the icon would still be opaque, still be the right size, and read as a smudge.
+     */
     @Test
-    fun `the mark carries the gradient the sidebar uses, not a flat fill`() {
-        val image = AppIcon.image(64)
-        // Sampled inside the shape but away from the letter, at opposite ends of the gradient.
-        val topLeft = image.getRGB(10, 6)
-        val bottomRight = image.getRGB(54, 58)
-
-        assertTrue(topLeft != bottomRight, "the fill is flat; the gradient did not take")
-        // Lavender at the start, deeper violet at the end: the start must be the lighter of the two.
-        assertTrue(brightness(topLeft) > brightness(bottomRight), "the gradient runs the wrong way")
-    }
-
-    @Test
-    fun `the letter is drawn, and in white`() {
-        val image = AppIcon.image(64)
-        var white = 0
-        for (x in 0 until 64) {
-            for (y in 0 until 64) {
-                val pixel = image.getRGB(x, y)
-                val r = (pixel shr 16) and 0xFF
-                val g = (pixel shr 8) and 0xFF
-                val b = pixel and 0xFF
-                if (r > 235 && g > 235 && b > 235) white += 1
-            }
-        }
-        // Enough pixels to be a letter rather than a stray edge, and far from the whole square.
-        assertTrue(white in 120..900, "found $white near-white pixels, which is not a letter")
-    }
-
-    /** The letter must be centred on its own outline, or it sits visibly high in the square. */
-    @Test
-    fun `the letter sits in the middle of the square`() {
-        val image = AppIcon.image(128)
-        var minY = Int.MAX_VALUE
-        var maxY = Int.MIN_VALUE
-        for (x in 0 until 128) {
-            for (y in 0 until 128) {
-                val pixel = image.getRGB(x, y)
-                if (((pixel shr 16) and 0xFF) > 235 && ((pixel shr 8) and 0xFF) > 235 && (pixel and 0xFF) > 235) {
-                    if (y < minY) minY = y
-                    if (y > maxY) maxY = y
+    fun `the picture survives every size, dark field and bright figure both`() {
+        AppIcon.SIZES.forEach { size ->
+            val image = AppIcon.image(size)
+            var darkest = 255
+            var brightest = 0
+            for (x in 0 until size) {
+                for (y in 0 until size) {
+                    val pixel = image.getRGB(x, y)
+                    if (pixel ushr 24 < 128) continue
+                    val luma = luma(pixel)
+                    if (luma < darkest) darkest = luma
+                    if (luma > brightest) brightest = luma
                 }
             }
+            assertTrue(darkest < 40, "the $size icon has no dark field: darkest is $darkest")
+            assertTrue(brightest > 170, "the $size icon has no bright figure: brightest is $brightest")
         }
-        assertTrue(minY < maxY, "no letter was found at all")
-        val gapAbove = minY
-        val gapBelow = 127 - maxY
-        assertTrue(
-            kotlin.math.abs(gapAbove - gapBelow) <= 6,
-            "the letter is off centre: $gapAbove above, $gapBelow below",
-        )
     }
 
     @Test
@@ -122,13 +98,10 @@ class AppIconTest {
         val bytes = AppIcon.icoBytes()
         val count = bytes[4].toInt() or (bytes[5].toInt() shl 8)
 
-        fun int(at: Int) = (bytes[at].toInt() and 0xFF) or ((bytes[at + 1].toInt() and 0xFF) shl 8) or
-            ((bytes[at + 2].toInt() and 0xFF) shl 16) or ((bytes[at + 3].toInt() and 0xFF) shl 24)
-
         repeat(count) { index ->
             val entry = 6 + index * 16
-            val length = int(entry + 8)
-            val offset = int(entry + 12)
+            val length = int(bytes, entry + 8)
+            val offset = int(bytes, entry + 12)
             assertTrue(length > 0, "entry $index has no data")
             assertTrue(offset + length <= bytes.size, "entry $index points past the end of the file")
         }
@@ -146,13 +119,10 @@ class AppIconTest {
         val bytes = AppIcon.icoBytes()
         val count = bytes[4].toInt() or (bytes[5].toInt() shl 8)
 
-        fun int(at: Int) = (bytes[at].toInt() and 0xFF) or ((bytes[at + 1].toInt() and 0xFF) shl 8) or
-            ((bytes[at + 2].toInt() and 0xFF) shl 16) or ((bytes[at + 3].toInt() and 0xFF) shl 24)
-
         repeat(count) { index ->
             val entry = 6 + index * 16
             val declared = bytes[entry].toInt() and 0xFF
-            val offset = int(entry + 12)
+            val offset = int(bytes, entry + 12)
             val isPng = bytes[offset] == 0x89.toByte() && bytes[offset + 1] == 'P'.code.toByte()
 
             if (declared == 0) {
@@ -160,9 +130,9 @@ class AppIconTest {
             } else {
                 assertTrue(!isPng, "the $declared entry should be a DIB, not a PNG")
                 // A DIB begins with the length of its own header, which is always forty.
-                assertEquals(40, int(offset), "the $declared entry has no DIB header")
+                assertEquals(40, int(bytes, offset), "the $declared entry has no DIB header")
                 // And claims twice its height, counting the mask stacked beneath it.
-                assertEquals(declared * 2, int(offset + 8), "the $declared entry's height is wrong")
+                assertEquals(declared * 2, int(bytes, offset + 8), "the $declared entry's height is wrong")
             }
         }
     }
@@ -170,40 +140,76 @@ class AppIconTest {
     /**
      * The icon shipped with the build is a file on disk, while the one in the running window is drawn.
      * If the two drift, the taskbar and the installed application stop looking like each other.
-     */
-    /**
-     * Compared byte for byte only where the drawing would come out the same.
      *
-     * The letter is set in Segoe UI Black where that exists and in the platform's own sans everywhere
-     * else, on purpose, so the same code draws different pixels on a machine without the face. A
-     * Linux CI runner is one such machine, and comparing bytes there fails for a reason that is not a
-     * defect. Where the face is present -- which includes every machine these files are regenerated on
-     * -- the guard is exact, which is where it earns its keep.
+     * Compared as a picture rather than byte for byte. Scaling six hundred pixels down to two hundred and
+     * fifty-six is arithmetic the platform is free to round its own way, and the encoder is free to
+     * deflate the result differently, so identical bytes were never the claim worth making -- the old
+     * guard sidestepped this by comparing bytes only on a machine with a particular font, which meant it
+     * never ran on the build server at all. Different artwork differs by hundreds per channel; the same
+     * artwork through a different rounding differs by one or two.
      */
     @Test
-    fun `the committed icon file matches what the code draws`() {
+    fun `the committed icon file shows what the code draws`() {
         val committed = File("src/main/resources/noctorium.ico")
         assertTrue(committed.isFile, "src/main/resources/noctorium.ico is missing")
+        val bytes = committed.readBytes()
 
-        if (AppIcon.hasPreferredFace) {
-            assertContentEquals(
-                AppIcon.icoBytes(),
-                committed.readBytes(),
-                "the committed icon is out of date; regenerate it with -Dnoctorium.writeIcons=true",
-            )
-        } else {
-            // Still worth checking it is an icon at all, and has every size, which does not depend
-            // on which face drew the letter.
-            val bytes = committed.readBytes()
-            assertEquals(1, bytes[2].toInt(), "the committed file is not an icon")
-            assertEquals(
-                AppIcon.SIZES.size,
-                bytes[4].toInt() or (bytes[5].toInt() shl 8),
-                "the committed icon has the wrong number of sizes",
-            )
-        }
+        assertEquals(1, bytes[2].toInt(), "the committed file is not an icon")
+        assertEquals(
+            AppIcon.SIZES.size,
+            bytes[4].toInt() or (bytes[5].toInt() shl 8),
+            "the committed icon has the wrong number of sizes",
+        )
+
+        // The 256 entry is the PNG one, so it can be decoded here without a DIB reader; it is also the
+        // one that carries the most of the picture, which is what is being compared.
+        val entry = 6 + AppIcon.SIZES.indexOf(256) * 16
+        val length = int(bytes, entry + 8)
+        val offset = int(bytes, entry + 12)
+        val largest = ImageIO.read(ByteArrayInputStream(bytes, offset, length))
+            ?: error("the 256 entry of the committed icon could not be decoded")
+
+        assertSamePicture(
+            AppIcon.image(256),
+            largest,
+            "the committed icon is out of date; regenerate it with -Dnoctorium.writeIcons=true",
+        )
     }
 
-    private fun brightness(argb: Int): Int =
-        ((argb shr 16) and 0xFF) + ((argb shr 8) and 0xFF) + (argb and 0xFF)
+    private fun luma(argb: Int): Int =
+        ((argb shr 16 and 0xFF) * 299 + (argb shr 8 and 0xFF) * 587 + (argb and 0xFF) * 114) / 1000
+
+    private fun int(bytes: ByteArray, at: Int) = (bytes[at].toInt() and 0xFF) or
+        ((bytes[at + 1].toInt() and 0xFF) shl 8) or
+        ((bytes[at + 2].toInt() and 0xFF) shl 16) or
+        ((bytes[at + 3].toInt() and 0xFF) shl 24)
+}
+
+/**
+ * Whether two images are the same picture, allowing for a platform rounding a scale differently.
+ *
+ * A changed picture is out by hundreds on some channel somewhere; a differently rounded one is out by a
+ * unit or two on a handful of pixels. Both a worst case and an average are checked, because either alone
+ * can be fooled: a mean hides one glaring pixel, and a maximum trips over a single rounding.
+ */
+internal fun assertSamePicture(expected: BufferedImage, actual: BufferedImage, message: String) {
+    assertEquals(expected.width, actual.width, "$message (width)")
+    assertEquals(expected.height, actual.height, "$message (height)")
+
+    var worst = 0
+    var total = 0L
+    for (x in 0 until expected.width) {
+        for (y in 0 until expected.height) {
+            val a = expected.getRGB(x, y)
+            val b = actual.getRGB(x, y)
+            listOf(24, 16, 8, 0).forEach { shift ->
+                val difference = kotlin.math.abs(((a shr shift) and 0xFF) - ((b shr shift) and 0xFF))
+                if (difference > worst) worst = difference
+                total += difference
+            }
+        }
+    }
+    val mean = total.toDouble() / (expected.width * expected.height * 4)
+    assertTrue(worst <= 8, "$message (a pixel is out by $worst)")
+    assertTrue(mean <= 1.0, "$message (out by $mean per channel on average)")
 }

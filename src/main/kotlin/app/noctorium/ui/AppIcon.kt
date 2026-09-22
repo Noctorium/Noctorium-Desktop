@@ -1,8 +1,5 @@
 package app.noctorium.ui
 
-import java.awt.Color
-import java.awt.Font
-import java.awt.GradientPaint
 import java.awt.RenderingHints
 import java.awt.geom.RoundRectangle2D
 import java.awt.image.BufferedImage
@@ -10,27 +7,38 @@ import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
 
 /**
- * The application's own mark, drawn rather than loaded.
+ * The application's mark: the artwork, drawn into whatever size is asked for.
  *
- * It is the same rounded square, gradient and letter the sidebar shows, so the icon in the title bar, the
- * one on the taskbar and the one beside the name inside the window are recognisably one thing. Drawing it
- * means every size is rendered at that size instead of being scaled down from one bitmap, which is what
- * usually turns a 16-pixel icon into mud.
+ * One picture, shipped beside the code, is the mark in the title bar, on the taskbar, in the installer,
+ * in the Linux packages and beside the name inside the window -- and the same picture is the phone's
+ * launcher icon. It used to be a gradient square with an N drawn into it, which had the advantage of
+ * being sharp at sixteen pixels and the disadvantage of being a letter in a box.
+ *
+ * Scaling is done here rather than by shipping a bitmap per size, so there is one file to change.
  */
 object AppIcon {
-    /** The sidebar's gradient, top-left to bottom-right. */
-    private val START = Color(0xD8, 0xB4, 0xFE)
-    private val END = Color(0x8B, 0x5C, 0xF6)
+    /** Where the artwork lives on the classpath. Square; everything below assumes that. */
+    private const val ARTWORK = "/noctorium-mark.png"
 
-    /** The mark's letter: Noctorium's N, the same one the sidebar and the phone's launcher icon show. */
-    private const val LETTER = "N"
-
-    /** Proportions taken from the sidebar mark: a 12dp radius and 21sp letter on a 36dp square. */
+    /** The corner radius, as a fraction of the side. The same proportion the mark has always had. */
     private const val CORNER_RATIO = 12f / 36f
-    private const val LETTER_RATIO = 21f / 36f
 
     /** The sizes Windows picks between for the title bar, the task bar, Alt-Tab and the shell. */
     val SIZES = listOf(16, 20, 24, 32, 48, 64, 128, 256)
+
+    /**
+     * The artwork, read once.
+     *
+     * Converted to ARGB on the way in: the file is opaque, and every image this object draws into has an
+     * alpha channel for the rounded corners, so doing the conversion once keeps the scaling below on one
+     * pixel layout instead of two.
+     */
+    private val artwork: BufferedImage by lazy {
+        val stream = AppIcon::class.java.getResourceAsStream(ARTWORK)
+            ?: error("$ARTWORK is missing from the resources")
+        val loaded = stream.use(ImageIO::read) ?: error("$ARTWORK could not be decoded")
+        toArgb(loaded)
+    }
 
     fun image(size: Int): BufferedImage {
         val image = BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)
@@ -38,25 +46,12 @@ object AppIcon {
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
             g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
-            g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE)
-            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
-
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+            // Clipped rather than drawn and then masked: the corners have to be genuinely transparent, or
+            // the icon is a black square against every taskbar that is not black.
             val radius = size * CORNER_RATIO
-            g.paint = GradientPaint(0f, 0f, START, size.toFloat(), size.toFloat(), END)
-            g.fill(RoundRectangle2D.Float(0f, 0f, size.toFloat(), size.toFloat(), radius * 2, radius * 2))
-
-            g.color = Color.WHITE
-            g.font = letterFont(size)
-            // Centred on the glyph's own outline rather than on the font's line metrics: a font's ascent
-            // and descent leave room for letters this one does not have, and centring on those sits the
-            // letter visibly high in the square.
-            val glyph = g.font.createGlyphVector(g.fontRenderContext, LETTER)
-            val bounds = glyph.visualBounds
-            g.drawString(
-                LETTER,
-                (size - bounds.width).toFloat() / 2f - bounds.x.toFloat(),
-                (size - bounds.height).toFloat() / 2f - bounds.y.toFloat(),
-            )
+            g.clip = RoundRectangle2D.Float(0f, 0f, size.toFloat(), size.toFloat(), radius * 2, radius * 2)
+            g.drawImage(scaled(size), 0, 0, null)
         } finally {
             g.dispose()
         }
@@ -66,30 +61,49 @@ object AppIcon {
     /** Every size at once, for handing to a window that will choose between them itself. */
     fun images(): List<BufferedImage> = SIZES.map(::image)
 
-    /** The face the committed icon files were drawn with. */
-    const val LETTER_FACE = "Segoe UI Black"
-
     /**
-     * Whether this machine has the face the icon is meant to be set in.
+     * The artwork at [target] pixels, halved repeatedly rather than scaled in one step.
      *
-     * The drawing deliberately falls back to the platform's own sans without it, so the very same code
-     * produces different pixels on a machine that has the face and one that does not. That is right for
-     * a window, and it is the reason the committed files can only be compared byte for byte on a machine
-     * that could have drawn them.
+     * One bilinear pass from six hundred pixels to sixteen samples a handful of them and misses the rest,
+     * which on artwork this fine turns the wings into speckle and the face into noise. Halving until the
+     * target is within reach averages every pixel on the way down. Each size is drawn once per run and
+     * the results are small, so they are kept.
      */
-    val hasPreferredFace: Boolean
-        get() = Font(LETTER_FACE, Font.BOLD, 12).family.equals(LETTER_FACE, ignoreCase = true)
+    private val scaledCache = java.util.concurrent.ConcurrentHashMap<Int, BufferedImage>()
 
-    private fun letterFont(size: Int): Font {
-        val points = (size * LETTER_RATIO).toInt().coerceAtLeast(6)
-        // Segoe UI is the face the rest of Windows is set in; anywhere without it falls back to the
-        // platform's own sans, which is the same choice the interface makes.
-        val segoe = Font(LETTER_FACE, Font.BOLD, points)
-        return if (segoe.family.equals(LETTER_FACE, ignoreCase = true)) {
-            segoe
-        } else {
-            Font(Font.SANS_SERIF, Font.BOLD, points)
+    private fun scaled(target: Int): BufferedImage = scaledCache.getOrPut(target) {
+        var current = artwork
+        var width = current.width
+        while (width / 2 > target) {
+            width /= 2
+            current = resize(current, width)
         }
+        resize(current, target)
+    }
+
+    private fun resize(source: BufferedImage, size: Int): BufferedImage {
+        val out = BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)
+        val g = out.createGraphics()
+        try {
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+            g.drawImage(source, 0, 0, size, size, null)
+        } finally {
+            g.dispose()
+        }
+        return out
+    }
+
+    private fun toArgb(source: BufferedImage): BufferedImage {
+        if (source.type == BufferedImage.TYPE_INT_ARGB) return source
+        val out = BufferedImage(source.width, source.height, BufferedImage.TYPE_INT_ARGB)
+        val g = out.createGraphics()
+        try {
+            g.drawImage(source, 0, 0, null)
+        } finally {
+            g.dispose()
+        }
+        return out
     }
 
     /**
