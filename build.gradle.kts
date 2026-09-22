@@ -2,11 +2,18 @@ import java.net.HttpURLConnection
 import java.net.URI
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
+/*
+ * The versions are declared here because this is the root project now, and `core` -- included from
+ * Noctorium-Base as a subproject -- applies the same Kotlin plugins without one. Keeping them in one
+ * place is what stops the two drifting onto different Kotlin or Compose versions, which on a Compose
+ * project shows up as a compiler-plugin mismatch rather than as anything that reads like a version
+ * problem. Noctorium-Mobile declares the same numbers.
+ */
 plugins {
-    kotlin("jvm")
-    kotlin("plugin.serialization")
-    id("org.jetbrains.kotlin.plugin.compose")
-    id("org.jetbrains.compose")
+    kotlin("jvm") version "2.1.21"
+    kotlin("plugin.serialization") version "2.1.21"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.1.21"
+    id("org.jetbrains.compose") version "1.8.2"
 }
 
 group = "app.noctorium"

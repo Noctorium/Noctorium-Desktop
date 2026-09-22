@@ -1,0 +1,42 @@
+name: CI
+
+# Every push and every pull request: the desktop compiles and its tests pass, against the core this
+# repository pins. Packaging is not here -- it takes twenty minutes and half a gigabyte of Chromium per
+# platform and belongs to a release, which Noctorium-Installer makes.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Tests and compilation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      # The core comes in as the base/ submodule. While Noctorium-Base is private, fetching it needs a
+      # token that can read it -- the job's own token can only see this repository -- so a fine-grained
+      # personal access token with read access to Noctorium-Base is stored as NOCTORIUM_CHECKOUT_TOKEN.
+      # Once the repositories are public the fallback to the job's own token is enough.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.NOCTORIUM_CHECKOUT_TOKEN || github.token }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Test and compile
+        run: ./gradlew test compileKotlin --stacktrace
