@@ -1,5 +1,7 @@
 import java.net.HttpURLConnection
 import java.net.URI
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 /*
@@ -237,7 +239,10 @@ val fetchPlaybackTools by tasks.registering {
             URI(url).toURL().openStream().use { input: java.io.InputStream ->
                 partial.outputStream().use { output -> input.copyTo(output) }
             }
-            partial.renameTo(into)
+            // Moved rather than renamed: File.renameTo answers false and says nothing when it cannot, and
+            // the next step then failed to open an archive that was never put where it was looked for.
+            check(partial.length() > 0) { "Nothing was downloaded from $url" }
+            Files.move(partial.toPath(), into.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
 
         fun latestAsset(repository: String, match: Regex): String {

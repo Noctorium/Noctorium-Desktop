@@ -101,23 +101,21 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
         onDispose { appState.close() }
     }
 
-    // "Match the artwork" reuses the palette already sampled for the now playing backdrop, so the whole
-    // interface drifts with whatever is on.
+    // The theme decides the page, the panels and the writing; the accent is chosen separately and may be
+    // the theme's own, one of the named ones, or -- "Match the artwork" -- the palette already sampled
+    // for the now playing backdrop, so the whole interface drifts with whatever is on.
+    val theme = preferences.themeColours()
     val artworkPalette = rememberArtworkPalette(queue.current?.artworkUrl, queue.current?.provider ?: ProviderType.LOCAL)
-    val accentTarget = preferences.accent.argb?.let { Color(it) } ?: artworkPalette.primary
+    val accentTarget = if (preferences.accent == AccentPreset.ARTWORK) artworkPalette.primary else Color(preferences.resolvedAccent(null))
     val accent by animateColorAsState(accentTarget, tween(600), label = "accent")
-    val background = when (preferences.backgroundDepth) {
-        BackgroundDepth.AMOLED -> AmoledBlack
-        BackgroundDepth.DARK -> NoctoriumDarkBackground
-    }
 
     // The title bar is Windows', not ours, so it has to be told the colour separately — and told again
-    // whenever the chosen depth changes, or a switch to pure black would leave a grey strip above it.
-    LaunchedEffect(window, background) {
+    // whenever the theme changes, or a switch to a light theme would leave a black strip above it.
+    LaunchedEffect(window, theme) {
         WindowChrome.applyDarkTitleBar(
             window,
-            backgroundArgb = background.toArgb(),
-            foregroundArgb = Color.White.copy(alpha = .88f).toArgb(),
+            backgroundArgb = Color(theme.background).toArgb(),
+            foregroundArgb = Color(theme.text).copy(alpha = .88f).toArgb(),
         )
     }
 
@@ -126,7 +124,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     // useful opinion on, and the alternative was a dialog in front of an application that cannot work yet.
     LaunchedEffect(Unit) { PlaybackToolInstaller.ensureReady() }
 
-    MaterialTheme(colorScheme = noctoriumColorScheme(accent, background)) {
+    MaterialTheme(colorScheme = noctoriumColorScheme(theme, accent)) {
         Surface(Modifier.fillMaxSize()) {
             Row {
                 NavigationRail(ui.destination, appState::navigate)
@@ -685,11 +683,11 @@ private fun NewPlaylistDialog(
                             enabled = available,
                             shape = RoundedCornerShape(11.dp),
                             color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .5f)
-                            else Color.White.copy(alpha = .04f),
+                            else ink(.04f),
                             border = BorderStroke(
                                 1.dp,
                                 if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .5f)
-                                else Color.White.copy(alpha = .08f),
+                                else ink(.08f),
                             ),
                         ) {
                             Row(
@@ -940,8 +938,8 @@ private fun VisibilityBadge(isPublic: Boolean?, compact: Boolean = false) {
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = if (isPublic) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .55f)
-        else Color.White.copy(alpha = .08f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = .1f)),
+        else ink(.08f),
+        border = BorderStroke(1.dp, ink(.1f)),
     ) {
         Row(
             Modifier.padding(horizontal = if (compact) 8.dp else 11.dp, vertical = if (compact) 3.dp else 7.dp),
@@ -1703,7 +1701,7 @@ private fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppStat
     val stackedRule = MaterialTheme.colorScheme.primary.copy(alpha = .35f)
     Surface(
         shadowElevation = 0.dp,
-        color = NoctoriumPanel,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth().height(100.dp).clickable(
             enabled = current != null,
             onClickLabel = "Open now playing",
@@ -1896,7 +1894,7 @@ private fun NowPlayingScreen(queue: QueueState, playback: PlaybackState, state: 
                 listOf(
                     ambient.copy(alpha = .42f),
                     ambientDeep.copy(alpha = .30f),
-                    AmoledBlack,
+                    MaterialTheme.colorScheme.background,
                 ),
             ),
         ),
@@ -1939,8 +1937,8 @@ private fun GlassPanel(modifier: Modifier = Modifier, content: @Composable BoxSc
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(22.dp),
-        color = Color.White.copy(alpha = .055f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = .08f)),
+        color = ink(.055f),
+        border = BorderStroke(1.dp, ink(.08f)),
         content = { Box(Modifier.fillMaxSize(), content = content) },
     )
 }
@@ -1972,7 +1970,7 @@ private fun NowPlayingHero(
                 track.artistLine,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                color = Color.White.copy(alpha = .62f),
+                color = ink(.62f),
                 fontSize = 14.sp,
             )
             Spacer(Modifier.height(18.dp))
@@ -2002,25 +2000,25 @@ private fun NowPlayingHero(
 private fun TransportControls(playback: PlaybackState, state: AppState) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(state::previous, Modifier.size(44.dp)) {
-            Icon(Icons.Default.SkipPrevious, "Previous track", Modifier.size(28.dp), tint = Color.White.copy(alpha = .82f))
+            Icon(Icons.Default.SkipPrevious, "Previous track", Modifier.size(28.dp), tint = ink(.82f))
         }
         IconButton(
             state::togglePlayback,
             Modifier.size(56.dp),
         ) {
             if (playback.status == PlaybackStatus.RESOLVING) {
-                CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.dp, color = Color.White)
+                CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurface)
             } else {
                 Icon(
                     if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     if (playback.isPlaying) "Pause" else "Play",
                     Modifier.size(42.dp),
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
         IconButton(state::next, Modifier.size(44.dp)) {
-            Icon(Icons.Default.SkipNext, "Next track", Modifier.size(28.dp), tint = Color.White.copy(alpha = .82f))
+            Icon(Icons.Default.SkipNext, "Next track", Modifier.size(28.dp), tint = ink(.82f))
         }
     }
 }
@@ -2042,14 +2040,14 @@ private fun HeroFooter(track: Track, playback: PlaybackState, state: AppState) {
         LikeButton(track, state, size = 34.dp)
         DownloadButton(track, state, size = 34.dp)
         IconButton({ state.copyTrackLink(track) }, Modifier.size(34.dp)) {
-            Icon(Icons.Default.Link, "Copy link", Modifier.size(17.dp), tint = Color.White.copy(alpha = .6f))
+            Icon(Icons.Default.Link, "Copy link", Modifier.size(17.dp), tint = ink(.6f))
         }
         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
             Text(
                 activeLine ?: track.album?.title ?: "",
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                color = Color.White.copy(alpha = if (activeLine != null) .92f else .45f),
+                color = ink(if (activeLine != null) .92f else .45f),
                 fontSize = 14.sp,
                 fontWeight = if (activeLine != null) FontWeight.Medium else FontWeight.Normal,
             )
@@ -2075,13 +2073,13 @@ private fun NowPlayingPanel(
                     val selected = selectedTab == tab
                     Surface(
                         onClick = { selectTab(tab) },
-                        color = if (selected) Color.White.copy(alpha = .16f) else Color.Transparent,
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = if (selected) .18f else .09f)),
+                        color = if (selected) ink(.16f) else Color.Transparent,
+                        border = BorderStroke(1.dp, ink(if (selected) .18f else .09f)),
                         shape = RoundedCornerShape(20.dp),
                     ) {
                         Text(
                             tab.label,
-                            color = if (selected) Color.White else Color.White.copy(alpha = .6f),
+                            color = if (selected) MaterialTheme.colorScheme.onSurface else ink(.6f),
                             fontSize = 12.sp,
                             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                             modifier = Modifier.padding(horizontal = 15.dp, vertical = 8.dp),
@@ -2403,7 +2401,7 @@ private fun UpNextPanel(queue: QueueState, state: AppState) {
                 )
                 Text(
                     "${queue.currentIndex + 1} of ${queue.tracks.size}",
-                    color = Color.White.copy(alpha = .5f),
+                    color = ink(.5f),
                     fontSize = 11.sp,
                 )
             }
@@ -2411,7 +2409,7 @@ private fun UpNextPanel(queue: QueueState, state: AppState) {
             QueueActionPill("Shuffle", Icons.Default.Shuffle, queue.shuffleEnabled, state::toggleShuffle)
             QueueActionPill("Clear", Icons.Default.Close, false, state::clearQueue)
         }
-        HorizontalDivider(color = Color.White.copy(alpha = .07f))
+        HorizontalDivider(color = ink(.07f))
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 10.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -2435,8 +2433,8 @@ private fun QueueActionPill(
     Surface(
         onClick = action,
         shape = RoundedCornerShape(20.dp),
-        color = if (active) MaterialTheme.colorScheme.primary.copy(alpha = .28f) else Color.White.copy(alpha = .08f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = if (active) .22f else .1f)),
+        color = if (active) MaterialTheme.colorScheme.primary.copy(alpha = .28f) else ink(.08f),
+        border = BorderStroke(1.dp, ink(if (active) .22f else .1f)),
     ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
@@ -2446,14 +2444,14 @@ private fun QueueActionPill(
                 icon,
                 null,
                 Modifier.size(14.dp),
-                tint = if (active) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = .75f),
+                tint = if (active) MaterialTheme.colorScheme.primary else ink(.75f),
             )
             Spacer(Modifier.width(6.dp))
             Text(
                 label,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (active) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = .82f),
+                color = if (active) MaterialTheme.colorScheme.primary else ink(.82f),
             )
         }
     }
@@ -2472,8 +2470,8 @@ private fun QueueRow(track: Track, index: Int, playing: Boolean, state: AppState
     Surface(
         onClick = { state.jumpToQueueItem(index) },
         color = when {
-            playing -> Color.White.copy(alpha = .11f)
-            hovered -> Color.White.copy(alpha = .06f)
+            playing -> ink(.11f)
+            hovered -> ink(.06f)
             else -> Color.Transparent
         },
         shape = RoundedCornerShape(12.dp),
@@ -2497,26 +2495,26 @@ private fun QueueRow(track: Track, index: Int, playing: Boolean, state: AppState
                     overflow = TextOverflow.Ellipsis,
                     fontSize = 13.sp,
                     fontWeight = if (playing) FontWeight.Bold else FontWeight.Medium,
-                    color = if (playing) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = .92f),
+                    color = if (playing) MaterialTheme.colorScheme.primary else ink(.92f),
                 )
                 Text(
                     track.artistLine,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = Color.White.copy(alpha = .5f),
+                    color = ink(.5f),
                     fontSize = 11.sp,
                 )
             }
             if (hovered) {
                 IconButton({ state.jumpToQueueItem(index) }, Modifier.size(30.dp)) {
-                    Icon(Icons.Default.PlayArrow, "Play now", Modifier.size(18.dp), tint = Color.White.copy(alpha = .85f))
+                    Icon(Icons.Default.PlayArrow, "Play now", Modifier.size(18.dp), tint = ink(.85f))
                 }
                 IconButton({ state.removeQueueItem(index) }, Modifier.size(30.dp)) {
-                    Icon(Icons.Default.Close, "Remove from queue", Modifier.size(16.dp), tint = Color.White.copy(alpha = .6f))
+                    Icon(Icons.Default.Close, "Remove from queue", Modifier.size(16.dp), tint = ink(.6f))
                 }
             } else {
                 track.durationMs?.let {
-                    Text(formatPlaybackTime(it), color = Color.White.copy(alpha = .45f), fontSize = 11.sp)
+                    Text(formatPlaybackTime(it), color = ink(.45f), fontSize = 11.sp)
                 }
             }
         }
@@ -2730,13 +2728,13 @@ private fun MinimalProgressBar(
     modifier: Modifier = Modifier,
 ) {
     var widthPx by remember { mutableIntStateOf(1) }
-    val trackColour = Color.White.copy(alpha = .22f)
+    val trackColour = ink(.22f)
     val filledColour = MaterialTheme.colorScheme.primary
 
     Row(modifier.height(30.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             formatPlaybackTime(positionMs.toLong()),
-            color = Color.White.copy(alpha = .68f),
+            color = ink(.68f),
             fontSize = 11.sp,
             modifier = Modifier.width(42.dp),
         )
@@ -2791,7 +2789,7 @@ private fun MinimalProgressBar(
         }
         Text(
             trailingLabel,
-            color = Color.White.copy(alpha = .68f),
+            color = ink(.68f),
             fontSize = 11.sp,
             textAlign = androidx.compose.ui.text.style.TextAlign.End,
             modifier = Modifier.width(42.dp),
@@ -3109,6 +3107,38 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
         }
 
         SettingsPanelCard {
+            CardHeading(Icons.Default.Palette, "Theme")
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Noctorium's own, and the palettes you may already know from your editor and terminal. " +
+                    "The desktop and the phone share the choice.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(12.dp))
+            // Grouped by family, because "Mocha" on its own means nothing and "Catppuccin Mocha" does.
+            ThemePreset.entries.groupBy { it.family }.forEach { (family, presets) ->
+                Text(family, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(7.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    presets.forEach { preset ->
+                        ThemeSwatch(
+                            preset = preset,
+                            colours = preset.colours ?: preferences.customTheme,
+                            selected = preferences.theme == preset,
+                            choose = { state.setTheme(preset) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+            if (preferences.theme == ThemePreset.CUSTOM) {
+                CustomThemeEditor(preferences.customTheme, state::setCustomTheme)
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+
+        SettingsPanelCard {
             CardHeading(Icons.Default.Palette, "Colour")
             Spacer(Modifier.height(12.dp))
             Text("Accent", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -3116,29 +3146,16 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
             // Swatches rather than names: the colour is the label.
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AccentPreset.entries.forEach { option ->
-                    AccentSwatch(option, preferences.accent == option) { state.setAccent(option) }
+                    AccentSwatch(option, Color(preferences.themeColours().accent), preferences.accent == option) { state.setAccent(option) }
                 }
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                preferences.accent.let {
-                    if (it == AccentPreset.ARTWORK) "The interface follows the cover of whatever is playing."
-                    else it.displayName
+                when (preferences.accent) {
+                    AccentPreset.ARTWORK -> "The interface follows the cover of whatever is playing."
+                    AccentPreset.THEME -> "The accent the theme was designed with."
+                    else -> preferences.accent.displayName
                 },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-            )
-            Spacer(Modifier.height(16.dp))
-            ChoiceRow(
-                "Background",
-                BackgroundDepth.entries,
-                preferences.backgroundDepth,
-                { it.displayName },
-                state::setBackgroundDepth,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                preferences.backgroundDepth.description,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
             )
@@ -3231,10 +3248,10 @@ private fun <T> ChoiceRow(
                 Surface(
                     onClick = { choose(option) },
                     shape = RoundedCornerShape(20.dp),
-                    color = if (active) MaterialTheme.colorScheme.primaryContainer else Color.White.copy(alpha = .05f),
+                    color = if (active) MaterialTheme.colorScheme.primaryContainer else ink(.05f),
                     border = BorderStroke(
                         1.dp,
-                        if (active) MaterialTheme.colorScheme.primary.copy(alpha = .55f) else Color.White.copy(alpha = .1f),
+                        if (active) MaterialTheme.colorScheme.primary.copy(alpha = .55f) else ink(.1f),
                     ),
                 ) {
                     Text(
@@ -3262,15 +3279,123 @@ private fun ToggleRow(title: String, description: String, checked: Boolean, chan
 }
 
 @Composable
-private fun AccentSwatch(option: AccentPreset, selected: Boolean, choose: () -> Unit) {
-    val colour = option.argb?.let { Color(it) }
+private fun ThemeSwatch(preset: ThemePreset, colours: ThemeColours, selected: Boolean, choose: () -> Unit) {
+    // A miniature of the theme itself: the page, a card on it, a line of writing and the accent. The name
+    // underneath is for the ones that look alike at this size.
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(84.dp)) {
+        Surface(
+            onClick = choose,
+            shape = RoundedCornerShape(10.dp),
+            color = Color(colours.background),
+            border = BorderStroke(
+                2.dp,
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+            ),
+            modifier = Modifier.size(84.dp, 56.dp),
+        ) {
+            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                Box(
+                    Modifier.fillMaxWidth().height(18.dp).clip(RoundedCornerShape(5.dp)).background(Color(colours.card)),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Box(Modifier.padding(start = 5.dp).size(width = 30.dp, height = 4.dp).clip(CircleShape).background(Color(colours.text)))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(Color(colours.accent)))
+                    Spacer(Modifier.width(5.dp))
+                    Box(Modifier.size(width = 26.dp, height = 3.dp).clip(CircleShape).background(Color(colours.subtext)))
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            preset.displayName,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * Six hex colours and a switch: the listener's own theme.
+ *
+ * Applied only when every field reads as a colour, and warned about -- not refused -- when the writing
+ * would sit too close to the page to read. SpMp offered a colour wheel here; six boxes that take the
+ * values people copy out of a palette's README are what a theme actually arrives as.
+ */
+@Composable
+private fun CustomThemeEditor(current: ThemeColours, apply: (ThemeColours) -> Unit) {
+    var background by remember(current) { mutableStateOf(current.background.toHexColour()) }
+    var panel by remember(current) { mutableStateOf(current.panel.toHexColour()) }
+    var card by remember(current) { mutableStateOf(current.card.toHexColour()) }
+    var text by remember(current) { mutableStateOf(current.text.toHexColour()) }
+    var subtext by remember(current) { mutableStateOf(current.subtext.toHexColour()) }
+    var accent by remember(current) { mutableStateOf(current.accent.toHexColour()) }
+    var light by remember(current) { mutableStateOf(current.light) }
+
+    val parsed = listOf(background, panel, card, text, subtext, accent).map(::parseHexColour)
+    val complete = parsed.all { it != null }
+    val readable = complete && contrastRatio(parsed[3]!!, parsed[0]!!) >= 4.5
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Your colours", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HexField("Background", background) { background = it }
+            HexField("Panel", panel) { panel = it }
+            HexField("Card", card) { card = it }
+            HexField("Text", text) { text = it }
+            HexField("Muted text", subtext) { subtext = it }
+            HexField("Accent", accent) { accent = it }
+        }
+        ToggleRow("Light theme", "Dark writing on a pale page. Tells the window and the title bar which way round the theme is.", light) { light = it }
+        if (complete && !readable) {
+            Text(
+                "The text and the background are too close to read comfortably (contrast ${"%.1f".format(contrastRatio(parsed[3]!!, parsed[0]!!))}, where 4.5 is the floor).",
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 11.sp,
+            )
+        }
+        Button(
+            onClick = { apply(ThemeColours(parsed[0]!!, parsed[1]!!, parsed[2]!!, parsed[3]!!, parsed[4]!!, parsed[5]!!, light)) },
+            enabled = complete,
+        ) { Text("Apply") }
+    }
+}
+
+@Composable
+private fun HexField(label: String, value: String, change: (String) -> Unit) {
+    val colour = parseHexColour(value)
+    OutlinedTextField(
+        value,
+        { change(it.take(9)) },
+        label = { Text(label, fontSize = 11.sp) },
+        singleLine = true,
+        isError = colour == null,
+        leadingIcon = {
+            Box(
+                Modifier.size(16.dp).clip(CircleShape)
+                    .background(colour?.let { Color(it) } ?: Color.Transparent)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
+            )
+        },
+        textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
+        modifier = Modifier.width(150.dp),
+    )
+}
+
+@Composable
+private fun AccentSwatch(option: AccentPreset, themeAccent: Color, selected: Boolean, choose: () -> Unit) {
+    // The theme's own accent is shown as itself, since it is a real colour; only the artwork option has none.
+    val colour = option.argb?.let { Color(it) } ?: themeAccent.takeIf { option == AccentPreset.THEME }
     Surface(
         onClick = choose,
         shape = CircleShape,
         color = Color.Transparent,
         border = BorderStroke(
             2.dp,
-            if (selected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = .16f),
+            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
         ),
         modifier = Modifier.size(40.dp),
     ) {
@@ -3308,10 +3433,10 @@ private fun ProgressStyleOption(option: ProgressBarStyle, selected: Boolean, cho
     Surface(
         onClick = choose,
         shape = RoundedCornerShape(14.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .4f) else Color.White.copy(alpha = .04f),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .4f) else ink(.04f),
         border = BorderStroke(
             1.dp,
-            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .5f) else Color.White.copy(alpha = .08f),
+            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .5f) else ink(.08f),
         ),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
@@ -3324,7 +3449,7 @@ private fun ProgressStyleOption(option: ProgressBarStyle, selected: Boolean, cho
                 }
             }
             Spacer(Modifier.height(10.dp))
-            Surface(color = AmoledBlack.copy(alpha = .55f), shape = RoundedCornerShape(10.dp)) {
+            Surface(color = MaterialTheme.colorScheme.background.copy(alpha = .55f), shape = RoundedCornerShape(10.dp)) {
                 Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
                     PlaybackProgressBar(preview, {}, Modifier.fillMaxWidth(), option)
                 }
@@ -3456,7 +3581,7 @@ private fun SoundCloudSignInWindow(state: AppState, close: () -> Unit) {
         state = rememberDialogState(width = 980.dp, height = 760.dp),
         title = "Sign in to SoundCloud",
     ) {
-        Column(Modifier.fillMaxSize().background(NoctoriumPanel)) {
+        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer)) {
             Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (finishing || component == null) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -3609,7 +3734,7 @@ private fun YouTubeSignInWindow(state: AppState, close: () -> Unit) {
         state = rememberDialogState(width = 1000.dp, height = 780.dp),
         title = "Sign in to YouTube Music",
     ) {
-        Column(Modifier.fillMaxSize().background(NoctoriumPanel)) {
+        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer)) {
             Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (finishing || component == null) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -3743,11 +3868,11 @@ private fun YouTubeAccountPanel(settings: SettingsState, state: AppState) {
                                 onClick = { state.setYouTubeChannel(channel) },
                                 shape = RoundedCornerShape(11.dp),
                                 color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .5f)
-                                else Color.White.copy(alpha = .04f),
+                                else ink(.04f),
                                 border = BorderStroke(
                                     1.dp,
                                     if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .5f)
-                                    else Color.White.copy(alpha = .08f),
+                                    else ink(.08f),
                                 ),
                             ) {
                                 Row(
@@ -4710,16 +4835,16 @@ private fun DiscordCardPreview(preview: DiscordPreview?, settings: DiscordPresen
         Column(Modifier.fillMaxWidth().padding(14.dp)) {
             Text(
                 settings.activityKind.displayName.uppercase(),
-                color = Color.White.copy(alpha = .55f),
+                color = ink(.55f),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(9.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = .08f)),
+                    Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(ink(.08f)),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Default.MusicNote, null, Modifier.size(22.dp), tint = Color.White.copy(alpha = .5f)) }
+                ) { Icon(Icons.Default.MusicNote, null, Modifier.size(22.dp), tint = ink(.5f)) }
                 Spacer(Modifier.width(11.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -4731,12 +4856,12 @@ private fun DiscordCardPreview(preview: DiscordPreview?, settings: DiscordPresen
                         overflow = TextOverflow.Ellipsis,
                     )
                     preview?.state?.takeIf { it.isNotBlank() }?.let {
-                        Text(it, color = Color.White.copy(alpha = .75f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(it, color = ink(.75f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     if (settings.timestamps != PresenceTimestamps.NONE) {
                         Text(
                             if (settings.timestamps == PresenceTimestamps.ELAPSED) "0:42 elapsed" else "2:31 left",
-                            color = Color.White.copy(alpha = .55f),
+                            color = ink(.55f),
                             fontSize = 11.sp,
                         )
                     }
@@ -4746,10 +4871,10 @@ private fun DiscordCardPreview(preview: DiscordPreview?, settings: DiscordPresen
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     buttons.forEach { label ->
-                        Surface(color = Color.White.copy(alpha = .1f), shape = RoundedCornerShape(6.dp)) {
+                        Surface(color = ink(.1f), shape = RoundedCornerShape(6.dp)) {
                             Text(
                                 label,
-                                color = Color.White.copy(alpha = .9f),
+                                color = ink(.9f),
                                 fontSize = 11.sp,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             )

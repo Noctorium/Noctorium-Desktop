@@ -94,9 +94,9 @@ internal fun OfflineDownloadsCard(downloads: DownloadsState, state: AppState) {
     var expanded by remember { mutableStateOf(false) }
 
     Surface(
-        color = NoctoriumPanel,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = .08f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(16.dp)) {
@@ -168,7 +168,7 @@ internal fun OfflineDownloadsCard(downloads: DownloadsState, state: AppState) {
 
             if (expanded && downloads.entries.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                HorizontalDivider(color = Color.White.copy(alpha = .07f))
+                HorizontalDivider(color = ink(.07f))
                 Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
                     downloads.entries.forEach { entry ->
                         Row(
