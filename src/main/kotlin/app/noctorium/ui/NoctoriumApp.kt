@@ -65,7 +65,6 @@ import app.noctorium.domain.*
 import app.noctorium.lyrics.LyricLine
 import app.noctorium.lyrics.LyricsProviderOutcome
 import app.noctorium.lyrics.LyricsProviderStatus
-import app.noctorium.lyrics.currentLine
 import app.noctorium.library.TrackEdit
 import androidx.compose.material.icons.outlined.PushPin
 import app.noctorium.playback.PlaybackToolInstaller
@@ -1647,16 +1646,11 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 13.sp,
                         )
-                        val lyricLine = barLyricLine(playback, state)
                         Text(
-                            playback.errorMessage ?: lyricLine ?: current?.artistLine ?: "Choose a track to start",
+                            playback.errorMessage ?: current?.artistLine ?: "Choose a track to start",
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            color = when {
-                                playback.errorMessage != null -> MaterialTheme.colorScheme.error
-                                lyricLine != null -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            },
+                            color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
                         )
                     }
@@ -1690,21 +1684,6 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
             if (atTop) HorizontalDivider(color = rule)
         }
     }
-}
-
-/**
- * The line being sung, for the player bar, or null to show the artist instead.
- *
- * Only while playing and only when the lyrics are timed and the listener has not switched it off. The
- * artist is one click away on the now playing screen; the lyric is only ever now. The idea of a lyric
- * that follows you around the application is SpMp's.
- */
-@Composable
-private fun barLyricLine(playback: PlaybackState, state: AppState): String? {
-    val preferences = state.settings.collectAsState().value.preferences
-    if (!preferences.lyricsInPlayerBar || !playback.isPlaying) return null
-    val lyrics by state.lyrics.collectAsState()
-    return lyrics.currentLine(playback.positionMs)
 }
 
 @Composable
@@ -1763,16 +1742,11 @@ private fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppStat
                                 overflow = TextOverflow.Ellipsis,
                                 fontWeight = FontWeight.SemiBold,
                             )
-                            val lyricLine = barLyricLine(playback, state)
                             Text(
-                                playback.errorMessage ?: lyricLine ?: current?.artistLine ?: "Choose a track to start",
+                                playback.errorMessage ?: current?.artistLine ?: "Choose a track to start",
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                color = when {
-                                    playback.errorMessage != null -> MaterialTheme.colorScheme.error
-                                    lyricLine != null -> MaterialTheme.colorScheme.primary
-                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                },
+                                color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 12.sp,
                             )
                         }
@@ -3189,13 +3163,6 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
                 "Tints the screen with colours sampled from the cover.",
                 preferences.ambientBackdrop,
                 state::setAmbientBackdrop,
-            )
-            Spacer(Modifier.height(10.dp))
-            ToggleRow(
-                "Lyrics in the player bar",
-                "Shows the line being sung in place of the artist, while the lyrics are timed.",
-                preferences.lyricsInPlayerBar,
-                state::setLyricsInPlayerBar,
             )
         }
 
