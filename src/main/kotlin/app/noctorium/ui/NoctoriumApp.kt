@@ -107,7 +107,13 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     // the theme's own, one of the named ones, or -- "Match the artwork" -- the palette already sampled
     // for the now playing backdrop, so the whole interface drifts with whatever is on.
     val theme = preferences.themeColours()
-    val artworkPalette = rememberArtworkPalette(queue.current?.artworkUrl, queue.current?.provider ?: ProviderType.LOCAL)
+    // Nothing playing, or a cover with no colour in it, leaves the theme's own accent in force rather
+    // than a fixed violet: "Match the artwork" should never paint a Gruvbox window lilac.
+    val artworkPalette = rememberArtworkPalette(
+        queue.current?.artworkUrl,
+        queue.current?.provider ?: ProviderType.LOCAL,
+        fallback = ArtworkPalette(Color(theme.accent), Color(theme.card)),
+    )
     val accentTarget = if (preferences.accent == AccentPreset.ARTWORK) artworkPalette.primary else Color(preferences.resolvedAccent(null))
     val accent by animateColorAsState(accentTarget, tween(600), label = "accent")
 
@@ -1881,7 +1887,11 @@ private fun NowPlayingScreen(queue: QueueState, playback: PlaybackState, state: 
 
     // The backdrop takes its colour from the cover, so the room changes with the record.
     val ambientEnabled = state.settings.collectAsState().value.preferences.ambientBackdrop
-    val palette = rememberArtworkPalette(current.artworkUrl, current.provider)
+    val palette = rememberArtworkPalette(
+        current.artworkUrl,
+        current.provider,
+        fallback = ArtworkPalette(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer),
+    )
     val ambient by animateColorAsState(
         if (ambientEnabled) palette.primary else MaterialTheme.colorScheme.background,
         tween(700),

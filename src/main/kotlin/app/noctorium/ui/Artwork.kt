@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -42,16 +43,13 @@ fun RemoteArtwork(
     provider: ProviderType,
     modifier: Modifier = Modifier,
 ) {
+    // What sits there until the cover arrives, and forever for a track that has none. Taken from the
+    // theme rather than fixed: it used to be two violets, which read as a stray Noctorium tile on any
+    // theme that is not violet -- a lilac square in the middle of Gruvbox. Which service a track came
+    // from is the badge's job, so the placeholder no longer tries to say it in a shade of purple.
+    val scheme = MaterialTheme.colorScheme
     BoxWithConstraints(
-        modifier.background(
-            Brush.linearGradient(
-                if (provider == ProviderType.YOUTUBE_MUSIC || provider == ProviderType.YOUTUBE_VIDEO) {
-                    listOf(Color(0xFF1A002E), Color(0xFF5B21B6))
-                } else {
-                    listOf(Color(0xFF10001F), Color(0xFF9333EA))
-                },
-            ),
-        ),
+        modifier.background(Brush.linearGradient(listOf(scheme.surfaceVariant, scheme.primaryContainer))),
         contentAlignment = Alignment.Center,
     ) {
         val density = LocalDensity.current
@@ -81,7 +79,9 @@ fun RemoteArtwork(
                     Icon(
                         Icons.Default.GraphicEq,
                         contentDescription = null,
-                        tint = Color.White.copy(alpha = .72f),
+                        // The theme's writing colour, not white: on a light theme a white mark on a pale
+                        // placeholder is a blank square.
+                        tint = scheme.onSurfaceVariant.copy(alpha = .72f),
                         modifier = Modifier.fillMaxSize(.32f),
                     )
                 }
@@ -97,32 +97,36 @@ private object PaletteCache {
     val palettes = ConcurrentHashMap<String, ArtworkPalette>()
 }
 
-private val DefaultPalette = ArtworkPalette(Color(0xFF6E4BD8), Color(0xFF2A1B45))
-
 /**
  * Pulls the two colours that carry a cover: the most common vivid hue, and a deeper companion for the far end
  * of the gradient. Washed-out and near-black pixels are ignored, since they describe the background of the
  * artwork rather than its character.
+ *
+ * [fallback] is what is answered while nothing has been sampled and for a track with no cover at all. It is
+ * handed in rather than fixed because this is what "Match the artwork" follows, and a constant violet meant
+ * that choosing it with nothing playing painted the interface Noctorium's own colour whatever theme was on.
+ * The caller knows the theme; this does not.
  */
 @Composable
-fun rememberArtworkPalette(url: String?, provider: ProviderType): ArtworkPalette {
+fun rememberArtworkPalette(url: String?, provider: ProviderType, fallback: ArtworkPalette): ArtworkPalette {
     val palette by produceState(
-        initialValue = url?.let { PaletteCache.palettes[it] } ?: DefaultPalette,
+        initialValue = url?.let { PaletteCache.palettes[it] } ?: fallback,
         key1 = url,
+        key2 = fallback,
     ) {
-        val key = url ?: return@produceState
+        val key = url ?: run { value = fallback; return@produceState }
         PaletteCache.palettes[key]?.let { value = it; return@produceState }
         // Hue sampling needs no detail, so a small decode is both enough and quick — and it means the backdrop
         // no longer waits for the full-size cover to arrive.
         val image = ArtworkLoader.cached(key) ?: ArtworkLoader.load(key, 128) ?: return@produceState
         value = withContext(Dispatchers.Default) {
-            runCatching { extractPalette(image) }.getOrDefault(DefaultPalette)
+            runCatching { extractPalette(image, fallback) }.getOrDefault(fallback)
         }.also { PaletteCache.palettes[key] = it }
     }
     return palette
 }
 
-private fun extractPalette(image: ImageBitmap): ArtworkPalette {
+private fun extractPalette(image: ImageBitmap, fallback: ArtworkPalette): ArtworkPalette {
     val pixels = image.toPixelMap()
     val step = maxOf(1, minOf(image.width, image.height) / 48)
     // Twelve hue buckets is enough to separate "pink cover" from "teal cover" without chasing gradients.
@@ -147,7 +151,9 @@ private fun extractPalette(image: ImageBitmap): ArtworkPalette {
         y += step
     }
     val ranked = buckets.filter { it[3] > 0f }.sortedByDescending { it[3] }
-    if (ranked.isEmpty()) return DefaultPalette
+    // A cover with no colour in it at all -- a black-and-white photograph, a plain sleeve. The theme's
+    // own colours are a better answer than a violet nobody chose.
+    if (ranked.isEmpty()) return fallback
     val primary = ranked.first().let { Color(it[0] / it[3], it[1] / it[3], it[2] / it[3]) }
     val secondary = ranked.getOrNull(1)?.let { Color(it[0] / it[3], it[1] / it[3], it[2] / it[3]) }
         ?: Color(primary.red * .45f, primary.green * .45f, primary.blue * .45f)
