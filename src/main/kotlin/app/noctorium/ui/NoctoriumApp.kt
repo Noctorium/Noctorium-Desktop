@@ -171,11 +171,20 @@ private fun NavigationRail(selected: Destination, navigate: (Destination) -> Uni
             Image(
                 painterResource("noctorium-mark.png"),
                 null,
-                Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)),
+                Modifier.size(34.dp).clip(RoundedCornerShape(11.dp)),
                 contentScale = ContentScale.Crop,
             )
-            Spacer(Modifier.width(10.dp))
-            Text("Noctorium", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(9.dp))
+            // One line, and sized to fit on it. The rail is 176dp wide and the name grew by three letters
+            // at the rename, so at the old size it broke across two lines as "Noctoriu / m" -- which is
+            // the first thing anybody saw of the application.
+            Text(
+                "Noctorium",
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false,
+            )
         }
         Spacer(Modifier.height(26.dp))
         NavItem("Home", Icons.Default.Home, selected == Destination.HOME) { navigate(Destination.HOME) }
