@@ -138,6 +138,10 @@ compose.desktop {
                 // beside it. Generated once; changing it strands everyone's existing installation.
                 upgradeUuid = "8f5ac0d6-2f1a-4b6e-9a4e-1f3c2d6b7e10"
                 dirChooser = true
+                // A shortcut on the desktop, beside the Start menu entry above. Somebody who has just
+                // installed a music player is going to open it now, and looking for it is a poor first
+                // thing to ask of them.
+                shortcut = true
                 /*
                  * Deliberately not perUserInstall.
                  *
