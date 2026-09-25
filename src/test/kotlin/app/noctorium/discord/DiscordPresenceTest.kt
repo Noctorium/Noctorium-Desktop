@@ -198,7 +198,7 @@ class DiscordApplicationTest {
     fun `Noctorium ships with an application id so nothing needs configuring`() {
         val untouched = DiscordPresenceSettings()
 
-        assertEquals("1464831676877111489", untouched.resolvedApplicationId())
+        assertEquals("1553165990995693588", untouched.resolvedApplicationId())
         assertEquals(false, untouched.usesOwnApplication)
     }
 
@@ -212,7 +212,7 @@ class DiscordApplicationTest {
 
     @Test
     fun `whitespace does not count as setting an id`() {
-        assertEquals("1464831676877111489", DiscordPresenceSettings(applicationId = "   ").resolvedApplicationId())
+        assertEquals("1553165990995693588", DiscordPresenceSettings(applicationId = "   ").resolvedApplicationId())
     }
 }
 
