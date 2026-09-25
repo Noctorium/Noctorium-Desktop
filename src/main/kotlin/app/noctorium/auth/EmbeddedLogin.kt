@@ -2,7 +2,6 @@ package app.noctorium.auth
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import me.friwi.jcefmaven.CefAppBuilder
 import org.cef.CefApp
 import org.cef.CefClient
 import org.cef.browser.CefBrowser
@@ -12,7 +11,6 @@ import org.cef.misc.BoolRef
 import org.cef.network.CefCookie
 import org.cef.network.CefCookieManager
 import java.awt.Component
-import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -47,17 +45,9 @@ class EmbeddedBrowserSession(private val installDir: Path) {
         onProgress: (String) -> Unit,
         onPageLoaded: (String) -> Unit,
     ): Component = withContext(Dispatchers.IO) {
-        val builder = CefAppBuilder()
-        builder.setInstallDir(File(installDir.toString()))
-        builder.cefSettings.windowless_rendering_enabled = false
-        builder.cefSettings.cache_path = installDir.resolve("cache").toString()
-        builder.setProgressHandler { state, percent ->
-            // States read like INSTALL / EXTRACTING / INITIALIZING; DOWNLOADING should never appear now that the
-            // natives are bundled, and if it does it means the platform artifact is missing from the build.
-            val stage = state.name.lowercase().replace('_', ' ')
-            onProgress(if (percent >= 0f) "$stage ${percent.toInt()}%" else stage)
-        }
-        val cefApp = builder.build()
+        // Through [CefRuntime], because Chromium is process-wide and the browser that writes to SoundCloud
+        // needs the cookie store this sign-in is about to fill.
+        val cefApp = CefRuntime.app(installDir, onProgress)
         app = cefApp
         val cefClient = cefApp.createClient()
         client = cefClient

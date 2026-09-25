@@ -309,3 +309,18 @@ listOf(
 ).forEach { name ->
     tasks.matching { it.name == name }.configureEach { dependsOn(fetchPlaybackTools) }
 }
+
+/**
+ * Runs one request through the embedded browser and prints the status, by hand.
+ *
+ * Checking that Chromium starts without a window on this machine, and that a page can answer back, is not
+ * something a unit test can do -- it needs the real browser and the real network -- so it is a task.
+ */
+tasks.register<JavaExec>("cefProbe") {
+    group = "verification"
+    description = "Makes one SoundCloud request through embedded Chromium and prints what came back."
+    mainClass.set("app.noctorium.auth.CefRequesterProbe")
+    classpath = sourceSets["main"].runtimeClasspath
+    // `-Pargs="PUT <url> <token>"`, so the method and target can be varied without editing the probe.
+    if (project.hasProperty("args")) args((project.property("args") as String).split(" "))
+}

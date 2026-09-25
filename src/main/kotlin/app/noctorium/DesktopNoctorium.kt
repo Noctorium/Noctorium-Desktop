@@ -10,7 +10,11 @@ import app.noctorium.platform.DesktopBridge
 import app.noctorium.playback.AccountProbe
 import app.noctorium.playback.MpvPlaybackEngine
 import app.noctorium.playback.YtDlpService
+import app.noctorium.auth.CefRequester
 import app.noctorium.settings.SecureCredentialStore
+import app.noctorium.settings.SettingsRepository
+import app.noctorium.social.SoundCloudLikeClient
+import app.noctorium.social.SoundCloudPlaylistClient
 
 /**
  * The desktop's answers to everything `core` asks for.
@@ -22,6 +26,13 @@ import app.noctorium.settings.SecureCredentialStore
 fun desktopAppState(): AppState {
     val backend = YtDlpService()
     val downloads = DownloadManager(backend, converter = AudioConverter())
+    // The Chromium that already signed the listener in, borrowed for the writes SoundCloud will not take
+    // from anything else. Built on first use, so nothing is unpacked for somebody who never likes a track,
+    // and null where this system has nowhere to keep a browser -- then the ordinary client is used and
+    // SoundCloud refuses it, which is what it did before this existed.
+    val soundCloudBrowser = SettingsRepository.defaultSettingsPath()?.parent
+        ?.resolve("chromium")
+        ?.let { CefRequester(it) }
     return AppState(
         ytDlp = backend,
         credentials = SecureCredentialStore(),
@@ -41,6 +52,8 @@ fun desktopAppState(): AppState {
                 ?: "This computer"
         },
         deviceKind = DeviceKind.DESKTOP,
+        likeClient = SoundCloudLikeClient(soundCloudBrowser),
+        playlistClient = SoundCloudPlaylistClient(soundCloudBrowser),
         updateInstaller = DesktopUpdateInstaller(),
     )
 }
