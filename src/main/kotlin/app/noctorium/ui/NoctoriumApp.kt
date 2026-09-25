@@ -741,6 +741,14 @@ private fun NewPlaylistDialog(
     confirmLabel: String,
     soundCloudReady: Boolean,
     youTubeReady: Boolean,
+    /**
+     * Why a service is unavailable, when it is not the sign-in.
+     *
+     * A SoundCloud track cannot go in a YouTube Music playlist and the option is rightly greyed out, but
+     * saying "sign in under Settings" about an account that is signed in sends somebody to check it, which
+     * cost me a detour on an account that was working perfectly.
+     */
+    unavailableNote: String = "Sign in under Settings to use this.",
     finish: (String?, PlaylistDestination) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
@@ -799,7 +807,7 @@ private fun NewPlaylistDialog(
                                         available && option == PlaylistDestination.SOUNDCLOUD ->
                                             "Made on your account, private until you change it."
                                         available -> "Made on your YouTube account."
-                                        else -> "Sign in under Settings to use this."
+                                        else -> unavailableNote
                                     }
                                     Text(note, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
                                 }
@@ -1432,7 +1440,15 @@ private fun AddToPlaylistDialog(
     state: AppState,
     dismiss: () -> Unit,
 ) {
-    var creating by remember { mutableStateOf(playlists.isEmpty()) }
+    val library by state.library.collectAsState()
+    // Playlists on the account itself, which Noctorium can write to. The likes page is a listing, not a
+    // playlist, so it is excluded by requiring a numeric id.
+    val servicePlaylists = library.playlists.filter { it.editableOnService() && it.provider.acceptsTrack(track) }
+    // Straight to making one only when there is genuinely nothing to add to. Counting the Noctorium
+    // playlists alone was wrong, and wrong in a way that hid a whole feature: on a machine with none of
+    // those -- an ordinary one -- every "Add to playlist" opened the create form, and the playlists on the
+    // account, sitting right there in the library, could never be picked.
+    var creating by remember { mutableStateOf(playlists.isEmpty() && servicePlaylists.isEmpty()) }
     if (creating) {
         val likes by state.likes.collectAsState()
         NewPlaylistDialog(
@@ -1442,6 +1458,9 @@ private fun AddToPlaylistDialog(
             // track being added could actually go in one.
             soundCloudReady = likes.soundCloudReady && track.provider == ProviderType.SOUNDCLOUD,
             youTubeReady = likes.youTubeReady && track.provider != ProviderType.SOUNDCLOUD,
+            // Here the other service is greyed out because the track cannot go there, whatever the state
+            // of that account, so the note says that rather than blaming the sign-in.
+            unavailableNote = "Not where a ${track.provider.displayName} track can go.",
         ) { name, destination ->
             dismiss()
             if (name != null) {
@@ -1454,10 +1473,6 @@ private fun AddToPlaylistDialog(
         }
         return
     }
-    val library by state.library.collectAsState()
-    // Playlists on the account itself, which Noctorium can write to. The likes page is a listing, not a playlist,
-    // so it is excluded by requiring a numeric id.
-    val servicePlaylists = library.playlists.filter { it.editableOnService() && it.provider.acceptsTrack(track) }
 
     AlertDialog(
         onDismissRequest = dismiss,
