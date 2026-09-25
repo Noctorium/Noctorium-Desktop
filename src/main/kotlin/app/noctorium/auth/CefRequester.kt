@@ -19,6 +19,8 @@ import org.cef.callback.CefQueryCallback
 import org.cef.handler.CefLoadHandlerAdapter
 import org.cef.handler.CefMessageRouterHandlerAdapter
 import java.nio.file.Path
+import javax.swing.JWindow
+import javax.swing.SwingUtilities
 
 /**
  * Makes a request from inside the Chromium this application already ships, on SoundCloud's origin.
@@ -44,6 +46,9 @@ class CefRequester(private val installDir: Path) : BrowserRequester {
 
     private var client: CefClient? = null
     private var browser: CefBrowser? = null
+
+    /** The window the browser lives in, off where no screen reaches. */
+    private var holder: JWindow? = null
 
     @Volatile
     private var loaded: CompletableDeferred<Unit>? = null
@@ -146,14 +151,39 @@ class CefRequester(private val installDir: Path) : BrowserRequester {
             }
         })
         client = cefClient
-        // Off-screen, so nothing is drawn and no window appears while somebody is liking a track.
-        val page = cefClient.createBrowser(ORIGIN_PAGE, true, false)
-        browser = page
         val finished = CompletableDeferred<Unit>()
         loaded = finished
-        page.createImmediately()
+        val page = onSwingThread {
+            val created = cefClient.createBrowser(ORIGIN_PAGE, false, false)
+            // An ordinary browser in a window placed far off the desktop, rather than an off-screen one.
+            // Off-screen rendering would be the tidier answer and costs too much: switching it on is a
+            // process-wide setting, and it made the sign-in page somebody actually types into sluggish.
+            // A browser does need a real window to live in -- without one it is never created and the
+            // request never runs -- so it gets one, a pixel wide, where no screen reaches and nothing in
+            // the task bar shows it.
+            holder = JWindow().apply {
+                setBounds(OFF_SCREEN, OFF_SCREEN, 1, 1)
+                contentPane.add(created.uiComponent)
+                isVisible = true
+            }
+            created
+        }
+        browser = page
         withTimeoutOrNull(LOAD_TIMEOUT_MILLIS) { finished.await() }
         page
+    }
+
+    /** Swing objects are built on Swing's own thread; everything calling this is on a coroutine's. */
+    private fun <T> onSwingThread(make: () -> T): T {
+        if (SwingUtilities.isEventDispatchThread()) return make()
+        var result: T? = null
+        var failure: Throwable? = null
+        SwingUtilities.invokeAndWait {
+            runCatching(make).onSuccess { result = it }.onFailure { failure = it }
+        }
+        failure?.let { throw it }
+        @Suppress("UNCHECKED_CAST")
+        return result as T
     }
 
     private suspend fun reload() {
@@ -222,9 +252,12 @@ class CefRequester(private val installDir: Path) : BrowserRequester {
         client = null
         // Off the caller's thread, for the same reason the sign-in window closes that way: shutting a CEF
         // browser pumps Chromium's message loop, and doing it on the interface thread freezes the window.
+        val window = holder
+        holder = null
         Thread({
             runCatching { closing?.close(true) }
             runCatching { disposing?.dispose() }
+            runCatching { SwingUtilities.invokeLater { window?.dispose() } }
         }, "noctorium-cef-requester-dispose").apply { isDaemon = true }.start()
     }
 
@@ -240,6 +273,9 @@ class CefRequester(private val installDir: Path) : BrowserRequester {
 
         /** A read on the protected host, used to earn the clearance where a retry would not be safe. */
         const val SETTLING_URL = "https://api-v2.soundcloud.com/me"
+
+        /** Far enough off the desktop that no arrangement of monitors puts it on one. */
+        const val OFF_SCREEN = -32_000
 
         const val LOAD_TIMEOUT_MILLIS = 20_000L
         const val REQUEST_TIMEOUT_MILLIS = 45_000L

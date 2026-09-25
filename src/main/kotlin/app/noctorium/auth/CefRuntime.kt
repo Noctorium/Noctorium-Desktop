@@ -33,12 +33,12 @@ internal object CefRuntime {
         withContext(Dispatchers.IO) {
             val builder = CefAppBuilder()
             builder.setInstallDir(File(installDir.toString()))
-            // On, because the request browser is never drawn and cannot be created at all without it.
-            // This only makes off-screen rendering available; the sign-in window is still a windowed
-            // browser and is drawn the same way. CEF warns that switching it on can cost some rendering
-            // performance on certain systems, which is the price of the only client SoundCloud will take
-            // a write from.
-            builder.cefSettings.windowless_rendering_enabled = true
+            // Off, and it has to stay off. Switching it on is the obvious way to give the request browser
+            // somewhere to render, and CEF's own note that it "may reduce rendering performance on some
+            // systems" turned out to mean the sign-in page -- the one somebody actually looks at and types
+            // into -- going sluggish. The request browser is a windowed one in a window nobody sees
+            // instead; see [CefRequester].
+            builder.cefSettings.windowless_rendering_enabled = false
             builder.cefSettings.cache_path = installDir.resolve("cache").toString()
             builder.setProgressHandler { state, percent ->
                 // States read like INSTALL / EXTRACTING / INITIALIZING; DOWNLOADING should never appear now
