@@ -262,7 +262,13 @@ private fun HomeScreen(ui: AppUiState, state: AppState) {
             items(2) { LoadingSection() }
         } else {
             items(filtered, key = { it.id }) { section ->
-                TrackRowSection(section.title, section.subtitle, section.tracks, state)
+                // A row is songs or cards, never both -- the services build them that way, and a row
+                // mixing things that play with things that open would make every click a guess.
+                if (section.playlists.isNotEmpty()) {
+                    PlaylistRowSection(section.title, section.subtitle, section.playlists, state)
+                } else {
+                    TrackRowSection(section.title, section.subtitle, section.tracks, state)
+                }
             }
         }
     }
@@ -322,6 +328,72 @@ private fun TrackRowSection(title: String, subtitle: String?, tracks: List<Track
         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             items(tracks, key = { it.queueKey }) { track ->
                 TrackCard(track, tracks, state, showBadge = mixedProviders)
+            }
+        }
+    }
+}
+
+/**
+ * A shelf of playlists and albums, which open rather than play.
+ *
+ * Most of what a service puts on its home page is this. Clicking one goes to the library, because that
+ * is where the playlist screen lives -- opening something the listener cannot then see would be the same
+ * as doing nothing at all.
+ */
+@Composable
+private fun PlaylistRowSection(
+    title: String,
+    subtitle: String?,
+    playlists: List<Playlist>,
+    state: AppState,
+) {
+    val preferences = state.settings.collectAsState().value.preferences
+    val cardWidth = preferences.cardSize.widthDp.dp
+    Column(Modifier.padding(vertical = 14.dp)) {
+        Text(title, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        subtitle?.takeIf { it.isNotBlank() }?.let {
+            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .8f), fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(14.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            items(playlists, key = { it.playlistKey }) { playlist ->
+                Column(
+                    Modifier
+                        .width(cardWidth)
+                        .clickable {
+                            state.openPlaylist(playlist)
+                            state.navigate(Destination.LIBRARY)
+                        },
+                ) {
+                    Box(Modifier.size(cardWidth).clip(RoundedCornerShape(11.dp))) {
+                        if (playlist.artworkUrl != null) {
+                            RemoteArtwork(playlist.artworkUrl, playlist.provider, Modifier.fillMaxSize())
+                        } else {
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = .6f)),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        playlist.title,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    playlist.ownerName?.takeIf { it.isNotBlank() }?.let {
+                        Text(
+                            it,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
     }
