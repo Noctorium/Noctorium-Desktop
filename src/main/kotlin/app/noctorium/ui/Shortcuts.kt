@@ -137,6 +137,9 @@ val shortcutHelp: List<Pair<String, List<ShortcutHelp>>> = listOf(
         ShortcutHelp("1 … 6", "Home, Search, Library, Now playing, Queue, Settings"),
         ShortcutHelp("/  ·  Ctrl F", "Search"),
         ShortcutHelp("?", "This list"),
-        ShortcutHelp("Esc", "Close what is open"),
+        ShortcutHelp("Esc", "Close what is open, or leave the box you are typing in"),
+    ),
+    "Anywhere on the machine" to listOf(
+        ShortcutHelp("▶❚❚  ⏭  ⏮", "The media keys work while Noctorium is behind another window"),
     ),
 )

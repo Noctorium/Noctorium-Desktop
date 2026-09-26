@@ -127,7 +127,10 @@ class ShortcutsTest {
     @Test
     fun `the help sheet lists every group and says what the steps are`() {
         val rows = shortcutHelp.flatMap { it.second }
-        assertEquals(listOf("Playing", "Sound", "Going places"), shortcutHelp.map { it.first })
+        assertEquals(
+            listOf("Playing", "Sound", "Going places", "Anywhere on the machine"),
+            shortcutHelp.map { it.first },
+        )
         assertTrue(rows.any { it.keys.contains("Space") }, "the first thing anybody tries is not listed")
         assertTrue(rows.any { it.what.contains("5 seconds") }, "the fine step is not described")
         assertTrue(rows.any { it.what.contains("30 seconds") }, "the coarse step is not described")

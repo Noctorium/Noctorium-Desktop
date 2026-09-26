@@ -85,6 +85,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
     // Reaches the one Windows call that colours the title bar; the window itself stays a native one.
     implementation("net.java.dev.jna:jna:5.17.0")
+    // The ready-made Windows bindings, for the media keys. Writing RegisterHotKey and the message
+    // structure by hand is a few lines either way; getting the structure's layout subtly wrong is a
+    // crash in native code rather than an exception, and this is the same project's own definitions.
+    implementation("net.java.dev.jna:jna-platform:5.17.0")
     // Embedded Chromium, used only to host SoundCloud's own sign-in page inside Noctorium.
     implementation("me.friwi:jcefmaven:146.0.10")
     jcefNativesArtifacts().forEach { artifact ->

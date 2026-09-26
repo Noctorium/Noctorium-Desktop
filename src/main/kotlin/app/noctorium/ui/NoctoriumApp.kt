@@ -200,6 +200,21 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     // Something has to hold focus for a key to arrive at all, and on a fresh window nothing does.
     LaunchedEffect(Unit) { runCatching { keyboard.requestFocus() } }
 
+    // The keys on the keyboard itself, which reach Noctorium whether or not it is the window in front.
+    // Only play, pause and the two track keys: those are the ones somebody presses without looking, and
+    // they are the ones an application may reasonably take from the whole machine.
+    DisposableEffect(Unit) {
+        val grab = MediaKeys.start { shortcut ->
+            when (shortcut) {
+                Shortcut.PlayPause -> appState.togglePlayback()
+                Shortcut.Next -> appState.next()
+                Shortcut.Previous -> appState.previous()
+                else -> Unit
+            }
+        }
+        onDispose { grab?.close() }
+    }
+
     MaterialTheme(colorScheme = noctoriumColorScheme(theme, accent)) {
       CompositionLocalProvider(LocalTyping provides typing) {
         if (shortcutsOpen) ShortcutsSheet { shortcutsOpen = false }
