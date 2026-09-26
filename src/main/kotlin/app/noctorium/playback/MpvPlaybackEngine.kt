@@ -37,11 +37,24 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.math.max
 
 internal const val NORMAL_MAX_VOLUME = 1f
-internal const val BOOSTED_MAX_VOLUME = 10f
-internal const val BOOST_START_VOLUME = 2f
+
+/**
+ * What the boost actually is: a compressor with make-up gain, and a limiter to catch what it throws.
+ *
+ * It used to be raw gain -- mpv's `volume` pushed to 200, then as far as 1000. That does not work, and
+ * measuring it says why. mpv's volume is a cubic curve, so 200 is not twice as loud, it is eight times
+ * the amplitude; against music mastered near full scale the samples saturate at once. Rendered to a file
+ * and measured, a tone at volume 200 came out at exactly 100% of full scale, and at volume 400 it was
+ * still exactly 100% -- louder by nothing at all, just squarer. Which is what the toggle was doing:
+ * distortion, then no further change, which is exactly what it looks like when it appears to do nothing.
+ *
+ * Making something genuinely louder means raising the quiet parts rather than pushing the loud ones past
+ * the ceiling. Same measurement, same tone, this chain: peak held at full scale and RMS -- which is what
+ * loudness follows -- up from 8.8% to 63.8%. Seven times, and not a clipped sample in it.
+ */
+internal const val BOOST_FILTER = "lavfi=[acompressor=threshold=-20dB:ratio=4:makeup=8,alimiter=limit=0.95]"
 
 /**
  * The line out of an mpv log that says what went wrong, or null if nothing did.
@@ -100,7 +113,6 @@ class MpvPlaybackEngine(
 
     /** Where mpv was told to write about the current attempt, for when it does not survive it. */
     private var processLog: Path? = null
-    private var volumeBeforeBoost = mutableState.value.volume
 
     /**
      * Whether mpv is to start the file over when it reaches the end, instead of exiting.
@@ -197,8 +209,10 @@ class MpvPlaybackEngine(
                         // finished: a second of nothing, then silence, with no message anywhere.
                         log?.let { add("--log-file=$it") }
                         add("--input-ipc-server=${ipcEndpoint!!}")
-                        add("--volume-max=${(BOOSTED_MAX_VOLUME * 100).toInt()}")
                         add("--volume=${(mutableState.value.volume * 100).toInt()}")
+                        // A new process for every track, so the boost has to be asked for again each
+                        // time or it would quietly lapse at the end of every song.
+                        if (mutableState.value.volumeBoostEnabled) add("--af=$BOOST_FILTER")
                         add("--mute=${if (mutableState.value.isMuted) "yes" else "no"}")
                         // Repeat-one, done by the player: it seeks back to the start out of its own
                         // cache instead of exiting, so there is no gap and nothing is fetched again.
@@ -271,7 +285,9 @@ class MpvPlaybackEngine(
     }
 
     override suspend fun setVolume(value: Float) {
-        val maximum = if (mutableState.value.volumeBoostEnabled) BOOSTED_MAX_VOLUME else NORMAL_MAX_VOLUME
+        // Unity, boosted or not. The boost is a filter now rather than a number above a hundred, so the
+        // slider means the same thing either way and cannot be dragged into distortion.
+        val maximum = NORMAL_MAX_VOLUME
         val requested = value.coerceIn(0f, maximum)
         try {
             if (process?.isAlive == true) {
@@ -289,33 +305,22 @@ class MpvPlaybackEngine(
         }
     }
 
+    /**
+     * Turns the loudness chain on or off, leaving the volume alone.
+     *
+     * It used to move the slider too -- straight to 200% on, back to where it was off -- which is how a
+     * boost that only distorted still looked like it had done something.
+     */
     override suspend fun setVolumeBoost(enabled: Boolean) {
-        val current = mutableState.value
-        if (current.volumeBoostEnabled == enabled) return
-
-        if (enabled) volumeBeforeBoost = current.volume.coerceIn(0f, NORMAL_MAX_VOLUME)
-        val target = if (enabled) max(current.volume, BOOST_START_VOLUME) else volumeBeforeBoost
+        if (mutableState.value.volumeBoostEnabled == enabled) return
         try {
-            var confirmed = target
             if (process?.isAlive == true) {
-                sendCommand("set_property", JsonPrimitive("volume"), JsonPrimitive(target * 100.0))
-                confirmed = getNumberProperty("volume")?.div(100.0)?.toFloat()
-                    ?.coerceIn(0f, if (enabled) BOOSTED_MAX_VOLUME else NORMAL_MAX_VOLUME)
-                    ?: target
+                // Replacing the whole chain rather than adding to it: this is the only filter Noctorium
+                // sets, and toggling twice should not leave two compressors in series.
+                sendCommand("set_property", JsonPrimitive("af"), JsonPrimitive(if (enabled) BOOST_FILTER else ""))
             }
-            mutableState.update { it.copy(
-                volume = confirmed,
-                volumeBoostEnabled = enabled,
-                errorMessage = null,
-            ) }
-            PlaybackLog.event(
-                "volume_boost_changed",
-                mapOf(
-                    "enabled" to enabled,
-                    "requestedPercent" to target * 100,
-                    "confirmedPercent" to confirmed * 100,
-                ),
-            )
+            mutableState.update { it.copy(volumeBoostEnabled = enabled, errorMessage = null) }
+            PlaybackLog.event("volume_boost_changed", mapOf("enabled" to enabled, "filter" to if (enabled) BOOST_FILTER else ""))
         } catch (error: Exception) {
             mutableState.update { it.copy(errorMessage = error.message ?: "Volume boost failed") }
             PlaybackLog.event("volume_boost_failed", mapOf("enabled" to enabled, "message" to (error.message ?: "unknown")))

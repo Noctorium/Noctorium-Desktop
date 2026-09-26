@@ -1700,14 +1700,17 @@ private fun VolumeControl(playback: PlaybackState, state: AppState) {
                     Text("Volume", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     Text(
                         "${(playback.volume * 100).roundToInt()}%",
-                        color = if (playback.volume > 1f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (playback.volumeBoostEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
+                // Straight through. The slider used to stretch to ten times unity when the boost was on,
+                // which was only ever a way of asking mpv to clip harder; the boost is a filter now and
+                // the slider means one thing.
                 Slider(
-                    value = volumeToSliderPosition(playback.volume, playback.volumeBoostEnabled),
-                    onValueChange = { state.setVolume(sliderPositionToVolume(it, playback.volumeBoostEnabled)) },
+                    value = playback.volume.coerceIn(0f, 1f),
+                    onValueChange = state::setVolume,
                     valueRange = 0f..1f,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1720,7 +1723,7 @@ private fun VolumeControl(playback: PlaybackState, state: AppState) {
                     FilterChip(
                         selected = playback.volumeBoostEnabled,
                         onClick = state::toggleVolumeBoost,
-                        label = { Text("Boost ×10", fontSize = 11.sp) },
+                        label = { Text("Boost", fontSize = 11.sp) },
                         leadingIcon = { Icon(Icons.Default.Bolt, null, Modifier.size(14.dp)) },
                         modifier = Modifier.height(30.dp),
                     )
@@ -2014,26 +2017,6 @@ private fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppStat
                 if (stackedAtTop) HorizontalDivider(color = stackedRule)
             }
         }
-    }
-}
-
-internal fun volumeToSliderPosition(volume: Float, boosted: Boolean): Float {
-    if (!boosted) return volume.coerceIn(0f, 1f)
-    val safeVolume = volume.coerceIn(0f, 10f)
-    return if (safeVolume <= 1f) {
-        safeVolume * .5f
-    } else {
-        .5f + ((safeVolume - 1f) / 9f) * .5f
-    }
-}
-
-internal fun sliderPositionToVolume(position: Float, boosted: Boolean): Float {
-    val safePosition = position.coerceIn(0f, 1f)
-    if (!boosted) return safePosition
-    return if (safePosition <= .5f) {
-        safePosition * 2f
-    } else {
-        1f + ((safePosition - .5f) / .5f) * 9f
     }
 }
 
