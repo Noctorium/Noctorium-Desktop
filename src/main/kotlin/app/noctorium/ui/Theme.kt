@@ -27,11 +27,18 @@ val DefaultTheme: ThemeColours = ThemePreset.NOCTORIUM_NIGHT.colours!!
 @Composable
 fun ink(alpha: Float): Color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
 
-/** Blends toward [other]; used to derive a whole scheme from a theme's six colours. */
+/**
+ * Blends toward [other]; used to derive a whole scheme from a theme's six colours.
+ *
+ * Opacity is blended along with the rest. It used to be dropped -- the result was always fully opaque --
+ * which cost nothing while every colour here was opaque anyway, and turned two of the glass surfaces
+ * back into solid ones the moment they were not.
+ */
 internal fun Color.mix(other: Color, ratio: Float): Color = Color(
     red = red + (other.red - red) * ratio,
     green = green + (other.green - green) * ratio,
     blue = blue + (other.blue - blue) * ratio,
+    alpha = alpha + (other.alpha - alpha) * ratio,
 )
 
 /**

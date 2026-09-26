@@ -60,6 +60,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -215,17 +217,38 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
         onDispose { grab?.close() }
     }
 
-    MaterialTheme(colorScheme = noctoriumColorScheme(theme, accent)) {
-      CompositionLocalProvider(LocalTyping provides typing) {
+    val density = LocalDensity.current
+    MaterialTheme(
+        colorScheme = noctoriumColorScheme(theme, accent).asGlass(preferences.surfaceStyle),
+        shapes = noctoriumShapes(preferences.cornerStyle),
+    ) {
+      // Text size, applied to the density rather than to the typography.
+      //
+      // Almost every size in this application is written at the call site as a literal `.sp`, so scaling
+      // MaterialTheme's typography would have moved about four labels and left the rest where they were.
+      // fontScale is the one lever that reaches every `.sp` there is, whether it came from a theme or
+      // from somebody typing 12 into a Text. It multiplies whatever the system is already asking for,
+      // so a machine set to large text and Noctorium set to large text get both.
+      CompositionLocalProvider(
+          LocalTyping provides typing,
+          LocalDensity provides Density(density.density, density.fontScale * preferences.textSize.scale),
+      ) {
         if (shortcutsOpen) ShortcutsSheet { shortcutsOpen = false }
         // The launch check has an answer nobody asked for; this is where it gets to say so once.
         UpdatePrompt(appState)
+        Box(Modifier.fillMaxSize()) {
+        if (preferences.surfaceStyle.isGlass) {
+            GlassBackdrop(queue.current?.artworkUrl, queue.current?.provider ?: ProviderType.LOCAL, Color(theme.background))
+        }
         Surface(
             Modifier
                 .fillMaxSize()
                 .focusRequester(keyboard)
                 .focusable()
                 .onKeyEvent(::handle),
+            // Transparent under glass, or the page would paint over the wash before any panel got the
+            // chance to be translucent in front of it.
+            color = if (preferences.surfaceStyle.isGlass) Color.Transparent else MaterialTheme.colorScheme.surface,
         ) {
             Row {
                 NavigationRail(ui.destination, appState::navigate)
@@ -249,6 +272,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                     if (!playerAtTop) PlayerBar(queue, playback, appState)
                 }
             }
+        }
         }
       }
     }
@@ -3335,6 +3359,26 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
                 "Tints the screen with colours sampled from the cover.",
                 preferences.ambientBackdrop,
                 state::setAmbientBackdrop,
+            )
+            Spacer(Modifier.height(16.dp))
+            ChoiceRow(
+                "Surfaces",
+                SurfaceStyle.entries,
+                preferences.surfaceStyle,
+                { it.displayName },
+                state::setSurfaceStyle,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(preferences.surfaceStyle.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            Spacer(Modifier.height(16.dp))
+            ChoiceRow("Corners", CornerStyle.entries, preferences.cornerStyle, { it.displayName }, state::setCornerStyle)
+            Spacer(Modifier.height(16.dp))
+            ChoiceRow("Text size", TextSize.entries, preferences.textSize, { it.displayName }, state::setTextSize)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Everything at once, on top of whatever text size the machine is already set to.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
             )
         }
 
