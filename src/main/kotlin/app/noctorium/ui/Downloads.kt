@@ -308,7 +308,7 @@ internal fun SaveMusicSetting(preferences: NoctoriumPreferences, state: AppState
                 TextButton({ state.setExportFolder(folder) }) { Text("Save") }
             }
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().tracksTyping(),
     )
     Spacer(Modifier.height(7.dp))
     Text(

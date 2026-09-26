@@ -109,7 +109,7 @@ private fun CustomMinutes(start: (Int) -> Unit) {
             label = { Text("Minutes", fontSize = 11.sp) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.width(110.dp),
+            modifier = Modifier.width(110.dp).tracksTyping(),
         )
         Spacer(Modifier.width(8.dp))
         TextButton({ minutes?.let(start) }, enabled = minutes != null) { Text("Start") }

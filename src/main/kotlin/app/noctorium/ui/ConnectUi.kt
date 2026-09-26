@@ -208,7 +208,7 @@ internal fun ConnectSettingsRows(state: AppState) {
                 label = { Text("Name this device") },
                 placeholder = { Text(connect.thisDevice) },
                 singleLine = true,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).tracksTyping(),
             )
             Spacer(Modifier.width(8.dp))
             TextButton({ state.renameThisDevice(name) }) { Text("Save") }

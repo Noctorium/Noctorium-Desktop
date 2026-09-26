@@ -3,6 +3,18 @@ package app.noctorium.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateContentSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -131,8 +143,73 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     // useful opinion on, and the alternative was a dialog in front of an application that cannot work yet.
     LaunchedEffect(Unit) { PlaybackToolInstaller.ensureReady() }
 
+    var shortcutsOpen by remember { mutableStateOf(false) }
+    // Bumped by the shortcut that means "search"; the search box watches it and takes the caret. A
+    // counter rather than a flag, so pressing it twice while already there works the second time too.
+    var focusSearch by remember { mutableStateOf(0) }
+    val keyboard = remember { FocusRequester() }
+
+    // Whether the caret is in a box. Text fields set it themselves, because a focused one does not stop
+    // an ordinary letter reaching here -- typing "no surprises" into the search box put the words in and
+    // toggled shuffle three times on the way past, which is not something either piece of code admits to.
+    val typing = remember { mutableStateOf(false) }
+
+    fun handle(event: KeyEvent): Boolean {
+        if (event.type != KeyEventType.KeyDown) return false
+        val shortcut = shortcutFor(
+            key = event.key,
+            ctrl = event.isCtrlPressed,
+            shift = event.isShiftPressed,
+            alt = event.isAltPressed,
+            typing = typing.value,
+        ) ?: return false
+        when (shortcut) {
+            Shortcut.PlayPause -> appState.togglePlayback()
+            Shortcut.Next -> appState.next()
+            Shortcut.Previous -> appState.previous()
+            is Shortcut.Seek -> {
+                val duration = playback.durationMs
+                if (duration > 0) {
+                    appState.seekTo((playback.positionMs + shortcut.deltaMs).coerceIn(0, duration))
+                }
+            }
+            is Shortcut.Volume -> appState.setVolume((playback.volume + shortcut.delta).coerceIn(0f, 1f))
+            Shortcut.Mute -> appState.toggleMute()
+            Shortcut.Shuffle -> appState.toggleShuffle()
+            Shortcut.Repeat -> appState.cycleRepeat()
+            Shortcut.Like -> queue.current?.let(appState::toggleLike)
+            is Shortcut.Go -> appState.navigate(shortcut.destination)
+            Shortcut.Search -> {
+                appState.navigate(Destination.SEARCH)
+                focusSearch++
+            }
+            Shortcut.Help -> shortcutsOpen = true
+            // The sheet first, and otherwise the caret: having typed in a box, there is no way back to
+            // the keyboard without reaching for the mouse, which rather defeats the point of all this.
+            // Escape puts focus back where the shortcuts live.
+            Shortcut.Dismiss -> when {
+                shortcutsOpen -> shortcutsOpen = false
+                typing.value -> runCatching { keyboard.requestFocus() }
+                // Nothing of ours is open, so it belongs to whatever else is listening.
+                else -> return false
+            }
+        }
+        return true
+    }
+
+    // Something has to hold focus for a key to arrive at all, and on a fresh window nothing does.
+    LaunchedEffect(Unit) { runCatching { keyboard.requestFocus() } }
+
     MaterialTheme(colorScheme = noctoriumColorScheme(theme, accent)) {
-        Surface(Modifier.fillMaxSize()) {
+      CompositionLocalProvider(LocalTyping provides typing) {
+        if (shortcutsOpen) ShortcutsSheet { shortcutsOpen = false }
+        Surface(
+            Modifier
+                .fillMaxSize()
+                .focusRequester(keyboard)
+                .focusable()
+                .onKeyEvent(::handle),
+        ) {
             Row {
                 NavigationRail(ui.destination, appState::navigate)
                 Column(Modifier.weight(1f)) {
@@ -145,7 +222,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                     Box(Modifier.weight(1f)) {
                         when (ui.destination) {
                             Destination.HOME -> HomeScreen(ui, appState)
-                            Destination.SEARCH -> SearchScreen(ui, appState)
+                            Destination.SEARCH -> SearchScreen(ui, appState, focusSearch)
                             Destination.LIBRARY -> LibraryScreen(appState)
                             Destination.NOW_PLAYING -> NowPlayingScreen(queue, playback, appState)
                             Destination.QUEUE -> QueueScreen(queue, appState)
@@ -156,6 +233,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                 }
             }
         }
+      }
     }
 }
 
@@ -764,7 +842,7 @@ private fun NewPlaylistDialog(
                     { name = it.take(120) },
                     label = { Text("Playlist name") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().tracksTyping(),
                 )
                 Spacer(Modifier.height(16.dp))
                 Text("Create it", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -841,7 +919,7 @@ private fun PlaylistNameDialog(
                 { name = it.take(120) },
                 label = { Text("Playlist name") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().tracksTyping(),
             )
         },
         confirmButton = { Button({ finish(name) }, enabled = name.isNotBlank()) { Text(confirmLabel) } },
@@ -868,7 +946,7 @@ private fun ImportLinkDialog(finish: (String?) -> Unit) {
                     { link = it },
                     label = { Text("Share link") },
                     placeholder = { Text(PlaylistShareLink.PREFIX + "…") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().tracksTyping(),
                     maxLines = 4,
                 )
             }
@@ -907,7 +985,7 @@ private fun SoundCloudNamePrompt(state: AppState) {
                     label = { Text("Profile name or profile link") },
                     placeholder = { Text("your-name") },
                     singleLine = true,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).tracksTyping(),
                 )
                 Spacer(Modifier.width(10.dp))
                 Button({ state.setSoundCloudUsername(username) }, enabled = username.isNotBlank()) {
@@ -1173,7 +1251,12 @@ private fun LibraryProblemBanner(message: String) {
 }
 
 @Composable
-private fun SearchScreen(ui: AppUiState, state: AppState) {
+private fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0) {
+    val box = remember { FocusRequester() }
+    // Zero is the screen simply being opened, which should not steal the caret from somebody who came
+    // here with the mouse. Every value after that is the shortcut asking for it.
+    LaunchedEffect(focusRequest) { if (focusRequest > 0) runCatching { box.requestFocus() } }
+
     Column(Modifier.fillMaxSize().padding(32.dp)) {
         Text("Search", fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(18.dp))
@@ -1184,7 +1267,7 @@ private fun SearchScreen(ui: AppUiState, state: AppState) {
             placeholder = { Text("Artists, songs, albums and playlists") },
             singleLine = true,
             shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth().widthIn(max = 860.dp),
+            modifier = Modifier.fillMaxWidth().widthIn(max = 860.dp).focusRequester(box).tracksTyping(),
         )
         Spacer(Modifier.height(12.dp))
         SearchModePicker(ui.searchMode, state::setSearchMode)
@@ -1407,8 +1490,8 @@ private fun EditTrackDialog(track: Track, existing: TrackEdit?, state: AppState,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                 )
-                OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(artist, { artist = it }, label = { Text("Artist") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth().tracksTyping())
+                OutlinedTextField(artist, { artist = it }, label = { Text("Artist") }, singleLine = true, modifier = Modifier.fillMaxWidth().tracksTyping())
             }
         },
         confirmButton = {
@@ -3545,7 +3628,7 @@ private fun ProfileSettingsPanel(preferences: NoctoriumPreferences, state: AppSt
         Text("Local profile", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Text("This name stays on this computer and identifies your Noctorium setup.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         Spacer(Modifier.height(18.dp))
-        OutlinedTextField(name, { name = it.take(40) }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(name, { name = it.take(40) }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth().tracksTyping())
         Spacer(Modifier.height(14.dp))
         Button({ state.setProfileName(name) }) { Icon(Icons.Default.Save, null); Spacer(Modifier.width(7.dp)); Text("Save profile") }
     }
@@ -4156,7 +4239,7 @@ private fun AccountConnectionPanel(
                     label = { Text("Profile name") },
                     placeholder = { Text("your-name") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().tracksTyping(),
                 )
                 Spacer(Modifier.height(11.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -4187,7 +4270,7 @@ private fun AccountConnectionPanel(
                     { cookieFile = it.trim() },
                     label = { Text("Path to cookies.txt") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().tracksTyping(),
                 )
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton({ pickCookieFile()?.let { cookieFile = it } }) {
@@ -4228,7 +4311,7 @@ private fun AccountConnectionPanel(
                         label = { Text("Browser profile (optional)") },
                         placeholder = { Text(if (selectedBrowser.chromium) "Profile 2" else "default-release") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().tracksTyping(),
                     )
                     if (!selectedBrowser.chromium) {
                         Spacer(Modifier.height(9.dp))
@@ -4237,7 +4320,7 @@ private fun AccountConnectionPanel(
                             { container = it.take(120) },
                             label = { Text("Firefox container (optional)") },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().tracksTyping(),
                         )
                     }
                     Spacer(Modifier.height(8.dp))
@@ -4422,7 +4505,7 @@ private fun SpotifySettingsPanel(settings: SettingsState, state: AppState) {
                 label = { Text("Client ID") },
                 placeholder = { Text("32 characters from the dashboard") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().tracksTyping(),
             )
             Spacer(Modifier.height(7.dp))
             Text(
@@ -4564,7 +4647,7 @@ private fun ScrobblingSettingsPanel(settings: SettingsState, state: AppState) {
                                 label = { Text("Last.fm API key") },
                                 singleLine = true,
                                 visualTransformation = PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().tracksTyping(),
                             )
                             Spacer(Modifier.height(9.dp))
                             OutlinedTextField(
@@ -4573,7 +4656,7 @@ private fun ScrobblingSettingsPanel(settings: SettingsState, state: AppState) {
                                 label = { Text("Last.fm shared secret") },
                                 singleLine = true,
                                 visualTransformation = PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().tracksTyping(),
                             )
                             Spacer(Modifier.height(10.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -4613,7 +4696,7 @@ private fun ScrobblingSettingsPanel(settings: SettingsState, state: AppState) {
                         label = { Text("ListenBrainz user token") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().tracksTyping(),
                     )
                     Spacer(Modifier.height(11.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -4761,7 +4844,7 @@ private fun DiscordSettingsPanel(preferences: NoctoriumPreferences, state: AppSt
                 label = { Text("Application ID (optional)") },
                 placeholder = { Text("Leave empty to use Noctorium's own") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().tracksTyping(),
             )
             Spacer(Modifier.height(11.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -4975,7 +5058,7 @@ private fun TemplateField(label: String, value: String, change: (String) -> Unit
         },
         label = { Text(label) },
         singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().tracksTyping(),
     )
 }
 
@@ -5147,7 +5230,7 @@ private fun NoctoriumAccountPanel(state: AppState) {
                         label = { Text("Display name") },
                         placeholder = { Text("Optional") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().tracksTyping(),
                     )
                     Spacer(Modifier.height(9.dp))
                 }
@@ -5156,7 +5239,7 @@ private fun NoctoriumAccountPanel(state: AppState) {
                     { email = it },
                     label = { Text("Email") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().tracksTyping(),
                 )
                 Spacer(Modifier.height(9.dp))
                 OutlinedTextField(
@@ -5171,7 +5254,7 @@ private fun NoctoriumAccountPanel(state: AppState) {
                     } else {
                         null
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().tracksTyping(),
                 )
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
