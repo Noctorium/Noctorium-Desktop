@@ -4,7 +4,8 @@ import app.noctorium.domain.Artist
 import app.noctorium.domain.ProviderType
 import app.noctorium.domain.Track
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
@@ -61,20 +62,39 @@ class StuckSpinnerTest {
         assertEquals("no audio", engine.state.value.errorMessage)
     }
 
+    /**
+     * Pressing the next track while this one resolves used to surface as an error message, because
+     * CancellationException is an Exception and the catch took it -- which also stopped the cancellation
+     * propagating, so the coroutine that asked for it was never told.
+     *
+     * Ordered by two latches rather than by a sleep. It used to start the play, wait 150ms and hope the
+     * cancel landed while the resolve was still going; the thing it raced was a blocking ten-second
+     * pause, so every run of the whole suite paid ten seconds for it, and on a machine under load the
+     * cancel arrived after the resolve had already finished and failed -- reported as this very bug
+     * coming back. Now the cancel happens strictly after the resolve has been entered and strictly
+     * before it is allowed to return, which is the situation being described, held still.
+     */
     @Test
     fun `being interrupted is not reported as a playback failure`() = runBlocking {
-        // Pressing the next track while this one resolves used to surface as an error message, because
-        // CancellationException is an Exception and the catch took it -- which also stopped the
-        // cancellation propagating, so the coroutine that asked for it was never told.
+        val resolving = CompletableDeferred<Unit>()
+        val letItFinish = CompletableDeferred<Unit>()
         val engine = MpvPlaybackEngine(
             resolver = YtDlpService(executable = { null }),
             executable = { Path.of("mpv-that-is-never-run") },
-            downloadedFile = { runBlocking { delay(10_000) }; null },
+            downloadedFile = {
+                resolving.complete(Unit)
+                // Blocking, because the engine asks this question straight rather than suspending on it.
+                // The play runs on Dispatchers.IO below precisely so that blocking here holds up nothing
+                // but itself, and the test thread stays free to do the cancelling.
+                runBlocking { letItFinish.await() }
+                null
+            },
         )
 
-        val job = launch { engine.play(track) }
-        delay(150)
+        val job = launch(Dispatchers.IO) { engine.play(track) }
+        resolving.await()
         job.cancel()
+        letItFinish.complete(Unit)
         job.join()
 
         val state = engine.state.value
