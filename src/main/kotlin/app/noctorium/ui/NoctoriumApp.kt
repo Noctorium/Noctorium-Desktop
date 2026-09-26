@@ -1687,10 +1687,12 @@ private fun VolumeControl(playback: PlaybackState, state: AppState) {
             Icon(
                 if (playback.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                 "Volume",
-                tint = when {
-                    playback.isMuted -> MaterialTheme.colorScheme.primary
-                    playback.volume > 1f -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                // Lit for the boost, not for a volume above unity: there is no longer such a thing, so
+                // that test was left never being true and the closed button stopped saying anything.
+                tint = if (playback.isMuted || playback.volumeBoostEnabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
         }
