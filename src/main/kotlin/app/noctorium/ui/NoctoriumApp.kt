@@ -218,6 +218,8 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     MaterialTheme(colorScheme = noctoriumColorScheme(theme, accent)) {
       CompositionLocalProvider(LocalTyping provides typing) {
         if (shortcutsOpen) ShortcutsSheet { shortcutsOpen = false }
+        // The launch check has an answer nobody asked for; this is where it gets to say so once.
+        UpdatePrompt(appState)
         Surface(
             Modifier
                 .fillMaxSize()

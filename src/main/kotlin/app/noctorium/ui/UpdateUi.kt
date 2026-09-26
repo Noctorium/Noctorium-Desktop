@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -147,3 +149,53 @@ internal fun UpdatePanel(state: AppState) {
 
 private fun megabytes(bytes: Long): String =
     if (bytes <= 0) "size unknown" else "${(bytes / 1_048_576.0).let { "%.0f".format(it) }} MB"
+
+/**
+ * The one time updating interrupts: the launch check found something and nobody has been told.
+ *
+ * Until now the answer only ever appeared on the settings screen, which means it only reached people
+ * who already suspected there was something to find. A release can sit unnoticed for weeks that way.
+ *
+ * A question with two answers and no third state. Nothing counts down, nothing installs if the dialog
+ * is ignored, and closing it by clicking away is the same as saying no. No is remembered, so this asks
+ * once per version rather than once per launch -- and everything it offers stays in settings for
+ * anybody who shuts it and then changes their mind.
+ */
+@Composable
+internal fun UpdatePrompt(state: AppState) {
+    val updates by state.updates.collectAsState()
+    val offer = updates.prompt ?: return
+    // Whether Noctorium can do it, or can only point: an unzipped copy has no installer to re-run, and a
+    // release with no checksum is one this refuses to run unseen.
+    val itself = updates.canInstall && offer.file != null && offer.sha256 != null
+    AlertDialog(
+        onDismissRequest = state::dismissUpdate,
+        title = { Text("Noctorium ${offer.version} is out") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    if (updates.currentVersion.isBlank()) {
+                        "Do you want to update?"
+                    } else {
+                        "You have ${updates.currentVersion}. Do you want to update?"
+                    },
+                    fontSize = 13.sp,
+                )
+                Text(
+                    if (itself) {
+                        "Noctorium downloads it and hands it to the installer, which asks again before " +
+                            "anything is replaced. Close Noctorium when it says so."
+                    } else {
+                        "This copy cannot replace itself, so this opens the release page instead."
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
+            }
+        },
+        confirmButton = {
+            Button(state::acceptUpdate) { Text(if (itself) "Update" else "Open the release page") }
+        },
+        dismissButton = { TextButton(state::dismissUpdate) { Text("Not now") } },
+    )
+}
