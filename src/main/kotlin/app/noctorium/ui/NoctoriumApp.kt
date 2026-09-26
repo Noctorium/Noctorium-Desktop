@@ -1,6 +1,11 @@
 package app.noctorium.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateContentSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -2853,13 +2858,14 @@ private fun PlaybackProgressBar(
         else -> formatPlaybackTime(durationMs)
     }
 
-    if (style == ProgressBarStyle.MINIMAL) {
-        MinimalProgressBar(
+    if (style.isDrawn) {
+        DrawnProgressBar(
+            style = style,
             positionMs = displayedPosition,
-            maximumMs = maximum,
             fraction = fraction,
             trailingLabel = trailing,
             canSeek = canSeek,
+            moving = playback.isPlaying && !dragging,
             onScrub = { fraction ->
                 dragging = true
                 draggedPosition = (fraction * maximum).coerceIn(0f, maximum)
@@ -2906,24 +2912,55 @@ private fun PlaybackProgressBar(
 }
 
 /**
- * A hairline seek bar: times at each end, a thin track, and a small dot for the handle. Drawn directly rather
- * than built from a Material slider, because the point of it is the absence of furniture.
+ * Every seek bar that is not Material's own: times at each end, and the track drawn between them.
+ *
+ * Drawn rather than built out of a slider, because what these styles differ in is exactly the furniture
+ * a slider insists on. One composable for all of them and one [drawSeekBar] underneath, so seeking --
+ * tap anywhere, drag from anywhere -- is written once and cannot work in one style and not another.
  */
 @Composable
-private fun MinimalProgressBar(
+private fun DrawnProgressBar(
+    style: ProgressBarStyle,
     positionMs: Float,
-    maximumMs: Float,
     /** How much of the track has played, already resolved by the caller so an unknown length reads as empty. */
     fraction: Float,
     trailingLabel: String,
     canSeek: Boolean,
+    /** Whether the music is actually running, which is the only time the wave has any business moving. */
+    moving: Boolean,
     onScrub: (Float) -> Unit,
     onScrubFinished: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var widthPx by remember { mutableIntStateOf(1) }
-    val trackColour = ink(.22f)
+    val trackColour = ink(SeekBar.TRACK_ALPHA)
     val filledColour = MaterialTheme.colorScheme.primary
+
+    /*
+     * The wave's travel, and the two reasons it is animated the way it is.
+     *
+     * The phase runs 0..1 and is multiplied into the sine below, so one cycle of the animation moves the
+     * crests exactly one wavelength: the wave slides rather than shimmering in place.
+     *
+     * The amplitude is a separate animation to zero when nothing is playing. Stopping the phase instead
+     * would freeze the wave mid-crest, which looks like a rendering fault rather than like a paused
+     * song; easing the height out leaves the flat line the other styles draw, which is what a stopped
+     * player should look like.
+     */
+    val travel = rememberInfiniteTransition(label = "wave")
+    val phase by travel.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween((SeekBar.WAVE_SECONDS_PER_CYCLE * 1000).toInt(), easing = LinearEasing),
+        ),
+        label = "wavePhase",
+    )
+    val amplitude by animateFloatAsState(
+        if (style == ProgressBarStyle.WAVE && moving) 1f else 0f,
+        tween(450),
+        label = "waveAmplitude",
+    )
 
     Row(modifier.height(30.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -2959,26 +2996,7 @@ private fun MinimalProgressBar(
             contentAlignment = Alignment.Center,
         ) {
             Canvas(Modifier.fillMaxWidth().height(24.dp)) {
-                val centreY = size.height / 2f
-                val thickness = 3.dp.toPx()
-                drawLine(
-                    color = trackColour,
-                    start = Offset(0f, centreY),
-                    end = Offset(size.width, centreY),
-                    strokeWidth = thickness,
-                    cap = StrokeCap.Round,
-                )
-                val head = size.width * fraction
-                if (head > 0f) {
-                    drawLine(
-                        color = filledColour,
-                        start = Offset(0f, centreY),
-                        end = Offset(head, centreY),
-                        strokeWidth = thickness,
-                        cap = StrokeCap.Round,
-                    )
-                }
-                if (canSeek) drawCircle(color = filledColour, radius = 6.dp.toPx(), center = Offset(head, centreY))
+                drawSeekBar(style, fraction, canSeek, trackColour, filledColour, phase, amplitude)
             }
         }
         Text(
@@ -3628,11 +3646,13 @@ private fun AccentSwatch(option: AccentPreset, themeAccent: Color, selected: Boo
 
 @Composable
 private fun ProgressStyleOption(option: ProgressBarStyle, selected: Boolean, choose: () -> Unit) {
-    // The preview is a live bar frozen at a plausible position, so each option shows exactly what it will be.
+    // A live bar at a plausible position, so each option shows exactly what it will be. Playing rather
+    // than paused, because one of the styles is only itself while the music is running: a paused Wave
+    // is a flat line, and previewing it as one would be advertising the wrong thing.
     val preview = remember {
         PlaybackState(
             track = null,
-            status = PlaybackStatus.PAUSED,
+            status = PlaybackStatus.PLAYING,
             positionMs = 156_000,
             durationMs = 258_000,
         )
