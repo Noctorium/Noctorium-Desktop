@@ -44,7 +44,7 @@ internal fun UpdatePanel(state: AppState) {
     // both need to know it is really there.
     val file = available?.file
 
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = chromeBottom())) {
         SettingsPanelCard {
             Text(
                 if (available != null) "Noctorium ${available.version} is out" else "Noctorium is up to date",

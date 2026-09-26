@@ -58,7 +58,7 @@ internal fun PlaybackToolsPanel() {
     val scope = rememberCoroutineScope()
     val windows = hostPlatform().isWindows
 
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = chromeBottom())) {
         SettingsPanelCard {
             Text(
                 if (tools.ready) "Noctorium has what it needs" else "Something is missing",

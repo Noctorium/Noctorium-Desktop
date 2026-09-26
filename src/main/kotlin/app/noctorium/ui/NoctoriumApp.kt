@@ -224,7 +224,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
 
     val density = LocalDensity.current
     MaterialTheme(
-        colorScheme = noctoriumColorScheme(theme, accent).asGlass(preferences.surfaceStyle),
+        colorScheme = noctoriumColorScheme(theme, accent),
         shapes = noctoriumShapes(preferences.cornerStyle),
     ) {
       // Text size, applied to the density rather than to the typography.
@@ -241,19 +241,12 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
         if (shortcutsOpen) ShortcutsSheet { shortcutsOpen = false }
         // The launch check has an answer nobody asked for; this is where it gets to say so once.
         UpdatePrompt(appState)
-        Box(Modifier.fillMaxSize()) {
-        if (preferences.surfaceStyle.isGlass) {
-            GlassBackdrop(queue.current?.artworkUrl, queue.current?.provider ?: ProviderType.LOCAL, Color(theme.background))
-        }
         Surface(
             Modifier
                 .fillMaxSize()
                 .focusRequester(keyboard)
                 .focusable()
                 .onKeyEvent(::handle),
-            // Transparent under glass, or the page would paint over the wash before any panel got the
-            // chance to be translucent in front of it.
-            color = if (preferences.surfaceStyle.isGlass) Color.Transparent else MaterialTheme.colorScheme.surface,
         ) {
             Row {
                 NavigationRail(ui.destination, appState::navigate)
@@ -263,8 +256,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                         appState.navigate(Destination.SETTINGS)
                     }
                     val playerAtTop = preferences.playerBarPosition == PlayerBarPosition.TOP
-                    if (playerAtTop) PlayerBar(queue, playback, appState)
-                    Box(Modifier.weight(1f)) {
+                    val screens: @Composable () -> Unit = {
                         when (ui.destination) {
                             Destination.HOME -> HomeScreen(ui, appState)
                             Destination.SEARCH -> SearchScreen(ui, appState, focusSearch)
@@ -274,12 +266,67 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                             Destination.SETTINGS -> SettingsScreen(appState)
                         }
                     }
-                    if (!playerAtTop) PlayerBar(queue, playback, appState)
+                    if (preferences.surfaceStyle.isGlass) {
+                        Box(Modifier.weight(1f)) {
+                            GlassContent(queue, playback, appState, Color(theme.background), playerAtTop, screens)
+                        }
+                    } else {
+                        if (playerAtTop) PlayerBar(queue, playback, appState)
+                        Box(Modifier.weight(1f)) { screens() }
+                        if (!playerAtTop) PlayerBar(queue, playback, appState)
+                    }
                 }
             }
         }
-        }
       }
+    }
+}
+
+/**
+ * The content area under liquid glass: the screens running its full height, and the player floating
+ * over them as a pane.
+ *
+ * The content goes *underneath*, which is the whole reason for the arrangement: a pane over a flat patch
+ * of page has nothing to bend, and a pane over a grid of covers bends every one of them as they scroll
+ * past. The screens are told how much of them the player covers, so their last rows can still be
+ * scrolled clear of it.
+ *
+ * The pane is drawn after the content and outside what is recorded for it, or it would be looking at
+ * itself.
+ */
+@Composable
+private fun BoxScope.GlassContent(
+    queue: QueueState,
+    playback: PlaybackState,
+    state: AppState,
+    background: Color,
+    playerAtTop: Boolean,
+    screens: @Composable () -> Unit,
+) {
+    val backdrop = rememberGlassBackdrop()
+    val density = LocalDensity.current
+    var cover by remember { mutableIntStateOf(0) }
+    Box(Modifier.fillMaxSize().glassSource(backdrop)) {
+        GlassWash(queue.current?.artworkUrl, queue.current?.provider ?: ProviderType.LOCAL, background)
+        val covered = with(density) { cover.toDp() }
+        if (playerAtTop) {
+            // At the top the screens start below the pane rather than under it. Half of them have a
+            // title that sits above their list instead of in it -- the settings pages, search, the
+            // library -- and a player floating over those covers the title, which no list padding can
+            // move. The phone solves this in its one shared scaffold; the desktop has no such scaffold,
+            // so it is solved here, and the wash still runs behind the pane, which is still glass.
+            Box(Modifier.fillMaxSize().padding(top = covered)) { screens() }
+        } else {
+            CompositionLocalProvider(LocalChromeInsets provides ChromeInsets(bottom = covered)) { screens() }
+        }
+    }
+    Box(
+        Modifier
+            .align(if (playerAtTop) Alignment.TopCenter else Alignment.BottomCenter)
+            .onSizeChanged { cover = it.height }
+            .padding(Glass.FLOAT_INSET_DP.dp),
+    ) {
+        GlassPane(backdrop, cornerRadius = 28.dp) { PlayerBar(queue, playback, state) }
     }
 }
 
@@ -355,7 +402,7 @@ private fun HomeScreen(ui: AppUiState, state: AppState) {
     val recent = ui.recentTracks.filter { track ->
         ui.providerFilter == ProviderFilter.ALL || track.provider.name == ui.providerFilter.name
     }
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 32.dp), contentPadding = PaddingValues(bottom = 36.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 32.dp), contentPadding = chromePadding(bottom = 36.dp)) {
         item {
             Spacer(Modifier.height(28.dp))
             Row(verticalAlignment = Alignment.Bottom) {
@@ -689,7 +736,7 @@ private fun LibraryScreen(state: AppState) {
             library.playlists.isEmpty() -> EmptyScreen("No playlists yet", "Playlists you own on a connected service appear here.")
             else -> LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(9.dp),
-                contentPadding = PaddingValues(bottom = 28.dp),
+                contentPadding = chromePadding(bottom = 28.dp),
             ) {
                 library.errorMessage?.let { message ->
                     item { LibraryProblemBanner(message) }
@@ -832,7 +879,7 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, state:
         if (playlist.tracks.isEmpty()) {
             EmptyScreen("Nothing here yet", "Use the ⋮ menu on any track to add it to this playlist.")
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(bottom = 28.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = chromePadding(bottom = 28.dp)) {
                 items(playlist.tracks, key = { it.queueKey }) { track ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.weight(1f)) { TrackRow(track, playlist.tracks, state) }
@@ -1143,7 +1190,7 @@ private fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: App
             playlist.tracks.isEmpty() -> EmptyScreen("Nothing to play", "This playlist came back empty.")
             else -> LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(7.dp),
-                contentPadding = PaddingValues(bottom = 28.dp),
+                contentPadding = chromePadding(bottom = 28.dp),
             ) {
                 items(playlist.tracks, key = { it.queueKey }) { track ->
                     TrackRow(track, playlist.tracks, state)
@@ -1327,7 +1374,7 @@ private fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0)
                 else "Only ${ui.searchMode.displayName} results will appear.",
             )
             ui.errorMessage != null -> PlaybackError(ui.errorMessage.orEmpty())
-            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = chromePadding()) {
                 items(ui.searchResults.tracks, key = { it.queueKey }) { track ->
                     TrackRow(track, ui.searchResults.tracks, state)
                 }
@@ -1785,9 +1832,9 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
     // content: below the bar when the bar is at the top of the window, above it when it is at the foot.
     val atTop = preferences.playerBarPosition == PlayerBarPosition.TOP
     val rule = MaterialTheme.colorScheme.primary.copy(alpha = .22f)
-    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxWidth().height(74.dp)) {
+    Surface(color = if (LocalInGlass.current) Color.Transparent else MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxWidth().height(74.dp)) {
         Column {
-            if (!atTop) HorizontalDivider(color = rule)
+            if (!atTop && !LocalInGlass.current) HorizontalDivider(color = rule)
             Row(
                 Modifier.fillMaxWidth().weight(1f).padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1902,7 +1949,7 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                 }
                 VolumeControl(playback, state)
             }
-            if (atTop) HorizontalDivider(color = rule)
+            if (atTop && !LocalInGlass.current) HorizontalDivider(color = rule)
         }
     }
 }
@@ -1921,7 +1968,7 @@ private fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppStat
     val stackedRule = MaterialTheme.colorScheme.primary.copy(alpha = .35f)
     Surface(
         shadowElevation = 0.dp,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = if (LocalInGlass.current) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth().height(100.dp).clickable(
             enabled = current != null,
             onClickLabel = "Open now playing",
@@ -1932,7 +1979,7 @@ private fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppStat
             val compact = maxWidth < 760.dp
             Column {
                 // As above: the rule marks the edge the content is on.
-                if (!stackedAtTop) HorizontalDivider(color = stackedRule)
+                if (!stackedAtTop && !LocalInGlass.current) HorizontalDivider(color = stackedRule)
                 PlaybackProgressBar(
                     playback = playback,
                     onSeek = state::seekTo,
@@ -2047,7 +2094,7 @@ private fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppStat
                         }
                     }
                 }
-                if (stackedAtTop) HorizontalDivider(color = stackedRule)
+                if (stackedAtTop && !LocalInGlass.current) HorizontalDivider(color = stackedRule)
             }
         }
     }
@@ -2519,7 +2566,7 @@ private fun LyricsContent(outcome: LyricsProviderOutcome, positionMs: Long, stat
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 12.dp + chromeBottom()),
                 verticalArrangement = Arrangement.spacedBy(if (result.synced) 13.dp else 8.dp),
             ) {
                 itemsIndexed(result.lines) { index, line ->
@@ -2612,7 +2659,7 @@ private fun UpNextPanel(queue: QueueState, state: AppState) {
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 10.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
-            contentPadding = PaddingValues(bottom = 18.dp),
+            contentPadding = chromePadding(bottom = 18.dp),
         ) {
             itemsIndexed(queue.tracks, key = { index, track -> "expanded:${track.queueKey}:$index" }) { index, track ->
                 QueueRow(track, index, index == queue.currentIndex, state)
@@ -2789,7 +2836,7 @@ private fun QueueScreen(queue: QueueState, state: AppState) {
         if (queue.tracks.isEmpty()) {
             EmptyScreen("Your queue is empty", "Play a section or add tracks from the ⋮ menu.")
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = chromePadding(bottom = 20.dp)) {
                 itemsIndexed(queue.tracks, key = { index, track -> "${track.queueKey}:$index" }) { index, track ->
                     QueueTrackRow(track, index, queue, state)
                 }
@@ -3088,7 +3135,7 @@ private fun SettingsScreen(state: AppState) {
 
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 30.dp),
-        contentPadding = PaddingValues(top = 26.dp, bottom = 32.dp),
+        contentPadding = chromePadding(top = 26.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(11.dp),
     ) {
         item {
@@ -3261,7 +3308,7 @@ private fun SettingsDetailHeader(title: String, back: () -> Unit, content: @Comp
  */
 @Composable
 private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppState) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsPanelCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Tune, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
@@ -4015,7 +4062,7 @@ private fun YouTubeAccountPanel(settings: SettingsState, state: AppState) {
     var signInOpen by remember { mutableStateOf(false) }
     if (signInOpen) YouTubeSignInWindow(state) { signInOpen = false }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsPanelCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.PlayCircle, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
@@ -4164,7 +4211,7 @@ private fun AccountConnectionPanel(
         CookieSource.ofBrowser(selectedBrowser, profile, container)
     }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsPanelCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -4489,7 +4536,7 @@ private fun SpotifySettingsPanel(settings: SettingsState, state: AppState) {
     val redirect = remember { state.spotifyRedirectUri() }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SettingsPanelCard {
@@ -4658,7 +4705,7 @@ private fun ScrobblingSettingsPanel(settings: SettingsState, state: AppState) {
     var lastFmSharedSecret by remember { mutableStateOf("") }
     var useCustomLastFmApplication by remember { mutableStateOf(false) }
     val scrobbling = settings.scrobbling
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = chromePadding(bottom = 24.dp)) {
         if (scrobbling.lastEvent != null || scrobbling.scrobblesThisSession > 0) {
             item {
                 Surface(color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .5f), shape = RoundedCornerShape(12.dp)) {
@@ -4827,7 +4874,7 @@ private fun LyricsSettingsPanel() {
         "Happi" to !System.getenv("NOCTORIUM_HAPPI_API_KEY").isNullOrBlank(),
         "Genius" to true,
     )
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = chromePadding()) {
         item { Text("Core providers work without an account. Optional commercial sources show whether their API key is available.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp); Spacer(Modifier.height(8.dp)) }
         items(providers, key = { it.first }) { (name, ready) ->
             Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(11.dp)) {
@@ -4847,7 +4894,7 @@ private fun DiscordSettingsPanel(preferences: NoctoriumPreferences, state: AppSt
     val status by state.discordStatus.collectAsState()
     var applicationId by remember(discord.applicationId) { mutableStateOf(discord.applicationId) }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsPanelCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.SportsEsports, null, Modifier.size(38.dp), tint = MaterialTheme.colorScheme.primary)
@@ -5152,7 +5199,7 @@ private fun DiagnosticsPanel(settings: SettingsState, state: AppState) {
             Spacer(Modifier.width(8.dp)); Text(if (settings.diagnosticsRunning) "Checking…" else "Run diagnostics")
         }
         Spacer(Modifier.height(16.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = chromePadding()) {
             items(settings.diagnostics, key = { it.name }) { result ->
                 val color = when (result.level) { DiagnosticLevel.PASS -> MaterialTheme.colorScheme.primary; DiagnosticLevel.WARNING -> MaterialTheme.colorScheme.tertiary; DiagnosticLevel.FAIL -> MaterialTheme.colorScheme.error }
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(11.dp)) {
@@ -5252,7 +5299,7 @@ private fun NoctoriumAccountPanel(state: AppState) {
     var password by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
 
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = chromeBottom())) {
         if (account.signedIn) {
             val user = account.user!!
             SettingsPanelCard {
