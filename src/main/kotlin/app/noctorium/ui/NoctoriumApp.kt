@@ -4034,7 +4034,7 @@ private fun YouTubeSignInWindow(state: AppState, close: () -> Unit) {
                     finishing = false
                     continue
                 }
-                state.completeYouTubeSignIn(saved.toString())
+                state.completeYouTubeSignIn(saved.toString(), live.userAgent())
                 // The browser's copy goes once Noctorium has its own, as SimpMusic does it. Two holders of
                 // one session is how a copy dies: whichever renews the cookies turns the other's into
                 // yesterday's, and the browser would be renewing them every time it touched Google.

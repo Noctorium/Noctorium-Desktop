@@ -68,6 +68,15 @@ class EmbeddedBrowserSession(private val installDir: Path) {
 
     fun currentUrl(): String? = browser?.url
 
+    /**
+     * What this Chromium calls itself: its standard user agent, which carries only the major version, as
+     * every Chromium's has since the user agent was reduced. Kept with a YouTube session so the requests
+     * that use it later say what the sign-in said.
+     */
+    fun userAgent(): String? = app?.version?.CHROME_VERSION_MAJOR?.takeIf { it > 0 }?.let { major ->
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$major.0.0.0 Safari/537.36"
+    }
+
     fun navigate(url: String) {
         browser?.loadURL(url)
     }
