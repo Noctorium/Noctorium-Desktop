@@ -94,6 +94,8 @@ dependencies {
     jcefNativesArtifacts().forEach { artifact ->
         implementation("me.friwi:$artifact:$jcefNativesVersion")
     }
+    // Draws the QR code the phone scans to send its YouTube Music sign-in over. Only the encoder is used.
+    implementation("com.google.zxing:core:3.5.3")
 
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")

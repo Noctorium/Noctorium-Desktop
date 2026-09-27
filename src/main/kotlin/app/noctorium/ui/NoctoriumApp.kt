@@ -95,6 +95,8 @@ import app.noctorium.auth.EmbeddedBrowserSession
 import app.noctorium.auth.SOUNDCLOUD_SESSION_URLS
 import app.noctorium.auth.SOUNDCLOUD_SIGN_IN
 import app.noctorium.auth.YOUTUBE_SESSION_URLS
+import app.noctorium.auth.YOUTUBE_HARVEST_URLS
+import app.noctorium.auth.mergeCookies
 import app.noctorium.auth.SOUNDCLOUD_OWN_LIKES
 import app.noctorium.auth.YOUTUBE_MUSIC_HOME
 import app.noctorium.auth.YOUTUBE_SIGN_IN
@@ -1210,8 +1212,27 @@ private fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: App
                 verticalArrangement = Arrangement.spacedBy(7.dp),
                 contentPadding = chromePadding(bottom = 28.dp),
             ) {
-                items(playlist.tracks, key = { it.queueKey }) { track ->
-                    TrackRow(track, playlist.tracks, state)
+                // The account's own YouTube playlists can be put in order from here, as on YouTube Music.
+                val reorderable = playlist.editableOnService() &&
+                    (playlist.provider == ProviderType.YOUTUBE_MUSIC || playlist.provider == ProviderType.YOUTUBE_VIDEO)
+                itemsIndexed(playlist.tracks, key = { _, track -> track.queueKey }) { index, track ->
+                    if (!reorderable) {
+                        TrackRow(track, playlist.tracks, state)
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) { TrackRow(track, playlist.tracks, state) }
+                            IconButton({ state.moveInYouTubePlaylist(index, index - 1) }, enabled = index > 0, modifier = Modifier.size(34.dp)) {
+                                Icon(Icons.Default.KeyboardArrowUp, "Move up", Modifier.size(19.dp))
+                            }
+                            IconButton(
+                                { state.moveInYouTubePlaylist(index, index + 1) },
+                                enabled = index < playlist.tracks.lastIndex,
+                                modifier = Modifier.size(34.dp),
+                            ) {
+                                Icon(Icons.Default.KeyboardArrowDown, "Move down", Modifier.size(19.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2242,6 +2263,7 @@ private fun NowPlayingHero(
                 color = ink(.62f),
                 fontSize = 14.sp,
             )
+            FollowArtistChip(track, state, Modifier.padding(top = 8.dp))
             Spacer(Modifier.height(18.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TransportControls(playback, state)
@@ -3990,8 +4012,11 @@ private fun YouTubeSignInWindow(state: AppState, close: () -> Unit) {
             // Written beside the real file and only moved over it once the provider has accepted it. The
             // check needs a file to point at, and writing that file over the working session first would
             // destroy a good one every time an old cookie turned out to be dead.
+            // Google's own cookies as well as YouTube's: they are what renews the YouTube ones once those go
+            // stale, and without them a stale session could only be signed in again. See YOUTUBE_HARVEST_URLS.
+            val google = runCatching { live.harvestCookies(YOUTUBE_HARVEST_URLS.last()) }.getOrDefault(emptyList())
             val candidate = runCatching {
-                writeCookieFile(cookies, destination.resolveSibling("youtube.cookies.checking"))
+                writeCookieFile(mergeCookies(cookies, google), destination.resolveSibling("youtube.cookies.checking"))
             }.getOrNull()
             if (candidate == null) {
                 status = "Signed in, but the session could not be written to disk."
@@ -4010,6 +4035,10 @@ private fun YouTubeSignInWindow(state: AppState, close: () -> Unit) {
                     continue
                 }
                 state.completeYouTubeSignIn(saved.toString())
+                // The browser's copy goes once Noctorium has its own, as SimpMusic does it. Two holders of
+                // one session is how a copy dies: whichever renews the cookies turns the other's into
+                // yesterday's, and the browser would be renewing them every time it touched Google.
+                live.clearCookies(YOUTUBE_SESSION_URLS)
                 close()
                 return@LaunchedEffect
             }
@@ -4085,7 +4114,16 @@ private fun YouTubeAccountPanel(settings: SettingsState, state: AppState) {
     val likes by state.likes.collectAsState()
     val source = settings.preferences.youtubeCookies
     var signInOpen by remember { mutableStateOf(false) }
+    var phoneOpen by remember { mutableStateOf(false) }
+    var pasteOpen by remember { mutableStateOf(false) }
     if (signInOpen) YouTubeSignInWindow(state) { signInOpen = false }
+    if (phoneOpen) PhoneSignInDialog(state) { phoneOpen = false }
+    if (pasteOpen) PasteCookiesDialog(state) { pasteOpen = false }
+    // The channels are read as soon as there is a session to read them with, so the account and its
+    // pictures are simply there rather than behind a button.
+    LaunchedEffect(likes.youTubeReady) {
+        if (likes.youTubeReady && likes.youTubeChannels.isEmpty()) state.loadYouTubeChannels()
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsPanelCard {
@@ -4109,13 +4147,22 @@ private fun YouTubeAccountPanel(settings: SettingsState, state: AppState) {
             Spacer(Modifier.height(14.dp))
             AccountStatusRow(settings.youtubeAccount)
             Spacer(Modifier.height(15.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button({ signInOpen = true }) {
                     Icon(Icons.Default.Login, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(7.dp))
                     Text(if (source.isConfigured) "Sign in again" else "Sign in to YouTube Music")
                 }
+                // The way SimpMusic signs its desktop in: on the phone, where the account usually already is.
+                OutlinedButton({ phoneOpen = true }) {
+                    Icon(Icons.Default.PhoneAndroid, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text("Sign in with your phone")
+                }
+                OutlinedButton({ pasteOpen = true }) { Text("Paste cookies") }
                 if (source.isConfigured) {
+                    OutlinedButton(state::checkYouTubeSignIn) { Text("Check now") }
                     OutlinedButton({ state.disconnectAccount(ProviderType.YOUTUBE_MUSIC) }) { Text("Disconnect") }
                 }
             }
@@ -4134,68 +4181,32 @@ private fun YouTubeAccountPanel(settings: SettingsState, state: AppState) {
 
         if (likes.youTubeReady) {
             SettingsPanelCard {
-                CardHeading(Icons.Default.SwitchAccount, "Channel")
+                CardHeading(Icons.Default.SwitchAccount, "Account and channel")
                 Spacer(Modifier.height(7.dp))
                 Text(
-                    "One Google account can own several YouTube channels, and the default one is not always the " +
-                        "right one. Whichever is chosen here is the account Noctorium acts as.",
+                    "Every Google account signed in to this session, and every channel each one owns. Whichever is " +
+                        "chosen is the one Noctorium acts as: its likes, its playlists, its history.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                 )
                 Spacer(Modifier.height(11.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CheckCircle, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(7.dp))
-                    Text(
-                        settings.preferences.youtubeChannelName.ifBlank { "Default channel" },
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
+                if (likes.youTubeChannels.isEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(7.dp))
+                        Text(settings.preferences.youtubeChannelName.ifBlank { "Default channel" }, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
+                } else {
+                    YouTubeChannelChooser(likes.youTubeChannels, settings, state)
                 }
                 Spacer(Modifier.height(11.dp))
                 OutlinedButton(state::loadYouTubeChannels) {
                     Icon(Icons.Default.Refresh, null, Modifier.size(17.dp))
                     Spacer(Modifier.width(7.dp))
-                    Text(if (likes.youTubeChannels.isEmpty()) "Find my channels" else "Refresh channels")
-                }
-                if (likes.youTubeChannels.isNotEmpty()) {
-                    Spacer(Modifier.height(12.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        likes.youTubeChannels.forEach { channel ->
-                            val selected = channel.pageId == settings.preferences.youtubePageId
-                            Surface(
-                                onClick = { state.setYouTubeChannel(channel) },
-                                shape = RoundedCornerShape(11.dp),
-                                color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .5f)
-                                else ink(.04f),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (selected) MaterialTheme.colorScheme.primary.copy(alpha = .5f)
-                                    else ink(.08f),
-                                ),
-                            ) {
-                                Row(
-                                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    RadioButton(selected, { state.setYouTubeChannel(channel) })
-                                    Spacer(Modifier.width(4.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(channel.name, fontSize = 13.sp)
-                                        if (channel.isDefault) {
-                                            Text(
-                                                "The account's default channel",
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                fontSize = 10.sp,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    Text(if (likes.youTubeChannels.isEmpty()) "Find my channels" else "Refresh")
                 }
             }
+            SettingsPanelCard { YouTubeHistorySetting(settings, state) }
         }
 
         SettingsPanelCard {
@@ -4206,8 +4217,11 @@ private fun YouTubeAccountPanel(settings: SettingsState, state: AppState) {
             Spacer(Modifier.height(9.dp))
             AccountFact("Your playlists and liked songs, read and written the way the YouTube Music site does.")
             AccountFact("Liking a YouTube track in Noctorium marks it liked on your account.")
+            AccountFact("Following an artist from the now playing screen follows them on YouTube Music.")
+            AccountFact("What you play here can go into your YouTube Music history, as it would playing it there.")
             AccountFact("Your library and playlists come from this session; playback itself resolves without it.")
             AccountFact("Your password goes to Google's page, never to Noctorium, and only the session is kept.")
+            AccountFact("Noctorium checks every few hours that the session still works, renews it if it has gone stale, and says so if it cannot.")
         }
     }
 }
