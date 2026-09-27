@@ -81,7 +81,6 @@ object PlaybackToolInstaller {
     private fun locate(tool: PlaybackTool): Path? = when (tool) {
         PlaybackTool.YT_DLP -> BackendLocator.ytDlp()
         PlaybackTool.MPV -> BackendLocator.mpv()
-        PlaybackTool.FFMPEG -> BackendLocator.ffmpeg()
     }
 
     private fun isManaged(path: Path): Boolean {
@@ -146,7 +145,7 @@ object PlaybackToolInstaller {
         if (platform == HostPlatform.UNSUPPORTED) {
             return@withLock fail("Noctorium does not have a ${tool.displayName} build for this kind of machine.")
         }
-        // Linux mpv and FFmpeg come from the distribution, not from here.
+        // Linux mpv comes from the distribution, not from here.
         if (!platform.isWindows && tool != PlaybackTool.YT_DLP) {
             return@withLock fail("${tool.displayName} is not installed. ${linuxInstallHint(tool)}")
         }
@@ -158,7 +157,6 @@ object PlaybackToolInstaller {
                 when (tool) {
                     PlaybackTool.YT_DLP -> installYtDlp(platform, bin)
                     PlaybackTool.MPV -> installArchived(platform, bin, "mpv", tool)
-                    PlaybackTool.FFMPEG -> installArchived(platform, bin, "ffmpeg", tool)
                 }
             }
         }.getOrElse { error -> error.message ?: "The download did not finish." }
@@ -203,7 +201,7 @@ object PlaybackToolInstaller {
     }
 
     /**
-     * mpv and FFmpeg for Windows, which come as one 7-Zip archive holding a whole program folder.
+     * mpv for Windows, which comes as one 7-Zip archive holding a whole program folder.
      *
      * Unpacked with the tar that ships in Windows itself. That is bsdtar over libarchive, which reads 7z,
      * and every Windows Noctorium supports has had it in System32 since 2018 -- so there is no decompressor

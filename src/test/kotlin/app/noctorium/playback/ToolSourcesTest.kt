@@ -131,7 +131,7 @@ class ToolSourcesTest {
     @Test
     fun `the Linux hint names the tool being asked about`() {
         assertTrue(linuxInstallHint(PlaybackTool.MPV).contains("install mpv"))
-        assertTrue(linuxInstallHint(PlaybackTool.FFMPEG).contains("install ffmpeg"))
+        assertTrue(linuxInstallHint(PlaybackTool.YT_DLP).contains("install yt-dlp"))
     }
 
     @Test
@@ -147,16 +147,20 @@ class PlaybackToolsStateTest {
 
     private fun status(tool: PlaybackTool, origin: ToolOrigin) = ToolStatus(tool, origin, path = "/somewhere")
 
+    /**
+     * FFmpeg was listed as an optional extra that made MP3s. It is gone: mpv makes them, and the cover is
+     * written without it, so nothing asks anybody to download it any more.
+     */
     @Test
-    fun `a missing optional tool does not make Noctorium unready`() {
+    fun `only yt-dlp and mpv are needed, and FFmpeg is not one of them`() {
+        assertEquals(listOf(PlaybackTool.YT_DLP, PlaybackTool.MPV), PlaybackTool.entries.toList())
         val state = PlaybackToolsState(
             tools = listOf(
                 status(PlaybackTool.YT_DLP, ToolOrigin.MANAGED),
                 status(PlaybackTool.MPV, ToolOrigin.SYSTEM),
-                ToolStatus(PlaybackTool.FFMPEG, ToolOrigin.MISSING),
             ),
         )
-        assertTrue(state.ready, "FFmpeg is optional and its absence stopped playback being possible")
+        assertTrue(state.ready)
         assertTrue(state.missingRequired.isEmpty())
     }
 
@@ -166,7 +170,6 @@ class PlaybackToolsStateTest {
             tools = listOf(
                 ToolStatus(PlaybackTool.YT_DLP, ToolOrigin.MISSING),
                 status(PlaybackTool.MPV, ToolOrigin.SYSTEM),
-                ToolStatus(PlaybackTool.FFMPEG, ToolOrigin.MISSING),
             ),
         )
         assertEquals(listOf(PlaybackTool.YT_DLP), state.missingRequired)

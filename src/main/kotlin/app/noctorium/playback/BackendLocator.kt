@@ -30,7 +30,6 @@ object BackendLocator {
      */
     fun ytDlp(): Path? = locate("NOCTORIUM_YTDLP_PATH", if (isWindows) "yt-dlp.exe" else "yt-dlp", preferDownloaded = true)
     fun mpv(): Path? = locate("NOCTORIUM_MPV_PATH", if (isWindows) "mpv.exe" else "mpv")
-    fun ffmpeg(): Path? = locate("NOCTORIUM_FFMPEG_PATH", if (isWindows) "ffmpeg.exe" else "ffmpeg")
 
     /**
      * The folder of extra files jpackage laid down beside the application, or null outside a packaged build.

@@ -45,10 +45,20 @@ class ShortcutsTest {
     fun `the numbers go where the sidebar goes, in the order it is drawn`() {
         assertEquals(Shortcut.Go(Destination.HOME), shortcutFor(Key.One))
         assertEquals(Shortcut.Go(Destination.SEARCH), shortcutFor(Key.Two))
-        assertEquals(Shortcut.Go(Destination.LIBRARY), shortcutFor(Key.Three))
-        assertEquals(Shortcut.Go(Destination.NOW_PLAYING), shortcutFor(Key.Four))
-        assertEquals(Shortcut.Go(Destination.QUEUE), shortcutFor(Key.Five))
-        assertEquals(Shortcut.Go(Destination.SETTINGS), shortcutFor(Key.Six))
+        assertEquals(Shortcut.Go(Destination.LINK), shortcutFor(Key.Three))
+        assertEquals(Shortcut.Go(Destination.LIBRARY), shortcutFor(Key.Four))
+        assertEquals(Shortcut.Go(Destination.DOWNLOADS), shortcutFor(Key.Five))
+        assertEquals(Shortcut.Go(Destination.NOW_PLAYING), shortcutFor(Key.Six))
+        assertEquals(Shortcut.Go(Destination.QUEUE), shortcutFor(Key.Seven))
+        assertEquals(Shortcut.Go(Destination.SETTINGS), shortcutFor(Key.Eight))
+    }
+
+    /** Ctrl+V plays a copied link, except in a box, where it has always meant putting the text there. */
+    @Test
+    fun `Ctrl V plays the link on the clipboard, but not while typing`() {
+        assertEquals(Shortcut.PasteLink, shortcutFor(Key.V, ctrl = true))
+        assertEquals(null, shortcutFor(Key.V, ctrl = true, typing = true))
+        assertEquals(null, shortcutFor(Key.V), "a plain V is not a paste")
     }
 
     /**

@@ -191,6 +191,12 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                 focusSearch++
             }
             Shortcut.Help -> shortcutsOpen = true
+            // The clipboard read at the moment of pressing, and the link screen shown so what happened to
+            // it is visible: playing, or why not.
+            Shortcut.PasteLink -> clipboardText()?.let { copied ->
+                appState.openLink(copied)
+                appState.navigate(Destination.LINK)
+            }
             // The sheet first, and otherwise the caret: having typed in a box, there is no way back to
             // the keyboard without reaching for the mouse, which rather defeats the point of all this.
             // Escape puts focus back where the shortcuts live.
@@ -260,7 +266,9 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                         when (ui.destination) {
                             Destination.HOME -> HomeScreen(ui, appState)
                             Destination.SEARCH -> SearchScreen(ui, appState, focusSearch)
+                            Destination.LINK -> LinkScreen(appState)
                             Destination.LIBRARY -> LibraryScreen(appState)
+                            Destination.DOWNLOADS -> DownloadsScreen(appState)
                             Destination.NOW_PLAYING -> NowPlayingScreen(queue, playback, appState)
                             Destination.QUEUE -> QueueScreen(queue, appState)
                             Destination.SETTINGS -> SettingsScreen(appState)
@@ -333,7 +341,7 @@ private fun BoxScope.GlassContent(
 @Composable
 private fun NavigationRail(selected: Destination, navigate: (Destination) -> Unit) {
     Column(
-        Modifier.width(176.dp).fillMaxHeight().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 18.dp),
+        Modifier.width(RAIL_WIDTH).fillMaxHeight().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 18.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // The same artwork the window, the taskbar and the phone's launcher show, so the mark beside
@@ -345,7 +353,7 @@ private fun NavigationRail(selected: Destination, navigate: (Destination) -> Uni
                 contentScale = ContentScale.Crop,
             )
             Spacer(Modifier.width(9.dp))
-            // One line, and sized to fit on it. The rail is 176dp wide and the name grew by three letters
+            // One line, and sized to fit on it. The rail was 176dp wide and the name grew by three letters
             // at the rename, so at the old size it broke across two lines as "Noctoriu / m" -- which is
             // the first thing anybody saw of the application.
             Text(
@@ -359,7 +367,9 @@ private fun NavigationRail(selected: Destination, navigate: (Destination) -> Uni
         Spacer(Modifier.height(26.dp))
         NavItem("Home", Icons.Default.Home, selected == Destination.HOME) { navigate(Destination.HOME) }
         NavItem("Search", Icons.Default.Search, selected == Destination.SEARCH) { navigate(Destination.SEARCH) }
+        NavItem("Paste link", Icons.Default.Link, selected == Destination.LINK) { navigate(Destination.LINK) }
         NavItem("Library", Icons.Default.LibraryMusic, selected == Destination.LIBRARY) { navigate(Destination.LIBRARY) }
+        NavItem("Downloads", Icons.Default.DownloadForOffline, selected == Destination.DOWNLOADS) { navigate(Destination.DOWNLOADS) }
         Spacer(Modifier.height(18.dp))
         Text(
             "PLAYING",
@@ -377,6 +387,14 @@ private fun NavigationRail(selected: Destination, navigate: (Destination) -> Uni
     }
 }
 
+/**
+ * Wide enough for "Now playing" and "Paste link" on one line at the ordinary text size, which at 176dp
+ * neither was: every label past eight letters broke in two, and a selected one, being bold, broke where
+ * it had not a moment before. Past that, a label is cut rather than wrapped, so the rail keeps its rhythm
+ * at the largest text size too.
+ */
+private val RAIL_WIDTH = 196.dp
+
 @Composable
 private fun NavItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, action: () -> Unit) {
     val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -389,7 +407,7 @@ private fun NavItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
         Row(Modifier.padding(horizontal = 12.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, label, tint = color)
             Spacer(Modifier.width(12.dp))
-            Text(label, color = color, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+            Text(label, color = color, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -1732,7 +1750,7 @@ private fun AddToPlaylistDialog(
 }
 
 @Composable
-private fun ProviderBadge(provider: ProviderType, compact: Boolean = false) {
+internal fun ProviderBadge(provider: ProviderType, compact: Boolean = false) {
     val background = when (provider) {
         ProviderType.YOUTUBE_MUSIC -> Color(0xFF8B2AB8)
         ProviderType.YOUTUBE_VIDEO -> Color(0xFFB32C35)
@@ -3245,7 +3263,7 @@ private fun SettingsScreen(state: AppState) {
                 { page = SettingsPage.PLAYBACK_TOOLS },
             )
         }
-        item { SettingsCard("Diagnostics", "Check yt-dlp, mpv, FFmpeg and storage", Icons.Default.MonitorHeart, { page = SettingsPage.DIAGNOSTICS }) }
+        item { SettingsCard("Diagnostics", "Check yt-dlp, mpv and storage", Icons.Default.MonitorHeart, { page = SettingsPage.DIAGNOSTICS }) }
     }
 }
 

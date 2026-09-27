@@ -5,7 +5,6 @@ import app.noctorium.settings.DiagnosticLevel
 import app.noctorium.settings.DiagnosticResult
 import app.noctorium.domain.Album
 import app.noctorium.downloads.AudioConverter
-import app.noctorium.downloads.ExportFormat
 import app.noctorium.domain.Artist
 import app.noctorium.domain.Playlist
 import app.noctorium.domain.ProviderType
@@ -25,8 +24,6 @@ import java.util.concurrent.TimeUnit
 
 class YtDlpService(
     private val executable: () -> Path? = BackendLocator::ytDlp,
-    /** Injected rather than looked up, so what happens without it can be exercised on a machine that has it. */
-    private val ffmpeg: () -> Path? = BackendLocator::ffmpeg,
 ) : MusicBackend {
     private val json = Json { ignoreUnknownKeys = true }
     private val cookieArguments = ConcurrentHashMap<ProviderType, List<String>>()
@@ -260,15 +257,14 @@ class YtDlpService(
     suspend fun version(): String = withContext(Dispatchers.IO) { run("--version").trim() }
 
     /**
-     * The three programs a desktop Noctorium depends on, each of which can genuinely be absent.
+     * The two programs a desktop Noctorium depends on, each of which can genuinely be absent.
      *
      * This is the half of diagnostics that has no meaning on a phone, where the extractor is compiled into
      * the APK — which is why the question belongs to the backend rather than to the screen asking it.
      */
     override suspend fun diagnostics(): List<DiagnosticResult> = listOf(
         check("yt-dlp", executable(), "Required for search and streaming"),
-        check("mpv", BackendLocator.mpv(), "Required for playback"),
-        check("FFmpeg", ffmpeg(), "Used for media compatibility"),
+        check("mpv", BackendLocator.mpv(), "Required for playback, and makes the MP3s music is saved as"),
     )
 
     private fun check(name: String, path: Path?, purpose: String): DiagnosticResult =
@@ -438,9 +434,9 @@ class YtDlpService(
     /**
      * Downloads a track's audio to a file, reporting progress as it goes.
      *
-     * The stream is taken in whatever container it already comes in. Converting it would mean depending on
-     * ffmpeg being present and re-encoding audio for no gain, and mpv plays every container yt-dlp hands
-     * back. [outputTemplate] carries yt-dlp's own `%(ext)s`, since which container it is only becomes known
+     * The stream is taken in whatever container it already comes in. Converting it would re-encode audio
+     * for no gain, and mpv plays every container yt-dlp hands back. [outputTemplate] carries yt-dlp's own
+     * `%(ext)s`, since which container it is only becomes known
      * once the stream is chosen.
      *
      * Uses [playbackArguments], not the browsing session: this is a player-level request and YouTube
@@ -479,68 +475,33 @@ class YtDlpService(
         )
     }
 
-    /** Whether this machine can convert audio, which is the only thing standing between us and MP3. */
-    /**
-     * Whether this machine can make an MP3 at all, by either route.
-     *
-     * yt-dlp converts with ffmpeg, and mpv can encode one on its own — and mpv is always here, because
-     * nothing plays without it. Asking only about ffmpeg reported "no MP3" on a machine that could make
-     * one perfectly well, which is why the whole question is answered here rather than half here and half
-     * at the call site.
-     */
-    override fun canConvertAudio(): Boolean = ffmpeg() != null || AudioConverter().canMakeMp3()
-
     /**
      * Saves a track as a file for the listener to keep, rather than for Noctorium to play.
      *
-     * With ffmpeg present the audio is converted to MP3 and given its title, artist and cover art, since
-     * MP3 with tags is the thing that behaves properly on every phone and in every car. Without it, the
-     * stream is taken exactly as it comes: no conversion is possible, but none is desirable either —
-     * re-encoding lossy audio into another lossy format only ever loses more, and what the services serve
-     * is m4a, which phones play anyway.
+     * Exactly as the service serves it, m4a for preference since every phone plays that. An MP3 is made
+     * from this afterwards, by mpv, with the cover written in by Id3 -- see AudioConverter. yt-dlp used to
+     * do the converting in one pass through ffmpeg, which meant a second download of a hundred megabytes
+     * for the one format people ask for by name.
      */
     override suspend fun exportAudio(
         sourceUrl: String,
         outputTemplate: String,
-        format: ExportFormat,
         onProgress: (Float) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
         require(sourceUrl.startsWith("https://") || sourceUrl.startsWith("http://")) {
             "Only HTTP media sources are accepted"
         }
-        if (format == ExportFormat.MP3 && ffmpeg() == null) {
-            throw BackendException(
-                "Saving as MP3 needs ffmpeg, which is not installed. Put ffmpeg.exe in Noctorium's bin " +
-                    "folder, or set NOCTORIUM_FFMPEG_PATH, and try again.",
-            )
-        }
         val provider = providerOf(sourceUrl)
-        val conversion = if (format == ExportFormat.MP3) {
-            listOf(
-                "--extract-audio",
-                "--audio-format", "mp3",
-                // 0 is yt-dlp's best variable bitrate, which for music is worth the extra megabyte.
-                "--audio-quality", "0",
-                // The tags and the cover, so a phone shows the track rather than a file name.
-                "--embed-metadata",
-                "--embed-thumbnail",
-                "--ffmpeg-location", ffmpeg()!!.parent.toString(),
-            )
-        } else {
-            // m4a for preference, since it needs no conversion and every phone plays it.
-            listOf("--format", "bestaudio[ext=m4a]/bestaudio")
-        }
         stream(
             EXPORT_TIMEOUT_SECONDS,
             arrayOf(
-                *(if (format == ExportFormat.MP3) arrayOf("--format", "bestaudio/best") else emptyArray()),
+                "--format", "bestaudio[ext=m4a]/bestaudio",
                 "--no-playlist",
                 "--no-warnings",
                 "--newline",
                 "--progress",
                 "--no-part",
                 "--no-continue",
-                *conversion.toTypedArray(),
                 "--output", outputTemplate,
                 *provider?.let(::playbackArguments).orEmpty().toTypedArray(),
                 "--",

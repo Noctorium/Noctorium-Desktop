@@ -54,14 +54,14 @@ internal fun ytDlpAsset(platform: HostPlatform): String? = when (platform) {
 }
 
 /**
- * The mpv or FFmpeg archive for this machine, out of everything one shinchiro release contains.
+ * The mpv archive for this machine, out of everything one shinchiro release contains.
  *
  * That release carries twelve files: three architectures, a `-dev` variant of each that holds headers and
  * an import library rather than a program, and a `-v3` variant built for x86-64-v3. The last one is the
  * trap -- it is a perfectly good build, it is listed next to the one that is wanted, and it raises an
  * illegal instruction on any processor without AVX2. Nothing about the file says so.
  *
- * @param prefix "mpv" or "ffmpeg".
+ * @param prefix "mpv", the program the archive holds.
  */
 internal fun shinchiroAsset(names: List<String>, prefix: String, platform: HostPlatform): String? {
     val architecture = when (platform) {
@@ -89,7 +89,6 @@ internal fun shinchiroAsset(names: List<String>, prefix: String, platform: HostP
 internal fun linuxInstallHint(tool: PlaybackTool): String {
     val package_ = when (tool) {
         PlaybackTool.MPV -> "mpv"
-        PlaybackTool.FFMPEG -> "ffmpeg"
         PlaybackTool.YT_DLP -> "yt-dlp"
     }
     return "Install it with your package manager: sudo apt install $package_ " +

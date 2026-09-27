@@ -11,13 +11,11 @@ import java.util.concurrent.TimeUnit
 /**
  * Turns downloaded audio into MP3 using the player that is already installed.
  *
- * MP3 normally means depending on ffmpeg, which is a separate thing to install and one more reason for the
- * feature not to work on somebody's machine. But mpv is here already — it has to be, or nothing would play
- * — and the builds it ships in carry libmp3lame and can write tags while they encode. So the format people
- * actually ask for costs nothing extra.
- *
- * ffmpeg is still preferred when it happens to be present, because yt-dlp can then convert and embed the
- * cover art in one pass. This is the path for when it is not.
+ * MP3 used to mean ffmpeg, which is a separate hundred-megabyte download and one more reason for the
+ * feature not to work on somebody's machine. But mpv is here already -- it has to be, or nothing would
+ * play -- and the builds it ships in carry libmp3lame. The one thing mpv will not do is put a picture in
+ * the file, and [Id3] does that afterwards, along with the rest of the tag. So the format people actually
+ * ask for costs nothing extra, cover included.
  */
 class AudioConverter(
     private val mpv: () -> Path? = BackendLocator::mpv,
@@ -25,11 +23,8 @@ class AudioConverter(
     /** Whether MP3 can be produced at all on this machine. */
     override fun canMakeMp3(): Boolean = mpv() != null
 
-    /**
-     * Writes [input] out as an MP3 at [output], carrying the title and artist so a phone has something to
-     * show. The cover art is not carried: mpv will not embed a picture, and that wants ffmpeg.
-     */
-    override suspend fun toMp3(input: Path, output: Path, title: String, artist: String): Path =
+    /** Writes [input] out as an MP3 at [output], tagged with the title, artist, album and cover. */
+    override suspend fun toMp3(input: Path, output: Path, tags: AudioTags): Path =
         withContext(Dispatchers.IO) {
             val player = mpv() ?: throw BackendException(
                 "Making an MP3 needs mpv, which is missing. Settings, then Playback tools, installs it.",
@@ -45,7 +40,9 @@ class AudioConverter(
                 add("--oac=libmp3lame")
                 // 320k constant, because this is a file somebody keeps rather than something streamed.
                 add("--oacopts=b=320k")
-                metadataFor(title, artist)?.let(::add)
+                // Written by mpv as well as by Id3 below, so that a file whose retagging failed still says
+                // what it is.
+                metadataFor(tags.title, tags.artist)?.let(::add)
                 add("--")
                 add(input.toString())
             }
@@ -60,6 +57,9 @@ class AudioConverter(
                 val reason = output_.lineSequence().lastOrNull { it.isNotBlank() }.orEmpty().take(200)
                 throw BackendException("Could not convert to MP3. $reason")
             }
+            // The tag mpv wrote is replaced by one with the album and the cover in it. A failure here
+            // leaves a perfectly good MP3 with mpv's tag, which is not worth losing the song over.
+            runCatching { Id3.retag(output, tags) }
             output
         }
 
@@ -71,7 +71,7 @@ class AudioConverter(
          * mpv's own way of setting tags while encoding, or null when there is nothing worth writing.
          *
          * Commas separate the pairs, so a comma inside a value would be read as the start of another tag.
-         * Artists really do contain them — "Vijay Prakash, Krish, Devan" is one credit — so they are turned
+         * Artists really do contain them -- "Vijay Prakash, Krish, Devan" is one credit -- so they are turned
          * into a separator that reads the same and cannot be mistaken for structure.
          */
         fun metadataFor(title: String, artist: String): String? {

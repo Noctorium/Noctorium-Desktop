@@ -138,7 +138,7 @@ private fun ToolRow(
 ) {
     val status = tools.status(tool)
     val missing = status == null || status.origin == ToolOrigin.MISSING
-    // Linux has no portable mpv or FFmpeg to fetch, so offering a button that can only ever print a
+    // Linux has no portable mpv to fetch, so offering a button that can only ever print a
     // package-manager line would be worse than printing the line.
     val installable = !missing || windows || tool == PlaybackTool.YT_DLP
     val colour = when {

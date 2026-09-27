@@ -297,9 +297,9 @@ internal fun SaveMusicSetting(preferences: NoctoriumPreferences, state: AppState
         supportingText = {
             Text(
                 if (mp3) {
-                    "Saved as MP3, tagged with the title and artist."
+                    "Saved as MP3, tagged with the title, the artist and the cover."
                 } else {
-                    "Saved in the original format. MP3 needs mpv or ffmpeg installed."
+                    "Saved in the original format. MP3 needs mpv, which Settings, then Playback tools, installs."
                 },
             )
         },

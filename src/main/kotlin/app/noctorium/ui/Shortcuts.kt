@@ -36,6 +36,9 @@ sealed interface Shortcut {
     /** Puts the caret in the search box, wherever the listener happens to be. */
     data object Search : Shortcut
 
+    /** Plays the link on the clipboard, from anywhere that is not a box being typed in. */
+    data object PasteLink : Shortcut
+
     data object Help : Shortcut
 
     /** Closes whatever is over the page: the help sheet first, then an open panel. */
@@ -59,6 +62,8 @@ fun shortcutFor(
     // Modified bindings work everywhere, including mid-word, because none of them could be a character.
     when {
         ctrl && key == Key.F -> return Shortcut.Search
+        // Only outside a box: in one, Ctrl+V is pasting into it, which is what it has always meant.
+        ctrl && key == Key.V && !typing -> return Shortcut.PasteLink
         ctrl && key == Key.DirectionRight -> return Shortcut.Next
         ctrl && key == Key.DirectionLeft -> return Shortcut.Previous
         // The media keys a keyboard may have of its own, and which arrive as ordinary key events here.
@@ -94,10 +99,12 @@ fun shortcutFor(
         // The sidebar, in the order it is drawn.
         Key.One -> Shortcut.Go(Destination.HOME)
         Key.Two -> Shortcut.Go(Destination.SEARCH)
-        Key.Three -> Shortcut.Go(Destination.LIBRARY)
-        Key.Four -> Shortcut.Go(Destination.NOW_PLAYING)
-        Key.Five -> Shortcut.Go(Destination.QUEUE)
-        Key.Six -> Shortcut.Go(Destination.SETTINGS)
+        Key.Three -> Shortcut.Go(Destination.LINK)
+        Key.Four -> Shortcut.Go(Destination.LIBRARY)
+        Key.Five -> Shortcut.Go(Destination.DOWNLOADS)
+        Key.Six -> Shortcut.Go(Destination.NOW_PLAYING)
+        Key.Seven -> Shortcut.Go(Destination.QUEUE)
+        Key.Eight -> Shortcut.Go(Destination.SETTINGS)
 
         // One key, two meanings: `?` is shift and slash on most layouts, so they are decided together
         // rather than as two branches, where the unshifted one would match first and the other would be
@@ -134,7 +141,8 @@ val shortcutHelp: List<Pair<String, List<ShortcutHelp>>> = listOf(
         ShortcutHelp("M", "Mute"),
     ),
     "Going places" to listOf(
-        ShortcutHelp("1 … 6", "Home, Search, Library, Now playing, Queue, Settings"),
+        ShortcutHelp("1 … 8", "Home, Search, Paste link, Library, Downloads, Now playing, Queue, Settings"),
+        ShortcutHelp("Ctrl V", "Play the link on your clipboard"),
         ShortcutHelp("/  ·  Ctrl F", "Search"),
         ShortcutHelp("?", "This list"),
         ShortcutHelp("Esc", "Close what is open, or leave the box you are typing in"),

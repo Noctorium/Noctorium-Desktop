@@ -205,6 +205,13 @@ tasks.test {
     // And for the playback tests that run against a real track, real yt-dlp and real mpv: off unless
     // asked for, since they need all three and the network, and take half a minute each.
     System.getProperty("noctorium.live")?.let { systemProperty("noctorium.live", it) }
+    // A live run wants the real programs, and the test folder above has none of its own. They are named
+    // through the same variables a listener can set, so the lookup being tested is the real one.
+    val installed = System.getenv("LOCALAPPDATA")?.let { file("$it/Noctorium/bin") }
+    if (System.getProperty("noctorium.live") == "true" && installed?.isDirectory == true) {
+        installed.resolve("mpv.exe").takeIf { it.isFile }?.let { environment("NOCTORIUM_MPV_PATH", it.absolutePath) }
+        installed.resolve("yt-dlp.exe").takeIf { it.isFile }?.let { environment("NOCTORIUM_YTDLP_PATH", it.absolutePath) }
+    }
 }
 
 /*

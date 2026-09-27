@@ -16,14 +16,12 @@ enum class PlaybackTool(
 ) {
     YT_DLP("yt-dlp", "Finds the audio behind a link", required = true),
     MPV("mpv", "Plays it", required = true),
-    FFMPEG("FFmpeg", "Converts downloads to MP3", required = false),
     ;
 
     /** What the file is called on this platform. */
     fun executableName(windows: Boolean = isWindows): String = when (this) {
         YT_DLP -> if (windows) "yt-dlp.exe" else "yt-dlp"
         MPV -> if (windows) "mpv.exe" else "mpv"
-        FFMPEG -> if (windows) "ffmpeg.exe" else "ffmpeg"
     }
 
     companion object {

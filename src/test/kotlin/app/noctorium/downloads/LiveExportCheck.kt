@@ -28,10 +28,15 @@ class LiveExportCheck {
         }
         val folder = Files.createTempDirectory("noctorium-export-live")
         try {
-            val ytDlp = YtDlpService()
-            val converter = AudioConverter()
-            val format = if (ytDlp.canConvertAudio() || converter.canMakeMp3()) ExportFormat.MP3 else ExportFormat.ORIGINAL
-            println("EXPORT: ffmpeg=" + ytDlp.canConvertAudio() + " mpv=" + converter.canMakeMp3() + ", saving as " + format.displayName)
+            // The real programs, named outright: tests run with their own empty application folder, so
+            // looking them up the ordinary way finds nothing.
+            val bin = System.getenv("LOCALAPPDATA")?.let { java.nio.file.Path.of(it, "Noctorium", "bin") }
+            val mpvPath = bin?.resolve("mpv.exe")?.takeIf(Files::exists) ?: BackendLocator.mpv()
+            val ytDlpPath = bin?.resolve("yt-dlp.exe")?.takeIf(Files::exists) ?: BackendLocator.ytDlp()
+            val ytDlp = YtDlpService(executable = { ytDlpPath })
+            val converter = AudioConverter(mpv = { mpvPath })
+            val format = if (converter.canMakeMp3()) ExportFormat.MP3 else ExportFormat.ORIGINAL
+            println("EXPORT: mpv=" + converter.canMakeMp3() + ", saving as " + format.displayName)
 
             val track = Track(
                 provider = ProviderType.YOUTUBE_MUSIC,
@@ -39,6 +44,7 @@ class LiveExportCheck {
                 title = "Never Gonna Give You Up",
                 artists = listOf(Artist("a", "Rick Astley", ProviderType.YOUTUBE_MUSIC)),
                 durationMs = 213_000,
+                artworkUrl = "https://i.ytimg.com/vi_webp/dQw4w9WgXcQ/hqdefault.webp",
                 sourceUrl = "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
             )
             val manager = DownloadManager(ytDlp, DownloadStore(folder = folder.resolve("library")), converter)
@@ -58,12 +64,23 @@ class LiveExportCheck {
             assertTrue(file.fileName.toString().startsWith("Rick Astley - "), "the name is " + file.fileName)
             assertTrue(file.fileName.toString().endsWith("." + format.extension), "wrong extension: " + file.fileName)
 
+            if (format == ExportFormat.MP3) {
+                // The cover, in the file, as a picture players can show. It was asked for as WebP, which
+                // is exactly what a player cannot show, so this also proves it was fetched as JPEG.
+                val bytes = Files.readAllBytes(file)
+                val tag = bytes.copyOfRange(0, Id3.existingTagLength(bytes))
+                val apic = String(tag, Charsets.ISO_8859_1).indexOf("APIC")
+                assertTrue(apic > 0, "no cover in the file")
+                assertTrue(String(tag, Charsets.ISO_8859_1).contains("image/jpeg"), "the cover is not a JPEG")
+                println("EXPORT: tag is " + tag.size + " bytes, cover included")
+            }
+
             // Nothing half-written may be left beside it.
             val leftovers = Files.list(folder).use { it.toList() }
                 .filter { Files.isRegularFile(it) && it.fileName.toString().contains("noctorium-part") }
             assertTrue(leftovers.isEmpty(), "a working file was left behind: " + leftovers)
 
-            val mpv = BackendLocator.mpv()
+            val mpv = mpvPath
             if (mpv != null) {
                 val probe = ProcessBuilder(
                     mpv.toString(), "--no-config", "--no-video", "--ao=null", "--length=0.2",
@@ -77,6 +94,7 @@ class LiveExportCheck {
                 assertTrue(duration != null && duration > 200, "mpv could not read a full track from the file")
                 if (format == ExportFormat.MP3) {
                     assertTrue(output.contains("CODEC=mp3"), "the file is not actually an MP3")
+                    assertTrue(output.contains("TITLE=Never Gonna Give You Up"), "the title tag is missing")
                 }
             }
         } finally {
