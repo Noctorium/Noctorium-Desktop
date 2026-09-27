@@ -1446,7 +1446,7 @@ private fun TrackRow(track: Track, sourceQueue: List<Track>, state: AppState) {
  * here is what left the heart permanently dead on YouTube Music long after YouTube liking worked.
  */
 @Composable
-private fun LikeButton(track: Track, state: AppState, size: Dp = 36.dp) {
+internal fun LikeButton(track: Track, state: AppState, size: Dp = 36.dp) {
     val likes by state.likes.collectAsState()
     val liked = likes.isLiked(track)
     val busy = likes.isBusy(track)
@@ -1776,7 +1776,7 @@ internal fun ProviderBadge(provider: ProviderType, compact: Boolean = false) {
 
 /** Volume, boost and mute in one popover, so the bar carries a single icon instead of four controls. */
 @Composable
-private fun VolumeControl(playback: PlaybackState, state: AppState) {
+internal fun VolumeControl(playback: PlaybackState, state: AppState) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton({ open = true }, Modifier.size(36.dp)) {
@@ -1973,10 +1973,15 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
 }
 
 @Composable
-private fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppState) {
-    if (state.settings.collectAsState().value.preferences.playerBarStyle == PlayerBarStyle.INLINE) {
-        InlinePlayerBar(queue, playback, state)
-        return
+internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppState) {
+    when (state.settings.collectAsState().value.preferences.playerBarStyle) {
+        PlayerBarStyle.INLINE -> return InlinePlayerBar(queue, playback, state)
+        PlayerBarStyle.CENTERED -> return CenteredPlayerBar(queue, playback, state)
+        PlayerBarStyle.SLIM -> return SlimPlayerBar(queue, playback, state)
+        PlayerBarStyle.SLIM_LEFT -> return SlimPlayerBar(queue, playback, state, controlsFirst = true)
+        PlayerBarStyle.SPOTLIGHT -> return SpotlightPlayerBar(queue, playback, state)
+        // Stacked is the one written out below, and was the only layout before there was a choice.
+        PlayerBarStyle.STACKED -> Unit
     }
     val current = queue.current
     val playerPreferences = state.settings.collectAsState().value.preferences
@@ -2897,7 +2902,7 @@ private fun QueueTrackRow(track: Track, index: Int, queue: QueueState, state: Ap
 }
 
 @Composable
-private fun PlaybackProgressBar(
+internal fun PlaybackProgressBar(
     playback: PlaybackState,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
@@ -3075,7 +3080,7 @@ private fun DrawnProgressBar(
 }
 
 /** Stands in for a length that is not known yet, so an unknown track does not claim to be zero seconds long. */
-private const val UNKNOWN_PLAYBACK_TIME = "--:--"
+internal const val UNKNOWN_PLAYBACK_TIME = "--:--"
 
 /**
  * How much of the seek bar is filled.
@@ -3087,7 +3092,7 @@ private const val UNKNOWN_PLAYBACK_TIME = "--:--"
 internal fun playbackFraction(positionMs: Float, durationMs: Long): Float =
     if (durationMs <= 0L) 0f else (positionMs / durationMs.toFloat()).coerceIn(0f, 1f)
 
-private fun formatPlaybackTime(milliseconds: Long): String {
+internal fun formatPlaybackTime(milliseconds: Long): String {
     val totalSeconds = milliseconds.coerceAtLeast(0) / 1_000
     val hours = totalSeconds / 3_600
     val minutes = (totalSeconds % 3_600) / 60
@@ -3521,6 +3526,7 @@ private fun CardHeading(icon: androidx.compose.ui.graphics.vector.ImageVector, t
 }
 
 /** A labelled row of pills. Generic so every choice in this panel looks and behaves identically. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun <T> ChoiceRow(
     label: String,
@@ -3532,7 +3538,8 @@ private fun <T> ChoiceRow(
     Column {
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Wrapped rather than cut off: five layouts and five seek bars do not fit a narrow window in one line.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { option ->
                 val active = option == selected
                 Surface(

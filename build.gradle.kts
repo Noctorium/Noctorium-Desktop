@@ -205,6 +205,8 @@ tasks.test {
     // And for the playback tests that run against a real track, real yt-dlp and real mpv: off unless
     // asked for, since they need all three and the network, and take half a minute each.
     System.getProperty("noctorium.live")?.let { systemProperty("noctorium.live", it) }
+    // Where PlayerBarRenderCheck draws the player bar layouts, when it is asked to.
+    System.getProperty("noctorium.renderBars")?.let { systemProperty("noctorium.renderBars", it) }
     // A live run wants the real programs, and the test folder above has none of its own. They are named
     // through the same variables a listener can set, so the lookup being tested is the real one.
     val installed = System.getenv("LOCALAPPDATA")?.let { file("$it/Noctorium/bin") }
