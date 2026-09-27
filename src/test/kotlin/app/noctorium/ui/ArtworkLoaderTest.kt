@@ -1,7 +1,10 @@
 package app.noctorium.ui
 
+import androidx.compose.ui.graphics.ImageBitmap
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ArtworkLoaderTest {
@@ -38,6 +41,29 @@ class ArtworkLoaderTest {
     @Test
     fun `very large requests are capped so one cover cannot dominate the cache`() {
         assertEquals(1024, artworkSizeBucket(4000))
+    }
+
+    /**
+     * Thirty now playing covers at 1024 pixels are 120 megabytes of pixels, outside the Java heap. The
+     * count bound alone would have kept every one of them.
+     */
+    @Test
+    fun `covers are held to a budget in bytes, not only a count`() {
+        ArtworkStore.clear()
+        try {
+            fun key(n: Int) = "https://c/$n" + ArtworkStore.SIZE_SEPARATOR + 1024
+            repeat(30) { ArtworkStore.put(key(it), ImageBitmap(1024, 1024)) }
+            assertTrue(ArtworkStore.bytesHeld() <= 96L * 1024 * 1024, "holding ${ArtworkStore.bytesHeld()} bytes")
+            assertNotNull(ArtworkStore.get(key(29)), "the cover just added was the one let go")
+            assertNull(ArtworkStore.get(key(0)), "the oldest cover was kept past the budget")
+
+            // Small ones are not pushed out by the budget: a screen of thumbnails is well inside it.
+            ArtworkStore.clear()
+            repeat(150) { ArtworkStore.put("https://t/$it" + ArtworkStore.SIZE_SEPARATOR + 128, ImageBitmap(128, 128)) }
+            assertNotNull(ArtworkStore.get("https://t/0" + ArtworkStore.SIZE_SEPARATOR + 128))
+        } finally {
+            ArtworkStore.clear()
+        }
     }
 
     @Test

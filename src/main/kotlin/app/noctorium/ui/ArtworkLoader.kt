@@ -28,21 +28,46 @@ import org.jetbrains.skia.Image as SkiaImage
  * Covers used to be held in a map that only ever grew: a long playlist meant hundreds of full-size bitmaps
  * resident at once. Least-recently-used eviction bounds that, and the size the cover was decoded at is part of
  * the key so a thumbnail and a hero image never fight over one slot.
+ *
+ * Bounded by bytes as well as by count. A count alone was enough while every cover arrived at 120 pixels:
+ * a hundred and sixty of those are nine megabytes. Covers now come at the size they are drawn, and a now
+ * playing cover at 1024 pixels is four megabytes on its own -- in Skia's memory, outside the Java heap,
+ * where no garbage collector is watching the total. A long listening session left one behind for every
+ * track it played.
  */
-private object ArtworkStore {
+internal object ArtworkStore {
     private const val MAX_ENTRIES = 160
+    private const val MAX_BYTES = 96L * 1024 * 1024
 
-    private val memory = object : LinkedHashMap<String, ImageBitmap>(64, .75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ImageBitmap>?): Boolean =
-            size > MAX_ENTRIES
-    }
+    private val memory = LinkedHashMap<String, ImageBitmap>(64, .75f, true)
+    private var bytes = 0L
 
     @Synchronized
     fun get(key: String): ImageBitmap? = memory[key]
 
     @Synchronized
     fun put(key: String, image: ImageBitmap) {
-        memory[key] = image
+        memory.put(key, image)?.let { bytes -= sizeOf(it) }
+        bytes += sizeOf(image)
+        // Least recently used first, and never the one just added, however large: it is on screen.
+        val oldest = memory.entries.iterator()
+        while ((memory.size > MAX_ENTRIES || bytes > MAX_BYTES) && oldest.hasNext()) {
+            val entry = oldest.next()
+            if (entry.key == key) continue
+            bytes -= sizeOf(entry.value)
+            oldest.remove()
+        }
+    }
+
+    private fun sizeOf(image: ImageBitmap): Long = image.width.toLong() * image.height * 4
+
+    @Synchronized
+    internal fun bytesHeld(): Long = bytes
+
+    @Synchronized
+    internal fun clear() {
+        memory.clear()
+        bytes = 0
     }
 
     /** Any decoded size of this cover, for callers that only need the pixels — the palette sampler included. */
