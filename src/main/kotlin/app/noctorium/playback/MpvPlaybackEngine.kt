@@ -66,6 +66,10 @@ internal const val BOOST_FILTER = "lavfi=[acompressor=threshold=-20dB:ratio=4:ma
  *
  * The last error is taken rather than the first: mpv keeps going through several, and the one that
  * finally stopped it is at the end.
+ *
+ * An address in it is cut down to the server's name. A stream address is several hundred characters of
+ * signature that meant nothing on screen, and it carries the computer's own IP address -- which has no
+ * business in an error message, or in a log somebody may be asked to send.
  */
 internal fun complaintIn(lines: List<String>): String? {
     val complaint = lines.lastOrNull { line ->
@@ -73,11 +77,75 @@ internal fun complaintIn(lines: List<String>): String? {
         line.contains("][e][") || line.contains("][f][")
     } ?: return null
     // Strips the leading bracket groups, however many mpv used, leaving the sentence itself.
-    return complaint.replace(Regex("^(\\[[^]]*])+"), "").trim().take(200).ifBlank { null }
+    return complaint.replace(Regex("^(\\[[^]]*])+"), "")
+        .replace(ADDRESS) { it.groupValues[1] }
+        .trim().take(200).ifBlank { null }
 }
+
+/** A web address, with the host kept and the path and query -- signatures, IP addresses -- dropped. */
+private val ADDRESS = Regex("""https?://([^/?#\s]+)[^\s]*?(?=[.,;:]?(?:\s|$))""")
+
+/**
+ * Whether mpv's log says the server turned the address away, which a fresh address fixes and nothing
+ * else does.
+ *
+ * Refused, gone and not found alike: an address bound to a network the computer has left comes back
+ * 403, and one that has run out comes back 403 or 410. A missing audio device, or a file mpv cannot
+ * decode, ends the player just as fast and says something else, and asking the service again for those
+ * would only put a lookup in front of the message.
+ */
+internal fun refusalIn(lines: List<String>): Boolean = lines.any { line ->
+    (line.contains("][e][") || line.contains("][f][")) && HTTP_REFUSAL.containsMatchIn(line)
+}
+
+/** curl's way of saying it, then ffmpeg's, which mpv falls back to for some streams. */
+private val HTTP_REFUSAL = Regex("""HTTP error 4\d\d|Server returned 4\d\d""")
 
 /** Ten seconds of asking at the ticker's rate, after which a stream is taken to have no length. */
 private const val MAX_DURATION_PROBES = 40
+
+/** How many times one track is brought back after mpv gives up on it, before the listener is told. */
+internal const val MAX_RECOVERIES = 2
+
+/** How far before the end a clean exit still counts as the end, allowing for mpv's own rounding. */
+private const val CUT_SHORT_MARGIN_MS = 10_000L
+
+/** How far back a recovered track resumes, so nothing is lost across the join. */
+private const val RESUME_OVERLAP_MS = 1_500L
+
+private const val NETWORK_TIMEOUT_SECONDS = 20
+private const val CONNECT_TIMEOUT_SECONDS = 10
+
+/** The piece curl fetches at a time: yt-dlp's own chunk size for YouTube. */
+private const val REQUEST_PIECE = "10MiB"
+
+/** What each mpv on this machine understands, asked once per executable. */
+private val knownOptions = java.util.concurrent.ConcurrentHashMap<Path, Set<String>>()
+
+/**
+ * The options [mpv] accepts, from its own `--list-options`.
+ *
+ * Asked rather than assumed because Noctorium runs whichever mpv it finds, and on Linux that is often the
+ * distribution's, years older than the one bundled for Windows. Empty if mpv cannot be asked, which leaves
+ * every optional flag off -- playing as before rather than not playing.
+ */
+internal fun optionsOf(mpv: Path): Set<String> = knownOptions.getOrPut(mpv) {
+    runCatching {
+        val lister = ProcessBuilder(mpv.toString(), "--no-config", "--list-options")
+            .redirectErrorStream(true)
+            .start()
+        val listing = lister.inputStream.bufferedReader().use { it.readText() }
+        lister.waitFor(10, TimeUnit.SECONDS)
+        optionNamesIn(listing)
+    }.getOrDefault(emptySet())
+}
+
+/** The option names out of an mpv `--list-options` listing: the words after a leading `--`. */
+internal fun optionNamesIn(listing: String): Set<String> =
+    Regex("""^\s*--([a-z0-9][a-z0-9-]*)""", RegexOption.MULTILINE)
+        .findAll(listing)
+        .map { it.groupValues[1] }
+        .toSet()
 
 class MpvPlaybackEngine(
     private val resolver: YtDlpService,
@@ -137,6 +205,9 @@ class MpvPlaybackEngine(
 
     init {
         runCatching { Runtime.getRuntime().addShutdownHook(shutdownHook) }
+        // Asked now, off to one side, so the first song of the session is not the one that waits the
+        // quarter of a second mpv takes to list what it understands.
+        scope.launch(Dispatchers.IO) { executable()?.let(::optionsOf) }
     }
 
     /**
@@ -164,68 +235,56 @@ class MpvPlaybackEngine(
      * straight past the old catch and left the spinner up with nothing logged anywhere. And the finally
      * below states the invariant outright: whatever happened, RESOLVING is not how this method ends.
      */
-    override suspend fun play(track: Track): Unit = playMutex.withLock {
+    override suspend fun play(track: Track) {
+        // A track chosen afresh starts with its full allowance of recoveries. See [recover].
+        recoveries = 0
+        start(track, startMs = 0)
+    }
+
+    /**
+     * How many times the current track has been brought back after mpv gave up on it.
+     *
+     * Bounded, because a stream that fails every time it is fetched afresh is not going to be rescued by a
+     * fourth attempt, and a player that silently retries forever is worse than one that says so.
+     */
+    @Volatile private var recoveries = 0
+
+    private suspend fun start(track: Track, startMs: Long): Unit = playMutex.withLock {
         mutableState.update { it.copy(
             status = PlaybackStatus.RESOLVING,
             track = track,
             errorMessage = null,
-            positionMs = 0,
+            positionMs = startMs,
             durationMs = track.durationMs ?: 0,
             loops = 0,
         ) }
         // Logged on the way in as well as the way out, so that next time the difference between "never
         // started" and "started and vanished" is a fact rather than a deduction.
-        PlaybackLog.event("playback_requested", mapOf("track" to track.queueKey))
+        PlaybackLog.event("playback_requested", mapOf("track" to track.queueKey, "startMs" to startMs))
         try {
             val mpv = executable() ?: throw BackendException(
                 "mpv is missing, so there is nothing to play through. Settings, then Playback tools, installs it.",
             )
-            val mediaUrl = mediaAddress(track)
-            stopProcess()
-            ipcEndpoint = createIpcEndpoint()
-            PlaybackLog.event(
-                "playback_starting",
-                mapOf(
-                    "track" to track.queueKey,
-                    "volumePercent" to mutableState.value.volume * 100,
-                    "boostEnabled" to mutableState.value.volumeBoostEnabled,
-                    "muted" to mutableState.value.isMuted,
-                ),
-            )
-            val log = newLogFile()
-            processLog = log
-            process = withContext(Dispatchers.IO) {
-                ProcessBuilder(
-                    buildList {
-                        add(mpv.toString())
-                        add("--no-config")
-                        add("--no-video")
-                        add("--force-window=no")
-                        add("--terminal=no")
-                        add("--input-terminal=no")
-                        // --terminal=no silences everything mpv would otherwise say, including why it is
-                        // about to stop. --log-file is the one channel that still works, and without it a
-                        // player that cannot open an audio device exits looking exactly like a track that
-                        // finished: a second of nothing, then silence, with no message anywhere.
-                        log?.let { add("--log-file=$it") }
-                        add("--input-ipc-server=${ipcEndpoint!!}")
-                        add("--volume=${(mutableState.value.volume * 100).toInt()}")
-                        // A new process for every track, so the boost has to be asked for again each
-                        // time or it would quietly lapse at the end of every song.
-                        if (mutableState.value.volumeBoostEnabled) add("--af=$BOOST_FILTER")
-                        add("--mute=${if (mutableState.value.isMuted) "yes" else "no"}")
-                        // Repeat-one, done by the player: it seeks back to the start out of its own
-                        // cache instead of exiting, so there is no gap and nothing is fetched again.
-                        if (looping) add("--loop-file=inf")
-                        add("--title=Noctorium")
-                        add("--")
-                        add(mediaUrl)
-                    },
-                ).redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                    .redirectError(ProcessBuilder.Redirect.DISCARD)
-                    .start()
-            }
+            val supported = withContext(Dispatchers.IO) { optionsOf(mpv) }
+            launch(track, mpv, mediaAddress(track), supported, startMs)
             delay(400)
+            // Addresses are remembered for hours now, and one the server has since stopped accepting --
+            // a changed network, a VPN switched on -- is refused in the first third of a second. That is
+            // fixed by asking the service again, so it is asked, once, instead of showing an error. Only
+            // for a refusal: a missing audio device fails just as fast, and a new address would only
+            // put a lookup in front of the message.
+            if (process?.isAlive != true && addressRefused() && downloadedFile(track) == null &&
+                recoveries < MAX_RECOVERIES
+            ) {
+                recoveries++
+                PlaybackLog.event(
+                    "playback_address_refused",
+                    mapOf("track" to track.queueKey, "attempt" to recoveries, "detail" to mpvComplaint()),
+                )
+                resolver.forgetAudio(track.sourceUrl)
+                launch(track, mpv, mediaAddress(track), supported, startMs)
+                delay(400)
+            }
             if (process?.isAlive != true) {
                 throw BackendException("mpv stopped before any audio started. " + (mpvComplaint() ?: "It gave no reason."))
             }
@@ -270,6 +329,66 @@ class MpvPlaybackEngine(
                 ) }
                 PlaybackLog.event("playback_stranded", mapOf("track" to track.queueKey))
             }
+        }
+    }
+
+    /** Whether the player that just stopped was turned away by the server. See [refusalIn]. */
+    private fun addressRefused(): Boolean = runCatching {
+        processLog?.let { refusalIn(java.nio.file.Files.readAllLines(it)) } ?: false
+    }.getOrDefault(false)
+
+    /** Stands down whatever was playing and starts mpv on [mediaUrl]. Whether it stays up is the caller's to see. */
+    private suspend fun launch(track: Track, mpv: Path, mediaUrl: String, supported: Set<String>, startMs: Long) {
+        stopProcess()
+        // A new process measures its own stream; the last one's length is not this one's.
+        streamLengthMs = 0L
+        lengthProbes = 0
+        ipcEndpoint = createIpcEndpoint()
+        PlaybackLog.event(
+            "playback_starting",
+            mapOf(
+                "track" to track.queueKey,
+                "volumePercent" to mutableState.value.volume * 100,
+                "boostEnabled" to mutableState.value.volumeBoostEnabled,
+                "muted" to mutableState.value.isMuted,
+            ),
+        )
+        val log = newLogFile()
+        processLog = log
+        process = withContext(Dispatchers.IO) {
+            ProcessBuilder(
+                buildList {
+                    add(mpv.toString())
+                    add("--no-config")
+                    add("--no-video")
+                    add("--force-window=no")
+                    add("--terminal=no")
+                    add("--input-terminal=no")
+                    // --terminal=no silences everything mpv would otherwise say, including why it is
+                    // about to stop. --log-file is the one channel that still works, and without it a
+                    // player that cannot open an audio device exits looking exactly like a track that
+                    // finished: a second of nothing, then silence, with no message anywhere.
+                    log?.let { add("--log-file=$it") }
+                    add("--input-ipc-server=${ipcEndpoint!!}")
+                    add("--volume=${(mutableState.value.volume * 100).toInt()}")
+                    // A new process for every track, so the boost has to be asked for again each
+                    // time or it would quietly lapse at the end of every song.
+                    if (mutableState.value.volumeBoostEnabled) add("--af=$BOOST_FILTER")
+                    add("--mute=${if (mutableState.value.isMuted) "yes" else "no"}")
+                    // Repeat-one, done by the player: it seeks back to the start out of its own
+                    // cache instead of exiting, so there is no gap and nothing is fetched again.
+                    if (looping) add("--loop-file=inf")
+                    add("--title=Noctorium")
+                    addAll(streamOptions(mediaUrl, supported))
+                    // Resuming after a recovery, a moment before where it stopped so nothing is lost
+                    // across the join. Relative to the start of the file, which is what `+` means.
+                    if (startMs > 0) add("--start=+${"%.1f".format(Locale.ROOT, startMs / 1000.0)}")
+                    add("--")
+                    add(mediaUrl)
+                },
+            ).redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start()
         }
     }
 
@@ -436,7 +555,26 @@ class MpvPlaybackEngine(
                          * non-zero when it gives up, which is exactly the distinction needed.
                          */
                         val code = runCatching { process?.exitValue() }.getOrNull()
-                        if (code != null && code != 0) {
+                        val failed = code != null && code != 0
+                        val cutShort = !failed && endedEarly(current.positionMs)
+                        val track = current.track
+                        if ((failed || cutShort) && track != null && recoveries < MAX_RECOVERIES) {
+                            recoveries++
+                            PlaybackLog.event(
+                                "playback_recovering",
+                                mapOf(
+                                    "track" to track.queueKey,
+                                    "exit" to code,
+                                    "cutShort" to cutShort,
+                                    "atMs" to current.positionMs,
+                                    "attempt" to recoveries,
+                                    "detail" to (mpvComplaint() ?: "no output"),
+                                ),
+                            )
+                            // From outside this loop: starting again stops this ticker, and a coroutine
+                            // that waits on its own cancellation waits forever.
+                            scope.launch { recover(track, current.positionMs) }
+                        } else if (failed || cutShort) {
                             val complaint = mpvComplaint()
                             mutableState.update {
                                 it.copy(
@@ -446,12 +584,19 @@ class MpvPlaybackEngine(
                             }
                             PlaybackLog.event(
                                 "playback_died",
-                                mapOf("exit" to code, "detail" to (complaint ?: "no output")),
+                                mapOf("exit" to code, "cutShort" to cutShort, "detail" to (complaint ?: "no output")),
                             )
                         } else {
                             mutableState.update { it.copy(status = PlaybackStatus.IDLE) }
                         }
                         break
+                    }
+                    // The length as mpv itself measures it, asked for once the stream is playing. Not
+                    // for the seek bar, which has the listing's length already, but for telling a track
+                    // that finished from one that was cut off: see [endedEarly].
+                    if (streamLengthMs == 0L && lengthProbes < MAX_DURATION_PROBES) {
+                        lengthProbes++
+                        streamLengthMs = measuredDurationMs()
                     }
                     // Ask mpv how long the stream is until it can say. A YouTube Music listing carries no
                     // duration field at all, so a track played from one arrives here with nothing to scale
@@ -502,6 +647,73 @@ class MpvPlaybackEngine(
      * A genuinely endless stream never reports one, so the caller stops asking after [MAX_DURATION_PROBES];
      * a normal track answers within the first tick or two.
      */
+    /** The stream's length as mpv measured it for the current process, or 0 while it has not said. */
+    @Volatile private var streamLengthMs = 0L
+    @Volatile private var lengthProbes = 0
+
+    /**
+     * Whether an mpv that exited cleanly stopped before the end of the track.
+     *
+     * This is the quiet way a song dies, and the one the listener hears as skipping. When a connection
+     * drops mid-track and mpv's own retries run out, it treats the end of what it has as the end of the
+     * file and exits with 0, exactly as it does after the last second of a song -- so the queue moved on
+     * and nothing was said.
+     *
+     * Judged against the length mpv itself measured and never the listing's. A listing's length is often
+     * a few seconds off the audio, and trusting it would call every such track cut short at its own end
+     * and try to rescue it. With no measured length there is no judgement at all: an honest end is the
+     * safe assumption.
+     */
+    private fun endedEarly(positionMs: Long): Boolean =
+        !looping && streamLengthMs > 0 && positionMs < streamLengthMs - CUT_SHORT_MARGIN_MS
+
+    /**
+     * Brings the current track back after mpv gave up on it: a freshly fetched address, from where it
+     * stopped.
+     *
+     * The address goes first. A stream that would not open, or stopped delivering, is most often a stream
+     * address that stopped being good -- expired, or refused -- and asking mpv to try the same one again
+     * is asking for the same answer. The phone has done this for refused streams all along; the desktop
+     * showed an error and stopped.
+     */
+    private suspend fun recover(track: Track, atMs: Long) {
+        resolver.forgetAudio(track.sourceUrl)
+        runCatching { start(track, startMs = (atMs - RESUME_OVERLAP_MS).coerceAtLeast(0)) }
+    }
+
+    /**
+     * How mpv should fetch a stream, as opposed to play a file.
+     *
+     * First, never mpv's own youtube-dl fallback. Given an address that will not open, mpv runs youtube-dl
+     * on it -- on a raw googlevideo address, which no extractor can do anything with -- and then exits
+     * reporting "youtube-dl failed: unexpected error occurred". That is the message that stopped songs:
+     * seconds of delay, a certain failure, and the real reason the stream would not open replaced by a
+     * misleading one. Noctorium resolves every stream itself; mpv's job is to play the address it is given
+     * and, if it cannot, say why.
+     *
+     * Then the client yt-dlp resolved the address as, so mpv fetches it announcing itself the same way.
+     *
+     * Then how long to wait. mpv's default is a minute of silence before it gives up on a stalled
+     * connection; twenty seconds, so that a stream which has gone is noticed and fetched afresh while the
+     * listener still thinks it is buffering.
+     *
+     * And, where this mpv fetches over curl, in bounded pieces rather than one open-ended request -- the way
+     * yt-dlp itself downloads from YouTube. A dropped connection then costs one piece, which curl retries,
+     * rather than the rest of the song.
+     *
+     * Each option only if this mpv has it. An option mpv does not recognise stops it from starting at all,
+     * which would turn a fix for some songs stopping into every song stopping. The curl options are recent;
+     * a distribution's packaged mpv may well not have them.
+     */
+    private fun streamOptions(mediaUrl: String, supported: Set<String>): List<String> = buildList {
+        if ("ytdl" in supported) add("--ytdl=no")
+        if (!mediaUrl.startsWith("http://") && !mediaUrl.startsWith("https://")) return@buildList
+        if ("user-agent" in supported) resolver.userAgentFor(mediaUrl)?.let { add("--user-agent=$it") }
+        if ("network-timeout" in supported) add("--network-timeout=$NETWORK_TIMEOUT_SECONDS")
+        if ("curl-connect-timeout" in supported) add("--curl-connect-timeout=$CONNECT_TIMEOUT_SECONDS")
+        if ("curl-max-request-size" in supported) add("--curl-max-request-size=$REQUEST_PIECE")
+    }
+
     private suspend fun measuredDurationMs(): Long =
         runCatching { getNumberProperty("duration") }.getOrNull()
             ?.takeIf { it.isFinite() && it > 0 }

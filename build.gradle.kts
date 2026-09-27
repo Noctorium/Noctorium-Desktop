@@ -190,6 +190,10 @@ tasks.named<ProcessResources>("processResources") {
 
 tasks.test {
     useJUnitPlatform()
+    // Every test gets a folder of its own under build/, never the listener's. Tests that played
+    // something wrote it into the real playback log -- over a hundred invented failures in a week -- and
+    // the folder lookup also migrates an older application folder, which no test run should be doing.
+    systemProperty("noctorium.home", layout.buildDirectory.dir("test-home").get().asFile.absolutePath)
     // Lets -Dnoctorium.writeIcons=true reach the test JVM, which is how the committed icon files are
     // regenerated from AppIcon after the drawing changes. Gradle does not pass its own system properties
     // down to the tests, so without this the generator silently does nothing and the guard test then
@@ -198,6 +202,9 @@ tasks.test {
     // Same again for the test that installs yt-dlp and mpv for real, which is off unless asked for:
     // it downloads fifty megabytes and depends on two other projects release pages being up.
     System.getProperty("noctorium.installTools")?.let { systemProperty("noctorium.installTools", it) }
+    // And for the playback tests that run against a real track, real yt-dlp and real mpv: off unless
+    // asked for, since they need all three and the network, and take half a minute each.
+    System.getProperty("noctorium.live")?.let { systemProperty("noctorium.live", it) }
 }
 
 /*

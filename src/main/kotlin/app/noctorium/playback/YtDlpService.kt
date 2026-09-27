@@ -177,6 +177,23 @@ class YtDlpService(
 
     override fun forgetAudio(sourceUrl: String) = addresses.forget(sourceUrl)
 
+    /** Plants an address as if it had been looked up, so a test can hand the player one that is refused. */
+    internal fun rememberAudio(sourceUrl: String, address: String) = addresses.remember(sourceUrl, address)
+
+    /**
+     * The User-Agent each stream address was issued to, so the player can ask for it as the same client.
+     *
+     * yt-dlp does not just find a stream, it impersonates a particular YouTube client to get one, and the
+     * address it hands back belongs to that client. `--get-url` returned the address and threw the rest
+     * away, so mpv then fetched it announcing itself as mpv. Today's client does not mind; the ones yt-dlp
+     * falls back to when YouTube changes something can, and a mismatch there is a stream that will not
+     * open. Kept per address, bounded, and never persisted: an address is only good for hours anyway.
+     */
+    private val streamAgents = ConcurrentHashMap<String, String>()
+
+    /** The User-Agent [address] was issued to, if yt-dlp said. */
+    fun userAgentFor(address: String): String? = streamAgents[address]
+
     private fun fetchAudioAddress(sourceUrl: String): String {
         val provider = when {
             "music.youtube.com" in sourceUrl -> ProviderType.YOUTUBE_MUSIC
@@ -184,16 +201,26 @@ class YtDlpService(
             "soundcloud.com" in sourceUrl -> ProviderType.SOUNDCLOUD
             else -> null
         }
-        return run(
+        // The address and the headers it came with, from the one extraction: asking for both costs
+        // nothing over asking for the address alone, and the second run it would otherwise take is two
+        // to three seconds of the listener waiting.
+        val lines = run(
             "--format", "bestaudio/best",
-            "--get-url",
+            "--print", "%(url)s",
+            "--print", "%(http_headers)j",
             "--no-playlist",
             "--no-warnings",
             *provider?.let(::playbackArguments).orEmpty().toTypedArray(),
             "--",
             sourceUrl,
-        ).lineSequence().firstOrNull { it.startsWith("http") }
+        ).lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
+        val address = lines.firstOrNull { it.startsWith("http") }
             ?: throw BackendException("yt-dlp returned no playable audio URL")
+        lines.firstOrNull { it.startsWith("{") }?.let(::userAgentIn)?.let { agent ->
+            if (streamAgents.size > MAX_REMEMBERED_AGENTS) streamAgents.clear()
+            streamAgents[address] = agent
+        }
+        return address
     }
 
     /**
@@ -621,3 +648,16 @@ private const val DOWNLOAD_TIMEOUT_SECONDS = 20L * 60L
 
 /** Converting takes longer than fetching, and a whole album saved one after another longer still. */
 private const val EXPORT_TIMEOUT_SECONDS = 30L * 60L
+
+/** Enough for any session's worth of tracks; past it the oldest are no use to anybody. */
+private const val MAX_REMEMBERED_AGENTS = 512
+
+/**
+ * The User-Agent out of the header block yt-dlp prints for a stream, or null if it did not include one.
+ *
+ * Read with a JSON parser rather than yt-dlp's own field path: `%(http_headers.User-Agent)s` comes back
+ * as NA, because the hyphen in the key is not something the path syntax can reach.
+ */
+internal fun userAgentIn(headersJson: String): String? = runCatching {
+    Json.parseToJsonElement(headersJson).jsonObject["User-Agent"]?.jsonPrimitive?.contentOrNull
+}.getOrNull()?.takeIf { it.isNotBlank() }

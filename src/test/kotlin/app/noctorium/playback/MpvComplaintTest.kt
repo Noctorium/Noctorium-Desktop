@@ -34,7 +34,16 @@ class MpvComplaintTest {
     @Test
     fun `the timestamp, the level and the component are not shown to anybody`() {
         val complaint = complaintIn(listOf("[   0.026][e][stream] Failed to open https://example.invalid/nope.webm."))
-        assertEquals("Failed to open https://example.invalid/nope.webm.", complaint)
+        assertEquals("Failed to open example.invalid.", complaint)
+    }
+
+    /** What a refused YouTube stream looks like: the signature, and the computer's own IP address. */
+    @Test
+    fun `a stream address is cut down to its server, and the IP address in it goes`() {
+        val complaint = complaintIn(listOf(
+            "[   0.139][e][stream] Failed to open https://rr5---sn-gqn-vu2e.googlevideo.com/videoplayback?expire=1790525415&ip=203.0.113.9&id=o-AB&sig=AJfQ",
+        ))
+        assertEquals("Failed to open rr5---sn-gqn-vu2e.googlevideo.com", complaint)
     }
 
     @Test
