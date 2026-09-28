@@ -82,6 +82,7 @@ import app.noctorium.discord.PresenceTimestamps
 import app.noctorium.downloads.DownloadStage
 import app.noctorium.domain.*
 import app.noctorium.lyrics.LyricLine
+import app.noctorium.lyrics.LyricsProviderId
 import app.noctorium.lyrics.LyricsProviderOutcome
 import app.noctorium.lyrics.LyricsProviderStatus
 import app.noctorium.library.TrackEdit
@@ -108,6 +109,8 @@ import app.noctorium.auth.writeCookieFile
 import app.noctorium.playlists.LocalPlaylist
 import app.noctorium.playlists.PlaylistShareLink
 import app.noctorium.settings.*
+import app.noctorium.platform.LaunchAtLogin
+import app.noctorium.platform.StartupMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -3134,7 +3137,7 @@ private fun PlaybackError(message: String) {
 }
 
 private enum class SettingsPage {
-    ACCOUNT, PROFILE, CUSTOMIZATION, YOUTUBE, SOUNDCLOUD, SPOTIFY, SCROBBLING, LYRICS, DISCORD, UPDATES,
+    ACCOUNT, PROFILE, CUSTOMIZATION, YOUTUBE, SOUNDCLOUD, SPOTIFY, SCROBBLING, LYRICS, STARTUP, DISCORD, UPDATES,
     PLAYBACK_TOOLS, DIAGNOSTICS
 }
 
@@ -3167,7 +3170,8 @@ private fun SettingsScreen(state: AppState) {
                 )
                 SettingsPage.SPOTIFY -> SpotifySettingsPanel(settings, state)
                 SettingsPage.SCROBBLING -> ScrobblingSettingsPanel(settings, state)
-                SettingsPage.LYRICS -> LyricsSettingsPanel()
+                SettingsPage.LYRICS -> LyricsSettingsPanel(settings.preferences, state)
+                SettingsPage.STARTUP -> StartupSettingsPanel(settings.preferences, state)
                 SettingsPage.DISCORD -> DiscordSettingsPanel(settings.preferences, state)
                 SettingsPage.UPDATES -> UpdatePanel(state)
                 SettingsPage.PLAYBACK_TOOLS -> PlaybackToolsPanel()
@@ -3268,7 +3272,23 @@ private fun SettingsScreen(state: AppState) {
                 connected.isNotEmpty(),
             )
         }
-        item { SettingsCard("Lyrics providers", "LRCLIB, Better Lyrics, Genius and 5 more", Icons.Default.Lyrics, { page = SettingsPage.LYRICS }) }
+        item {
+            SettingsCard(
+                "Lyrics providers",
+                settings.preferences.lyricsProvider?.let { "Opens on ${it.displayName} · 8 sources" }
+                    ?: "LRCLIB, Better Lyrics, Genius and 5 more",
+                Icons.Default.Lyrics,
+                { page = SettingsPage.LYRICS },
+            )
+        }
+        item {
+            SettingsCard(
+                "Startup and tray",
+                startupSubtitle(settings.preferences),
+                Icons.Default.PowerSettingsNew,
+                { page = SettingsPage.STARTUP },
+            )
+        }
         item {
             // Read from the live setting. This once read the field that only exists to carry a choice over
             // from an older build, which is never written and so always said Disabled however it was set.
@@ -3329,6 +3349,7 @@ private fun pageTitle(page: SettingsPage) = when (page) {
     SettingsPage.SPOTIFY -> "Spotify library"
     SettingsPage.SCROBBLING -> "Scrobbling"
     SettingsPage.LYRICS -> "Lyrics providers"
+    SettingsPage.STARTUP -> "Startup and tray"
     SettingsPage.DISCORD -> "Discord Rich Presence"
     SettingsPage.UPDATES -> "Updates"
     SettingsPage.PLAYBACK_TOOLS -> "Playback tools"
@@ -4548,11 +4569,10 @@ internal fun AccountFact(text: String) {
 }
 
 private fun spotifySummary(spotify: SpotifyConnectionState): String = when {
-    !spotify.configured -> "Read your playlists and liked songs"
     spotify.connecting -> "Waiting for Spotify…"
     spotify.connected && spotify.accountName.isNotBlank() -> "Reading ${spotify.accountName}'s library"
     spotify.connected -> "Your Spotify library is connected"
-    else -> "Client id saved — connect your account"
+    else -> "Read your playlists and liked songs"
 }
 
 /**
@@ -4562,16 +4582,16 @@ private fun spotifySummary(spotify: SpotifyConnectionState): String = when {
  * connecting Spotify means playing from Spotify. It does not, and it cannot: the Web API serves no audio,
  * and only Spotify's own player is allowed to decode it. What connecting gives is the collection.
  *
- * The setup asks for a client id, which is a step the other services do not have. There is no way around
- * it -- Spotify answers nothing without one, and its own web-player token endpoint is closed to requests
- * from outside the site.
+ * Connecting is one button, through Noctorium's own Spotify app. A Spotify app of the listener's own is
+ * still offered, folded away underneath, for somebody who would rather sign in through that.
  */
 @Composable
-private fun SpotifySettingsPanel(settings: SettingsState, state: AppState) {
+internal fun SpotifySettingsPanel(settings: SettingsState, state: AppState) {
     val spotify = settings.spotify
     var clientId by remember(settings.preferences.spotifyClientId) {
         mutableStateOf(settings.preferences.spotifyClientId)
     }
+    var ownAppOpen by remember { mutableStateOf(settings.preferences.spotifyClientId.isNotBlank()) }
     val redirect = remember { state.spotifyRedirectUri() }
 
     Column(
@@ -4612,74 +4632,23 @@ private fun SpotifySettingsPanel(settings: SettingsState, state: AppState) {
         }
 
         SettingsPanelCard {
-            Text("One-time setup", fontWeight = FontWeight.SemiBold)
+            Text("Connect", fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(6.dp))
             Text(
-                "Spotify answers nothing without a client id, and only issues them per application — so this " +
-                    "one is yours rather than Noctorium's. It takes a minute and never expires.",
+                if (spotify.ownApp) {
+                    "Signs in through your own Spotify app, in your browser. Noctorium is only ever allowed to read."
+                } else {
+                    "Signs in on Spotify's own page, in your browser. Nothing to set up first, and Noctorium is " +
+                        "only ever allowed to read."
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
             )
             Spacer(Modifier.height(13.dp))
-            SetupStep(1, "Open Spotify's developer dashboard and create an app. Any name will do.")
-            SetupStep(2, "Add this exact address to the app's Redirect URIs, and tick the Web API:")
-            Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = .7f),
-                shape = RoundedCornerShape(9.dp),
-                modifier = Modifier.padding(start = 26.dp, top = 4.dp, bottom = 8.dp),
-            ) {
-                Row(
-                    Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    SelectionContainer { Text(redirect, fontSize = 11.sp, fontFamily = FontFamily.Monospace) }
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(state::copySpotifyRedirectUri, Modifier.size(26.dp)) {
-                        Icon(Icons.Default.ContentCopy, "Copy the redirect address", Modifier.size(15.dp))
-                    }
-                }
-            }
-            SetupStep(3, "Copy the app's Client ID from its settings and paste it below.")
-            Spacer(Modifier.height(11.dp))
-            OutlinedButton(state::openSpotifyDashboard) {
-                Icon(Icons.Default.OpenInNew, null, Modifier.size(17.dp))
-                Spacer(Modifier.width(7.dp))
-                Text("Open Spotify's dashboard")
-            }
-        }
-
-        SettingsPanelCard {
-            Text("Your Spotify client id", fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(10.dp))
-            OutlinedTextField(
-                clientId,
-                { clientId = it.trim().take(64) },
-                label = { Text("Client ID") },
-                placeholder = { Text("32 characters from the dashboard") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().tracksTyping(),
-            )
-            Spacer(Modifier.height(7.dp))
-            Text(
-                "This is an identifier and not a password, so it is kept in your settings file. The sign-in " +
-                    "itself is stored encrypted for your Windows account.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-            )
-            Spacer(Modifier.height(13.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 Button(
-                    { state.setSpotifyClientId(clientId) },
-                    enabled = clientId != settings.preferences.spotifyClientId,
-                ) {
-                    Icon(Icons.Default.Save, null, Modifier.size(17.dp))
-                    Spacer(Modifier.width(7.dp))
-                    Text("Save client id")
-                }
-                Button(
                     state::connectSpotify,
-                    enabled = spotify.configured && !spotify.connecting &&
-                        clientId == settings.preferences.spotifyClientId,
+                    enabled = !spotify.connecting && clientId == settings.preferences.spotifyClientId,
                 ) {
                     Icon(Icons.Default.Link, null, Modifier.size(17.dp))
                     Spacer(Modifier.width(7.dp))
@@ -4697,6 +4666,88 @@ private fun SpotifySettingsPanel(settings: SettingsState, state: AppState) {
                 ) {
                     Row(Modifier.fillMaxWidth().padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
                         SelectionContainer(Modifier.weight(1f)) { Text(message, fontSize = 11.sp) }
+                    }
+                }
+            }
+        }
+
+        SettingsPanelCard {
+            Row(
+                Modifier.fillMaxWidth().clickable { ownAppOpen = !ownAppOpen },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Use your own Spotify app", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (spotify.ownApp) "In use" else "Optional",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                }
+                Icon(if (ownAppOpen) Icons.Default.ExpandLess else Icons.Default.ExpandMore, if (ownAppOpen) "Fold away" else "Show")
+            }
+            if (ownAppOpen) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "For signing in through an app registered to you instead of Noctorium's. It takes a minute " +
+                        "and never expires.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.height(13.dp))
+                SetupStep(1, "Open Spotify's developer dashboard and create an app. Any name will do.")
+                SetupStep(2, "Add this exact address to the app's Redirect URIs, and tick the Web API:")
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = .7f),
+                    shape = RoundedCornerShape(9.dp),
+                    modifier = Modifier.padding(start = 26.dp, top = 4.dp, bottom = 8.dp),
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SelectionContainer { Text(redirect, fontSize = 11.sp, fontFamily = FontFamily.Monospace) }
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(state::copySpotifyRedirectUri, Modifier.size(26.dp)) {
+                            Icon(Icons.Default.ContentCopy, "Copy the redirect address", Modifier.size(15.dp))
+                        }
+                    }
+                }
+                SetupStep(3, "Copy the app's Client ID from its settings, paste it below, and connect again.")
+                Spacer(Modifier.height(11.dp))
+                OutlinedButton(state::openSpotifyDashboard) {
+                    Icon(Icons.Default.OpenInNew, null, Modifier.size(17.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text("Open Spotify's dashboard")
+                }
+                Spacer(Modifier.height(14.dp))
+                OutlinedTextField(
+                    clientId,
+                    { clientId = it.trim().take(64) },
+                    label = { Text("Client ID") },
+                    placeholder = { Text("32 characters from the dashboard") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().tracksTyping(),
+                )
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    "An identifier and not a password, so it is kept in your settings file. The sign-in itself is " +
+                        "stored encrypted for your account on this computer.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                )
+                Spacer(Modifier.height(13.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Button(
+                        { state.setSpotifyClientId(clientId) },
+                        enabled = clientId.isNotBlank() && clientId != settings.preferences.spotifyClientId,
+                    ) {
+                        Icon(Icons.Default.Save, null, Modifier.size(17.dp))
+                        Spacer(Modifier.width(7.dp))
+                        Text("Use this app")
+                    }
+                    if (spotify.ownApp) {
+                        OutlinedButton({ clientId = ""; state.setSpotifyClientId("") }) { Text("Go back to Noctorium's") }
                     }
                 }
             }
@@ -4902,7 +4953,7 @@ private fun ScrobbleServiceHeader(name: String, service: ScrobbleServiceState) {
 }
 
 @Composable
-private fun LyricsSettingsPanel() {
+internal fun LyricsSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
     val providers = listOf(
         "LRCLIB" to true,
         "Better Lyrics" to true,
@@ -4914,6 +4965,26 @@ private fun LyricsSettingsPanel() {
         "Genius" to true,
     )
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = chromePadding()) {
+        item {
+            SettingsPanelCard {
+                // The same choice as picking a source above the lyrics themselves, which is where it is
+                // usually made; this is where it can be seen and put back.
+                ChoiceRow(
+                    "Open lyrics on",
+                    listOf<LyricsProviderId?>(null) + LyricsProviderId.entries,
+                    preferences.lyricsProvider,
+                    { it?.displayName ?: "The best answer" },
+                    { choice -> if (choice == null) state.clearPreferredLyricsProvider() else state.selectLyricsProvider(choice) },
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Every source is still asked. A song your choice has nothing for opens on the best of the others.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
         item { Text("Core providers work without an account. Optional commercial sources show whether their API key is available.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp); Spacer(Modifier.height(8.dp)) }
         items(providers, key = { it.first }) { (name, ready) ->
             Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(11.dp)) {
@@ -4922,6 +4993,112 @@ private fun LyricsSettingsPanel() {
                     Spacer(Modifier.width(11.dp)); Text(name, Modifier.weight(1f), fontWeight = FontWeight.Medium)
                     Text(if (ready) "Ready" else "API key needed", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                 }
+            }
+        }
+    }
+}
+
+/** What the startup tile says: how Noctorium starts, and what closing it does. */
+@Composable
+private fun startupSubtitle(preferences: NoctoriumPreferences): String {
+    val mode = remember { LaunchAtLogin.system.mode() }
+    val closing = if (preferences.desktop.closeToTray && DesktopTray.supported) "Closes to the tray" else "Closing quits"
+    val starting = when (mode) {
+        StartupMode.OFF -> null
+        StartupMode.WINDOW -> "Starts with ${computerName()}"
+        StartupMode.TRAY -> "Starts in the tray"
+    }
+    return listOfNotNull(starting, closing).joinToString(" · ")
+}
+
+/** Windows by name, where it is Windows; anything else is the computer. */
+private fun computerName(): String =
+    if (System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)) "Windows" else "the computer"
+
+/**
+ * What the close button does, and whether Noctorium starts with the computer.
+ *
+ * The start is read back from the operating system after every change rather than assumed, because that is
+ * where it lives -- the listener can switch it off in Task Manager just as well as here -- and a page that
+ * said "on" about an entry Windows refused to write would be the worst of both.
+ */
+@Composable
+internal fun StartupSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
+    val startup = LaunchAtLogin.system
+    var mode by remember { mutableStateOf(startup.mode()) }
+    var refused by remember { mutableStateOf(false) }
+    val trayAvailable = DesktopTray.supported
+
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SettingsPanelCard {
+            CardHeading(Icons.Default.Close, "Closing the window")
+            Spacer(Modifier.height(12.dp))
+            ChoiceRow(
+                "When you close Noctorium",
+                listOf(false, true),
+                preferences.desktop.closeToTray && trayAvailable,
+                { toTray -> if (toTray) "Keep playing in the tray" else "Quit" },
+                { toTray -> if (trayAvailable) state.updateDesktop { copy(closeToTray = toTray) } },
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                when {
+                    !trayAvailable ->
+                        "This desktop has no system tray to wait in, so closing always quits. The music would " +
+                            "otherwise go on with nothing on screen to stop it."
+                    preferences.desktop.closeToTray ->
+                        "The music carries on and Noctorium waits in the tray. Click its icon to open the window " +
+                            "again, or right-click it for the controls and Quit."
+                    else -> "Closing the window stops the music and quits Noctorium."
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+            )
+        }
+
+        SettingsPanelCard {
+            CardHeading(Icons.Default.PowerSettingsNew, "Start with ${computerName()}")
+            Spacer(Modifier.height(12.dp))
+            if (startup.available) {
+                ChoiceRow(
+                    "When you sign in",
+                    StartupMode.entries,
+                    mode,
+                    { it.displayName },
+                    { choice ->
+                        refused = !startup.set(choice)
+                        mode = startup.mode()
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(mode.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                if (mode == StartupMode.TRAY && !trayAvailable) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "With no tray on this desktop it opens minimised instead, so it can still be found.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                }
+                if (refused) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "That could not be changed. Your computer's own startup settings may be managed by " +
+                            "somebody else.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 11.sp,
+                    )
+                }
+            } else {
+                Text(
+                    "Only an installed Noctorium can start with ${computerName()}. This one is running from its " +
+                        "source, and would not be there to start next time.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
             }
         }
     }
