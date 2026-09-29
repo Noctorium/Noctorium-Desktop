@@ -58,6 +58,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -248,6 +249,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
       CompositionLocalProvider(
           LocalTyping provides typing,
           LocalDensity provides Density(density.density, density.fontScale * preferences.textSize.scale),
+          LocalMotion provides preferences.animations,
       ) {
         if (shortcutsOpen) ShortcutsSheet { shortcutsOpen = false }
         // The launch check has an answer nobody asked for; this is where it gets to say so once.
@@ -268,15 +270,18 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                     }
                     val playerAtTop = preferences.playerBarPosition == PlayerBarPosition.TOP
                     val screens: @Composable () -> Unit = {
-                        when (ui.destination) {
-                            Destination.HOME -> HomeScreen(ui, appState)
-                            Destination.SEARCH -> SearchScreen(ui, appState, focusSearch)
-                            Destination.LINK -> LinkScreen(appState)
-                            Destination.LIBRARY -> LibraryScreen(appState)
-                            Destination.DOWNLOADS -> DownloadsScreen(appState)
-                            Destination.NOW_PLAYING -> NowPlayingScreen(queue, playback, appState)
-                            Destination.QUEUE -> QueueScreen(queue, appState)
-                            Destination.SETTINGS -> SettingsScreen(appState)
+                        // One screen easing in over the last rather than the window cutting between them.
+                        MotionContent(ui.destination, Modifier.fillMaxSize()) { destination ->
+                            when (destination) {
+                                Destination.HOME -> HomeScreen(ui, appState)
+                                Destination.SEARCH -> SearchScreen(ui, appState, focusSearch)
+                                Destination.LINK -> LinkScreen(appState)
+                                Destination.LIBRARY -> LibraryScreen(appState)
+                                Destination.DOWNLOADS -> DownloadsScreen(appState)
+                                Destination.NOW_PLAYING -> NowPlayingScreen(queue, playback, appState)
+                                Destination.QUEUE -> QueueScreen(queue, appState)
+                                Destination.SETTINGS -> SettingsScreen(appState)
+                            }
                         }
                     }
                     if (preferences.surfaceStyle.isGlass) {
@@ -601,6 +606,8 @@ private fun TrackCard(track: Track, sourceQueue: List<Track>, state: AppState, s
     // Whether controls hide until pointed at is a preference; some people would rather always see them.
     val hovered = isHovered || preferences.hoverControls == HoverControls.ALWAYS
     val cardWidth = preferences.cardSize.widthDp.dp
+    // The cover rises a touch under the pointer, which says "this can be played" before anything is clicked.
+    val lift by animateFloatAsState(if (isHovered) 1.035f else 1f, motionSpec(MotionTiming.QUICK + 40), label = "card-lift")
     Surface(
         onClick = { state.play(track, PlaybackOrigin.HOME, sourceQueue) },
         color = Color.Transparent,
@@ -609,7 +616,7 @@ private fun TrackCard(track: Track, sourceQueue: List<Track>, state: AppState, s
         modifier = Modifier.width(cardWidth).hoverable(interaction),
     ) {
         Column {
-            Box(Modifier.size(cardWidth).clip(RoundedCornerShape(14.dp))) {
+            Box(Modifier.size(cardWidth).graphicsLayer { scaleX = lift; scaleY = lift }.clip(RoundedCornerShape(14.dp))) {
                 RemoteArtwork(track.artworkUrl, track.provider, Modifier.fillMaxSize())
                 if (showBadge) {
                     Box(Modifier.align(Alignment.TopStart).padding(8.dp)) { ProviderBadge(track.provider, compact = true) }
@@ -693,15 +700,25 @@ private fun LibraryScreen(state: AppState) {
         }
     }
 
-    library.openLocalPlaylist?.let { playlist ->
-        LocalPlaylistDetail(playlist, library.notice, state)
-        return
+    // Opening a playlist slides it in, and going back slides it out again, the way the phone does.
+    val view = library.openLocalPlaylist?.let { "local:${it.id}" }
+        ?: library.openPlaylist?.let { "playlist:${it.playlistKey}" }
+        ?: "list"
+    MotionContent(view, Modifier.fillMaxSize(), kind = MotionKind.PAGE, forward = { _, to -> to != "list" }) { shown ->
+        // Kept after they are let go of, so a page sliding away still shows what it was showing.
+        val local = rememberLast(library.openLocalPlaylist?.takeIf { "local:${it.id}" == shown })
+        val service = rememberLast(library.openPlaylist?.takeIf { "playlist:${it.playlistKey}" == shown })
+        when {
+            shown.startsWith("local:") -> local?.let { LocalPlaylistDetail(it, library.notice, state) }
+            shown.startsWith("playlist:") -> service?.let { PlaylistDetail(it, library, state) }
+            else -> LibraryList(library, state, { newPlaylistOpen = true }, { importOpen = true })
+        }
     }
-    library.openPlaylist?.let { playlist ->
-        PlaylistDetail(playlist, library, state)
-        return
-    }
+}
 
+/** The library itself: the playlists made here, and the ones from the connected accounts. */
+@Composable
+private fun LibraryList(library: LibraryState, state: AppState, newPlaylist: () -> Unit, importLink: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 30.dp)) {
         Spacer(Modifier.height(26.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -713,11 +730,11 @@ private fun LibraryScreen(state: AppState) {
                     fontSize = 13.sp,
                 )
             }
-            Button({ newPlaylistOpen = true }) {
+            Button(newPlaylist) {
                 Icon(Icons.Default.Add, null); Spacer(Modifier.width(7.dp)); Text("New playlist")
             }
             Spacer(Modifier.width(9.dp))
-            OutlinedButton({ importOpen = true }) {
+            OutlinedButton(importLink) {
                 Icon(Icons.Default.Link, null, Modifier.size(18.dp)); Spacer(Modifier.width(7.dp)); Text("Paste link")
             }
             IconButton({ state.refreshLibrary(force = true) }, enabled = !library.loading) {
@@ -904,7 +921,8 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, state:
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = chromePadding(bottom = 28.dp)) {
                 items(playlist.tracks, key = { it.queueKey }) { track ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Rows glide to where they belong when one is taken out, instead of the rest jumping up.
+                    Row(if (LocalMotion.current) Modifier.animateItem() else Modifier, verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.weight(1f)) { TrackRow(track, playlist.tracks, state) }
                         IconButton({ state.removeTrackFromPlaylist(playlist.id, track.queueKey) }) {
                             Icon(Icons.Default.RemoveCircleOutline, "Remove from playlist", Modifier.size(18.dp))
@@ -1219,20 +1237,23 @@ private fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: App
                 val reorderable = playlist.editableOnService() &&
                     (playlist.provider == ProviderType.YOUTUBE_MUSIC || playlist.provider == ProviderType.YOUTUBE_VIDEO)
                 itemsIndexed(playlist.tracks, key = { _, track -> track.queueKey }) { index, track ->
-                    if (!reorderable) {
-                        TrackRow(track, playlist.tracks, state)
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.weight(1f)) { TrackRow(track, playlist.tracks, state) }
-                            IconButton({ state.moveInYouTubePlaylist(index, index - 1) }, enabled = index > 0, modifier = Modifier.size(34.dp)) {
-                                Icon(Icons.Default.KeyboardArrowUp, "Move up", Modifier.size(19.dp))
-                            }
-                            IconButton(
-                                { state.moveInYouTubePlaylist(index, index + 1) },
-                                enabled = index < playlist.tracks.lastIndex,
-                                modifier = Modifier.size(34.dp),
-                            ) {
-                                Icon(Icons.Default.KeyboardArrowDown, "Move down", Modifier.size(19.dp))
+                    // A moved track glides to its new place, so the order visibly changes rather than reshuffling.
+                    Box(if (LocalMotion.current) Modifier.animateItem() else Modifier) {
+                        if (!reorderable) {
+                            TrackRow(track, playlist.tracks, state)
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.weight(1f)) { TrackRow(track, playlist.tracks, state) }
+                                IconButton({ state.moveInYouTubePlaylist(index, index - 1) }, enabled = index > 0, modifier = Modifier.size(34.dp)) {
+                                    Icon(Icons.Default.KeyboardArrowUp, "Move up", Modifier.size(19.dp))
+                                }
+                                IconButton(
+                                    { state.moveInYouTubePlaylist(index, index + 1) },
+                                    enabled = index < playlist.tracks.lastIndex,
+                                    modifier = Modifier.size(34.dp),
+                                ) {
+                                    Icon(Icons.Default.KeyboardArrowDown, "Move down", Modifier.size(19.dp))
+                                }
                             }
                         }
                     }
@@ -1272,18 +1293,6 @@ private fun VisibilityBadge(isPublic: Boolean?, compact: Boolean = false) {
             )
         }
     }
-}
-
-/**
- * A playlist Noctorium can change on the service it came from.
- *
- * SoundCloud numbers its playlists, while YouTube ids start with PL or VL; the likes listing on either service
- * is a view rather than a playlist, so it is excluded.
- */
-fun Playlist.editableOnService(): Boolean = when (provider) {
-    ProviderType.SOUNDCLOUD -> id.all(Char::isDigit)
-    ProviderType.YOUTUBE_MUSIC, ProviderType.YOUTUBE_VIDEO -> id.startsWith("PL") || id.startsWith("VL")
-    ProviderType.SPOTIFY, ProviderType.LOCAL -> false
 }
 
 /** Rename, delete and privacy for a playlist that lives on a service account rather than only in Noctorium. */
@@ -1476,7 +1485,8 @@ internal fun LikeButton(track: Track, state: AppState, size: Dp = 36.dp) {
     val busy = likes.isBusy(track)
     val supported = likes.supports(track)
     val service = track.provider.displayName
-    IconButton({ state.toggleLike(track) }, Modifier.size(size), enabled = supported && !busy) {
+    // The heart pops as it fills, so a like is seen to land and not only to change colour.
+    IconButton({ state.toggleLike(track) }, Modifier.size(size).popOn(liked, pop = liked), enabled = supported && !busy) {
         when {
             busy -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
             liked -> Icon(
@@ -1903,11 +1913,7 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                     if (playback.status == PlaybackStatus.RESOLVING) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else {
-                        Icon(
-                            if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            if (playback.isPlaying) "Pause" else "Play",
-                            Modifier.size(24.dp),
-                        )
+                        PlayPauseIcon(playback.isPlaying, Modifier.size(24.dp))
                     }
                 }
                 IconButton(state::next, Modifier.size(34.dp)) {
@@ -2093,11 +2099,7 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                             if (playback.status == PlaybackStatus.RESOLVING) {
                                 CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                             } else {
-                                Icon(
-                                    if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    if (playback.isPlaying) "Pause" else "Play",
-                                    Modifier.size(30.dp),
-                                )
+                                PlayPauseIcon(playback.isPlaying, Modifier.size(30.dp))
                             }
                         }
                         Spacer(Modifier.width(8.dp))
@@ -2303,12 +2305,7 @@ private fun TransportControls(playback: PlaybackState, state: AppState) {
             if (playback.status == PlaybackStatus.RESOLVING) {
                 CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurface)
             } else {
-                Icon(
-                    if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    if (playback.isPlaying) "Pause" else "Play",
-                    Modifier.size(42.dp),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
+                PlayPauseIcon(playback.isPlaying, Modifier.size(42.dp), tint = MaterialTheme.colorScheme.onSurface)
             }
         }
         IconButton(state::next, Modifier.size(44.dp)) {
@@ -2633,13 +2630,19 @@ private fun LyricsContent(outcome: LyricsProviderOutcome, positionMs: Long, stat
 
 @Composable
 private fun LyricLineText(line: LyricLine, active: Boolean, synced: Boolean) {
-    Text(
-        line.text,
-        color = when {
+    // The line being sung brightens into the accent, and the one before fades back, rather than flicking.
+    val colour by animateColorAsState(
+        when {
             active -> MaterialTheme.colorScheme.primary
             synced -> MaterialTheme.colorScheme.onSurfaceVariant
             else -> MaterialTheme.colorScheme.onSurface
         },
+        motionSpec(MotionTiming.STANDARD),
+        label = "lyric-line",
+    )
+    Text(
+        line.text,
+        color = colour,
         fontSize = if (active) 18.sp else if (synced) 15.sp else 14.sp,
         fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
         lineHeight = if (active) 23.sp else 20.sp,
@@ -3154,34 +3157,41 @@ private var pendingSettingsPage: SettingsPage? = null
 private fun SettingsScreen(state: AppState) {
     val settings by state.settings.collectAsState()
     var page by remember { mutableStateOf(pendingSettingsPage.also { pendingSettingsPage = null }) }
-    if (page != null) {
-        SettingsDetailHeader(pageTitle(page!!), { page = null }) {
-            when (page) {
-                SettingsPage.ACCOUNT -> NoctoriumAccountPanel(state)
-                SettingsPage.PROFILE -> ProfileSettingsPanel(settings.preferences, state)
-                SettingsPage.CUSTOMIZATION -> CustomizationPanel(settings.preferences, state)
-                SettingsPage.YOUTUBE -> YouTubeAccountPanel(settings, state)
-                SettingsPage.SOUNDCLOUD -> AccountConnectionPanel(
-                    ProviderType.SOUNDCLOUD,
-                    settings.preferences.soundCloudCookies,
-                    settings.soundCloudAccount,
-                    state,
-                    settings.preferences.soundCloudUsername,
-                )
-                SettingsPage.SPOTIFY -> SpotifySettingsPanel(settings, state)
-                SettingsPage.SCROBBLING -> ScrobblingSettingsPanel(settings, state)
-                SettingsPage.LYRICS -> LyricsSettingsPanel(settings.preferences, state)
-                SettingsPage.STARTUP -> StartupSettingsPanel(settings.preferences, state)
-                SettingsPage.DISCORD -> DiscordSettingsPanel(settings.preferences, state)
-                SettingsPage.UPDATES -> UpdatePanel(state)
-                SettingsPage.PLAYBACK_TOOLS -> PlaybackToolsPanel()
-                SettingsPage.DIAGNOSTICS -> DiagnosticsPanel(settings, state)
-                null -> Unit
+    // Going into a page and back out again slides, the way a phone's settings do, rather than cutting.
+    MotionContent(page, Modifier.fillMaxSize(), kind = MotionKind.PAGE, forward = { _, to -> to != null }) { shown ->
+        if (shown != null) {
+            SettingsDetailHeader(pageTitle(shown), { page = null }) {
+                when (shown) {
+                    SettingsPage.ACCOUNT -> NoctoriumAccountPanel(state)
+                    SettingsPage.PROFILE -> ProfileSettingsPanel(settings.preferences, state)
+                    SettingsPage.CUSTOMIZATION -> CustomizationPanel(settings.preferences, state)
+                    SettingsPage.YOUTUBE -> YouTubeAccountPanel(settings, state)
+                    SettingsPage.SOUNDCLOUD -> AccountConnectionPanel(
+                        ProviderType.SOUNDCLOUD,
+                        settings.preferences.soundCloudCookies,
+                        settings.soundCloudAccount,
+                        state,
+                        settings.preferences.soundCloudUsername,
+                    )
+                    SettingsPage.SPOTIFY -> SpotifySettingsPanel(settings, state)
+                    SettingsPage.SCROBBLING -> ScrobblingSettingsPanel(settings, state)
+                    SettingsPage.LYRICS -> LyricsSettingsPanel(settings.preferences, state)
+                    SettingsPage.STARTUP -> StartupSettingsPanel(settings.preferences, state)
+                    SettingsPage.DISCORD -> DiscordSettingsPanel(settings.preferences, state)
+                    SettingsPage.UPDATES -> UpdatePanel(state)
+                    SettingsPage.PLAYBACK_TOOLS -> PlaybackToolsPanel()
+                    SettingsPage.DIAGNOSTICS -> DiagnosticsPanel(settings, state)
+                }
             }
+        } else {
+            SettingsHome(settings, state) { page = it }
         }
-        return
     }
+}
 
+/** The list of settings, each tile a way into its page. */
+@Composable
+private fun SettingsHome(settings: SettingsState, state: AppState, open: (SettingsPage) -> Unit) {
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 30.dp),
         contentPadding = chromePadding(top = 26.dp, bottom = 32.dp),
@@ -3214,7 +3224,7 @@ private fun SettingsScreen(state: AppState) {
                     "Sign in to count what you listen to"
                 },
                 Icons.Default.Insights,
-                { page = SettingsPage.ACCOUNT },
+                { open(SettingsPage.ACCOUNT) },
             )
         }
         item {
@@ -3222,7 +3232,7 @@ private fun SettingsScreen(state: AppState) {
                 settings.preferences.profileName,
                 "Your local Noctorium profile",
                 Icons.Default.AccountCircle,
-                { page = SettingsPage.PROFILE },
+                { open(SettingsPage.PROFILE) },
             )
         }
         item {
@@ -3230,7 +3240,7 @@ private fun SettingsScreen(state: AppState) {
                 "Customization",
                 "Seek bar style and how the player looks",
                 Icons.Default.Tune,
-                { page = SettingsPage.CUSTOMIZATION },
+                { open(SettingsPage.CUSTOMIZATION) },
             )
         }
         item {
@@ -3238,7 +3248,7 @@ private fun SettingsScreen(state: AppState) {
                 "YouTube Music",
                 accountSummary(settings.preferences.youtubeCookies, settings.youtubeAccount),
                 Icons.Default.PlayCircle,
-                { page = SettingsPage.YOUTUBE },
+                { open(SettingsPage.YOUTUBE) },
                 settings.youtubeAccount.status == AccountConnectionStatus.CONNECTED,
             )
         }
@@ -3247,7 +3257,7 @@ private fun SettingsScreen(state: AppState) {
                 "SoundCloud",
                 accountSummary(settings.preferences.soundCloudCookies, settings.soundCloudAccount),
                 Icons.Default.Cloud,
-                { page = SettingsPage.SOUNDCLOUD },
+                { open(SettingsPage.SOUNDCLOUD) },
                 settings.soundCloudAccount.status == AccountConnectionStatus.CONNECTED,
             )
         }
@@ -3256,7 +3266,7 @@ private fun SettingsScreen(state: AppState) {
                 "Spotify library",
                 spotifySummary(settings.spotify),
                 Icons.Default.LibraryMusic,
-                { page = SettingsPage.SPOTIFY },
+                { open(SettingsPage.SPOTIFY) },
                 settings.spotify.connected,
             )
         }
@@ -3268,7 +3278,7 @@ private fun SettingsScreen(state: AppState) {
                 "Scrobbling",
                 if (connected.isEmpty()) "Connect Last.fm or ListenBrainz" else "Connected: ${connected.joinToString()}",
                 Icons.Default.History,
-                { page = SettingsPage.SCROBBLING },
+                { open(SettingsPage.SCROBBLING) },
                 connected.isNotEmpty(),
             )
         }
@@ -3278,7 +3288,7 @@ private fun SettingsScreen(state: AppState) {
                 settings.preferences.lyricsProvider?.let { "Opens on ${it.displayName} · 8 sources" }
                     ?: "LRCLIB, Better Lyrics, Genius and 5 more",
                 Icons.Default.Lyrics,
-                { page = SettingsPage.LYRICS },
+                { open(SettingsPage.LYRICS) },
             )
         }
         item {
@@ -3286,7 +3296,7 @@ private fun SettingsScreen(state: AppState) {
                 "Startup and tray",
                 startupSubtitle(settings.preferences),
                 Icons.Default.PowerSettingsNew,
-                { page = SettingsPage.STARTUP },
+                { open(SettingsPage.STARTUP) },
             )
         }
         item {
@@ -3297,20 +3307,20 @@ private fun SettingsScreen(state: AppState) {
                 "Discord Rich Presence",
                 if (discord.enabled) "Enabled · ${discord.timestamps.displayName}" else "Disabled",
                 Icons.Default.SportsEsports,
-                { page = SettingsPage.DISCORD },
+                { open(SettingsPage.DISCORD) },
                 discord.enabled,
             )
         }
-        item { SettingsCard("Updates", updatesSubtitle(state), Icons.Default.SystemUpdateAlt, { page = SettingsPage.UPDATES }) }
+        item { SettingsCard("Updates", updatesSubtitle(state), Icons.Default.SystemUpdateAlt, { open(SettingsPage.UPDATES) }) }
         item {
             SettingsCard(
                 "Playback tools",
                 playbackToolsSubtitle(),
                 Icons.Default.Extension,
-                { page = SettingsPage.PLAYBACK_TOOLS },
+                { open(SettingsPage.PLAYBACK_TOOLS) },
             )
         }
-        item { SettingsCard("Diagnostics", "Check yt-dlp, mpv and storage", Icons.Default.MonitorHeart, { page = SettingsPage.DIAGNOSTICS }) }
+        item { SettingsCard("Diagnostics", "Check yt-dlp, mpv and storage", Icons.Default.MonitorHeart, { open(SettingsPage.DIAGNOSTICS) }) }
     }
 }
 
@@ -3490,6 +3500,13 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
                 "Tints the screen with colours sampled from the cover.",
                 preferences.ambientBackdrop,
                 state::setAmbientBackdrop,
+            )
+            Spacer(Modifier.height(12.dp))
+            ToggleRow(
+                "Animations",
+                "Screens ease in, pages slide, and a new track's name rises into place. Off makes every change instant.",
+                preferences.animations,
+                state::setAnimations,
             )
             Spacer(Modifier.height(16.dp))
             ChoiceRow(

@@ -39,6 +39,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -311,7 +312,11 @@ private fun SlimLine(current: Track?, playback: PlaybackState, state: AppState, 
     )
 }
 
-/** Title over artist, or over what went wrong, in red, when something did. */
+/**
+ * Title over artist, or over what went wrong, in red, when something did.
+ *
+ * A new track's name rises into place as the last one lifts away, so a skip is seen as well as heard.
+ */
 @Composable
 private fun BarTitle(
     current: Track?,
@@ -321,20 +326,40 @@ private fun BarTitle(
     titleSize: TextUnit = 14.sp,
     detailSize: TextUnit = 12.sp,
 ) {
-    Column(modifier.clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) }) {
-        Text(
-            current?.title ?: "Nothing playing",
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = titleSize,
-        )
-        Text(
-            playback.errorMessage ?: current?.artistLine ?: "Choose a track to start",
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = detailSize,
+    MotionContent(
+        current,
+        modifier.clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
+        kind = MotionKind.TRACK,
+        contentKey = { it?.queueKey },
+    ) { track ->
+        Column {
+            Text(
+                track?.title ?: "Nothing playing",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = titleSize,
+            )
+            Text(
+                playback.errorMessage ?: track?.artistLine ?: "Choose a track to start",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = detailSize,
+            )
+        }
+    }
+}
+
+/** Play or pause, the one giving way to the other with a small scale rather than a cut. */
+@Composable
+internal fun PlayPauseIcon(playing: Boolean, modifier: Modifier = Modifier, tint: Color = LocalContentColor.current) {
+    MotionContent(playing, kind = MotionKind.ICON, contentAlignment = Alignment.Center) { isPlaying ->
+        Icon(
+            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+            if (isPlaying) "Pause" else "Play",
+            modifier,
+            tint = tint,
         )
     }
 }
@@ -364,11 +389,7 @@ private fun Transport(
             if (playback.status == PlaybackStatus.RESOLVING) {
                 CircularProgressIndicator(Modifier.size(playSize * .42f), strokeWidth = 2.dp)
             } else {
-                Icon(
-                    if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    if (playback.isPlaying) "Pause" else "Play",
-                    Modifier.size(playSize * .56f),
-                )
+                PlayPauseIcon(playback.isPlaying, Modifier.size(playSize * .56f))
             }
         }
         IconButton(state::next, Modifier.size(buttonSize)) {
