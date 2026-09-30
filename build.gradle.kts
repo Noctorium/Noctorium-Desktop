@@ -21,7 +21,22 @@ plugins {
 group = "app.noctorium"
 
 /**
- * The version, from -PappVersion when the release workflow passes one and a sane default otherwise.
+ * The newest release tag this checkout has, such as `v0.5.9`, for a build nobody handed a version to.
+ *
+ * A local build used to call itself 0.4.0 whatever it was built from, so a copy made here offered to
+ * "update" to a release older than itself and described every bug report as coming from 0.4.0. The tag
+ * is the version the code was released as; a build with work on top of it is that version plus the work,
+ * which is still the most useful thing it can say. Null where there is no git or no tag to read.
+ */
+val latestReleaseTag: String? = runCatching {
+    providers.exec {
+        commandLine("git", "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().takeIf { it.startsWith("v") }
+}.getOrNull()
+
+/**
+ * The version: from -PappVersion when the release workflow passes one, and otherwise from the newest tag.
  *
  * Kept separate from the packaged version below because the packagers are much fussier than Gradle is:
  * rpm refuses a version containing a hyphen, and msi wants three numeric parts with the first no
@@ -29,7 +44,9 @@ group = "app.noctorium"
  * build at the very last step, after twenty minutes of packaging, on two of the four platforms.
  */
 val appVersion: String = (findProperty("appVersion") as String?)?.trim()?.removePrefix("v")
-    ?.takeIf { it.isNotBlank() } ?: "0.4.0"
+    ?.takeIf { it.isNotBlank() }
+    ?: latestReleaseTag?.removePrefix("v")
+    ?: "0.5.9"
 
 /** The same version with any pre-release suffix taken off, which is all rpm and msi will take. */
 val packagedVersion: String = appVersion.substringBefore('-').let { numeric ->
