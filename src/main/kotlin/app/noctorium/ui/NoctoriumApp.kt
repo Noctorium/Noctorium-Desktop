@@ -2149,77 +2149,127 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
     }
 }
 
-private enum class NowPlayingTab(val label: String) {
-    UP_NEXT("Up next"),
-    LYRICS("Lyrics"),
-    RELATED("Related"),
+/** What is on screen: the layout, whether its panel is out, and whether the window is wide enough for both. */
+private data class NowPlayingArrangement(val layout: NowPlayingLayout, val panel: Boolean, val wide: Boolean)
+
+/** How the track, its controls and its cover are set out, within whatever room the layout gives them. */
+private enum class HeroArrangement {
+    /** Title and controls above the cover, the way the screen always was. */
+    STANDARD,
+
+    /** The cover first, everything else centred beneath it. */
+    CENTRED,
+
+    /** The cover large, with the track and the controls in a column beside it. */
+    BESIDE,
+
+    /** One band: a small cover and everything else in a row after it. */
+    BANNER,
 }
 
+/** The column beside the lyrics in the sing-along layout. */
+private val SING_ALONG_COLUMN = 380.dp
+
 @Composable
-private fun NowPlayingScreen(queue: QueueState, playback: PlaybackState, state: AppState) {
+internal fun NowPlayingScreen(queue: QueueState, playback: PlaybackState, state: AppState) {
     val current = queue.current
-    var selectedTab by remember { mutableStateOf(NowPlayingTab.UP_NEXT) }
+    val preferences = state.settings.collectAsState().value.preferences
+    val look = preferences.desktop.nowPlaying
+    var selectedTab by remember {
+        mutableStateOf(if (look.layout == NowPlayingLayout.SING_ALONG) NowPlayingTab.LYRICS else look.openOn)
+    }
+    var arranging by remember { mutableStateOf(false) }
+    // Choosing the sing-along layout brings the lyrics forward, which is what it is for.
+    LaunchedEffect(look.layout) {
+        if (look.layout == NowPlayingLayout.SING_ALONG) selectedTab = NowPlayingTab.LYRICS
+    }
 
     if (current == null) {
         EmptyScreen("Nothing playing", "Choose a track, then click the player to open this view.")
         return
     }
 
-    // The backdrop takes its colour from the cover, so the room changes with the record.
-    val ambientEnabled = state.settings.collectAsState().value.preferences.ambientBackdrop
-    val palette = rememberArtworkPalette(
-        current.artworkUrl,
-        current.provider,
-        fallback = ArtworkPalette(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer),
-    )
-    val ambient by animateColorAsState(
-        if (ambientEnabled) palette.primary else MaterialTheme.colorScheme.background,
-        tween(700),
-        label = "ambient",
-    )
-    val ambientDeep by animateColorAsState(
-        if (ambientEnabled) palette.secondary else MaterialTheme.colorScheme.background,
-        tween(700),
-        label = "ambientDeep",
-    )
-
-    Box(
-        Modifier.fillMaxSize().background(
-            Brush.linearGradient(
-                listOf(
-                    ambient.copy(alpha = .42f),
-                    ambientDeep.copy(alpha = .30f),
-                    MaterialTheme.colorScheme.background,
-                ),
-            ),
-        ),
-    ) {
+    Box(Modifier.fillMaxSize()) {
+        // The backdrop takes its colour from the cover, so the room changes with the record.
+        NowPlayingBackground(current, preferences.nowPlayingBackdrop)
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            if (maxWidth >= 840.dp) {
-                Row(Modifier.fillMaxSize().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    NowPlayingHero(current, playback, state, Modifier.weight(1f).fillMaxHeight())
-                    GlassPanel(Modifier.width(430.dp).fillMaxHeight()) {
-                        NowPlayingPanel(
-                            queue = queue,
-                            selectedTab = selectedTab,
-                            selectTab = { selectedTab = it },
-                            state = state,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
+            val arrangement = NowPlayingArrangement(
+                layout = look.layout,
+                panel = look.layout.hasPanel && !look.panelHidden,
+                wide = maxWidth >= 840.dp,
+            )
+            val panel: @Composable (Modifier, Boolean) -> Unit = { modifier, largeLyrics ->
+                GlassPanel(modifier) {
+                    NowPlayingPanel(
+                        queue = queue,
+                        selectedTab = selectedTab,
+                        selectTab = { selectedTab = it },
+                        state = state,
+                        modifier = Modifier.fillMaxSize(),
+                        largeLyrics = largeLyrics,
+                    )
                 }
-            } else {
-                Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    NowPlayingHero(current, playback, state, Modifier.fillMaxWidth().height(360.dp))
-                    GlassPanel(Modifier.fillMaxWidth().weight(1f)) {
-                        NowPlayingPanel(
-                            queue = queue,
-                            selectedTab = selectedTab,
-                            selectTab = { selectedTab = it },
-                            state = state,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
+            }
+            // One arrangement easing into the next, so a change made from the menu is seen happening.
+            MotionContent(arrangement, Modifier.fillMaxSize()) { shown ->
+                NowPlayingArranged(shown, current, playback, state, look.panelWidth.widthDp.dp, { arranging = true }, panel)
+            }
+        }
+        // Anchored to the top right whatever the layout, so the menu stays put while the screen rearranges
+        // behind it, and each choice can be seen before the next is made.
+        Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp, end = 20.dp)) {
+            DropdownMenu(arranging, { arranging = false }, Modifier.width(384.dp)) {
+                NowPlayingArranger(look, preferences.nowPlayingBackdrop, state) { arranging = false }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NowPlayingArranged(
+    shown: NowPlayingArrangement,
+    track: Track,
+    playback: PlaybackState,
+    state: AppState,
+    panelWidth: Dp,
+    arrange: () -> Unit,
+    panel: @Composable (Modifier, Boolean) -> Unit,
+) {
+    val layout = shown.layout
+    val hero: @Composable (HeroArrangement, Modifier) -> Unit = { heroArrangement, modifier ->
+        NowPlayingHero(track, playback, state, heroArrangement, arrange, modifier)
+    }
+    when {
+        layout == NowPlayingLayout.BANNER -> Column(
+            Modifier.fillMaxSize().padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            if (!shown.panel) Spacer(Modifier.weight(1f))
+            hero(HeroArrangement.BANNER, Modifier.fillMaxWidth())
+            if (shown.panel) panel(Modifier.fillMaxWidth().weight(1f), false) else Spacer(Modifier.weight(1f))
+        }
+        layout == NowPlayingLayout.STAGE && shown.wide -> hero(HeroArrangement.BESIDE, Modifier.fillMaxSize())
+        layout == NowPlayingLayout.STAGE || layout == NowPlayingLayout.FOCUS ->
+            hero(HeroArrangement.CENTRED, Modifier.fillMaxSize())
+        // The panel tucked away: the record takes the middle, rather than a seek bar the width of the window.
+        !shown.panel -> hero(HeroArrangement.CENTRED, Modifier.fillMaxSize())
+        !shown.wide -> Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            hero(HeroArrangement.STANDARD, Modifier.fillMaxWidth().height(360.dp))
+            panel(Modifier.fillMaxWidth().weight(1f), false)
+        }
+        else -> Row(Modifier.fillMaxSize().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            when (layout) {
+                NowPlayingLayout.PANEL_LEFT -> {
+                    panel(Modifier.width(panelWidth).fillMaxHeight(), false)
+                    hero(HeroArrangement.STANDARD, Modifier.weight(1f).fillMaxHeight())
+                }
+                NowPlayingLayout.SING_ALONG -> {
+                    hero(HeroArrangement.CENTRED, Modifier.width(SING_ALONG_COLUMN).fillMaxHeight())
+                    panel(Modifier.weight(1f).fillMaxHeight(), true)
+                }
+                else -> {
+                    hero(HeroArrangement.STANDARD, Modifier.weight(1f).fillMaxHeight())
+                    panel(Modifier.width(panelWidth).fillMaxHeight(), false)
                 }
             }
         }
@@ -2243,50 +2293,135 @@ private fun NowPlayingHero(
     track: Track,
     playback: PlaybackState,
     state: AppState,
+    arrangement: HeroArrangement,
+    arrange: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val playerPreferences = state.settings.collectAsState().value.preferences
-    val progressStyle = playerPreferences.progressBarStyle
-    val timeDisplay = playerPreferences.timeDisplay
-    BoxWithConstraints(modifier) {
-        val artworkSize = minOf(430.dp, maxWidth * .82f, maxHeight * .58f)
-        Column(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 18.dp)) {
+    val preferences = state.settings.collectAsState().value.preferences
+    val look = preferences.desktop.nowPlaying
+    val scale = look.coverSize.scale
+    val seekBar: @Composable (Modifier) -> Unit = {
+        PlaybackProgressBar(playback, state::seekTo, it, preferences.progressBarStyle, preferences.timeDisplay)
+    }
+    val cover: @Composable (Dp) -> Unit = { size -> NowPlayingCover(track, playback.isPlaying, look.cover, size) }
+    val follow: @Composable (Modifier) -> Unit = { if (look.followButton) FollowArtistChip(track, state, it) }
+    val footer: @Composable () -> Unit = { HeroFooter(track, playback, state, look, arrange) }
+
+    when (arrangement) {
+        HeroArrangement.STANDARD -> Column(modifier.padding(horizontal = 28.dp, vertical = 18.dp)) {
             // Title and artist lead, above the cover, the way a record sleeve is captioned.
-            Text(
-                track.title,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 31.sp,
-            )
+            Text(track.title, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 26.sp, fontWeight = FontWeight.Bold, lineHeight = 31.sp)
             Spacer(Modifier.height(3.dp))
-            Text(
-                track.artistLine,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = ink(.62f),
-                fontSize = 14.sp,
-            )
-            FollowArtistChip(track, state, Modifier.padding(top = 8.dp))
+            Text(track.artistLine, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.62f), fontSize = 14.sp)
+            follow(Modifier.padding(top = 8.dp))
             Spacer(Modifier.height(18.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TransportControls(playback, state)
                 Spacer(Modifier.width(20.dp))
-                PlaybackProgressBar(playback, state::seekTo, Modifier.weight(1f), progressStyle, timeDisplay)
+                seekBar(Modifier.weight(1f))
             }
             Spacer(Modifier.height(18.dp))
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                Surface(shape = RoundedCornerShape(18.dp), shadowElevation = 22.dp, color = Color.Transparent) {
-                    RemoteArtwork(
-                        track.artworkUrl,
-                        track.provider,
-                        Modifier.size(artworkSize).clip(RoundedCornerShape(18.dp)),
-                    )
-                }
+            // Whatever room is left, so a larger cover grows into the space rather than over the footer.
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                cover(minOf(430.dp * scale, maxWidth * .82f, maxHeight))
             }
             Spacer(Modifier.height(14.dp))
-            HeroFooter(track, playback, state)
+            footer()
+        }
+
+        HeroArrangement.CENTRED -> Column(
+            modifier.padding(horizontal = 28.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+                cover(minOf(460.dp * scale, maxWidth * .9f, maxHeight))
+            }
+            Spacer(Modifier.height(22.dp))
+            Column(Modifier.widthIn(max = 560.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    track.title,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 29.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(track.artistLine, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.62f), fontSize = 14.sp)
+                follow(Modifier.padding(top = 8.dp))
+                Spacer(Modifier.height(14.dp))
+                seekBar(Modifier.fillMaxWidth())
+                Spacer(Modifier.height(4.dp))
+                TransportControls(playback, state)
+                Spacer(Modifier.height(8.dp))
+                footer()
+            }
+        }
+
+        HeroArrangement.BESIDE -> BoxWithConstraints(modifier.padding(28.dp)) {
+            val gap = 48.dp
+            val column = minOf(440.dp, maxWidth * .42f)
+            val side = minOf(560.dp * scale, maxHeight, maxWidth - gap - column).coerceAtLeast(160.dp)
+            Row(
+                Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
+            ) {
+                cover(side)
+                Column(Modifier.width(column)) {
+                    track.album?.title?.takeIf { it.isNotBlank() && it != track.title }?.let { album ->
+                        Text(
+                            album.uppercase(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = ink(.45f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 1.2.sp,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Text(track.title, maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = 32.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp)
+                    Spacer(Modifier.height(5.dp))
+                    Text(track.artistLine, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.62f), fontSize = 16.sp)
+                    follow(Modifier.padding(top = 10.dp))
+                    Spacer(Modifier.height(28.dp))
+                    seekBar(Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(6.dp))
+                    TransportControls(playback, state)
+                    Spacer(Modifier.height(16.dp))
+                    footer()
+                }
+            }
+        }
+
+        HeroArrangement.BANNER -> Row(modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            cover(176.dp * scale)
+            Spacer(Modifier.width(26.dp))
+            Column(Modifier.weight(1f)) {
+                Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        track.artistLine,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = ink(.62f),
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    follow(Modifier.padding(start = 12.dp))
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TransportControls(playback, state)
+                    Spacer(Modifier.width(20.dp))
+                    seekBar(Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(4.dp))
+                footer()
+            }
         }
     }
 }
@@ -2314,11 +2449,16 @@ private fun TransportControls(playback: PlaybackState, state: AppState) {
     }
 }
 
-/** The line being sung right now, flanked by the actions that belong to this track. */
+/**
+ * The line being sung right now, flanked by the actions that belong to this track, and the two that belong
+ * to the screen: the panel tucked away or brought back, and the menu that rearranges it.
+ */
 @Composable
-private fun HeroFooter(track: Track, playback: PlaybackState, state: AppState) {
+private fun HeroFooter(track: Track, playback: PlaybackState, state: AppState, look: NowPlayingPreferences, arrange: () -> Unit) {
     val lyrics by state.lyrics.collectAsState()
-    val activeLine = lyrics.outcomes
+    // Not where the lyrics are already the size of the screen beside it: the same line twice is one too many.
+    val singingBeside = look.layout == NowPlayingLayout.SING_ALONG && !look.panelHidden
+    val activeLine = if (!look.lyricLine || singingBeside) null else lyrics.outcomes
         .firstOrNull { it.provider == lyrics.selectedProvider }
         ?.result
         ?.takeIf { it.synced }
@@ -2333,7 +2473,7 @@ private fun HeroFooter(track: Track, playback: PlaybackState, state: AppState) {
         IconButton({ state.copyTrackLink(track) }, Modifier.size(34.dp)) {
             Icon(Icons.Default.Link, "Copy link", Modifier.size(17.dp), tint = ink(.6f))
         }
-        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+        Box(Modifier.weight(1f).padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
             Text(
                 activeLine ?: track.album?.title ?: "",
                 maxLines = 1,
@@ -2344,6 +2484,86 @@ private fun HeroFooter(track: Track, playback: PlaybackState, state: AppState) {
             )
         }
         ProviderBadge(track.provider, compact = true)
+        if (look.layout.hasPanel) {
+            IconButton({ state.updateNowPlaying { copy(panelHidden = !panelHidden) } }, Modifier.size(34.dp)) {
+                Icon(
+                    Icons.Default.ViewSidebar,
+                    if (look.panelHidden) "Show the panel" else "Hide the panel",
+                    Modifier.size(18.dp),
+                    tint = if (look.panelHidden) ink(.45f) else ink(.82f),
+                )
+            }
+        }
+        IconButton(arrange, Modifier.size(34.dp)) {
+            Icon(Icons.Default.Tune, "Arrange this screen", Modifier.size(18.dp), tint = ink(.6f))
+        }
+    }
+}
+
+/**
+ * The now playing screen's own menu: the layouts as pictures, and the cover, its size, the backdrop and the
+ * panel. Everything here is also in Settings; this is so it can be chosen while looking at the result.
+ */
+@Composable
+internal fun NowPlayingArranger(look: NowPlayingPreferences, backdrop: NowPlayingBackdrop, state: AppState, close: () -> Unit) {
+    Column(Modifier.padding(horizontal = 18.dp, vertical = 10.dp)) {
+        Text("Arrange now playing", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Spacer(Modifier.height(12.dp))
+        NowPlayingLayoutPicker(look.layout, compact = true) { layout -> state.updateNowPlaying { copy(layout = layout) } }
+        Spacer(Modifier.height(16.dp))
+        ChoiceRow("Cover", CoverStyle.entries, look.cover, { it.displayName }) { cover -> state.updateNowPlaying { copy(cover = cover) } }
+        Spacer(Modifier.height(14.dp))
+        ChoiceRow("Cover size", CoverSize.entries, look.coverSize, { it.displayName }) { size -> state.updateNowPlaying { copy(coverSize = size) } }
+        Spacer(Modifier.height(14.dp))
+        ChoiceRow("Backdrop", NowPlayingBackdrop.entries, backdrop, { it.displayName }, state::setNowPlayingBackdrop)
+        if (look.layout == NowPlayingLayout.SIDE_BY_SIDE || look.layout == NowPlayingLayout.PANEL_LEFT) {
+            Spacer(Modifier.height(14.dp))
+            ChoiceRow("Panel width", NowPlayingPanelWidth.entries, look.panelWidth, { it.displayName }) { width ->
+                state.updateNowPlaying { copy(panelWidth = width) }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        TextButton({
+            close()
+            pendingSettingsPage = SettingsPage.CUSTOMIZATION
+            state.navigate(Destination.SETTINGS)
+        }) {
+            Text("More in Settings", fontSize = 12.sp)
+        }
+    }
+}
+
+/** The six layouts, each as a picture of itself with its name under it. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NowPlayingLayoutPicker(selected: NowPlayingLayout, compact: Boolean = false, choose: (NowPlayingLayout) -> Unit) {
+    val pictureWidth = if (compact) 90.dp else 132.dp
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        NowPlayingLayout.entries.forEach { layout ->
+            val active = layout == selected
+            val border by animateColorAsState(
+                if (active) MaterialTheme.colorScheme.primary else ink(.1f),
+                motionSpec(MotionTiming.QUICK),
+                label = "layout-border",
+            )
+            Surface(
+                onClick = { choose(layout) },
+                shape = RoundedCornerShape(12.dp),
+                color = if (active) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .55f) else ink(.04f),
+                border = BorderStroke(if (active) 2.dp else 1.dp, border),
+            ) {
+                Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    NowPlayingLayoutPicture(layout, active, Modifier.size(pictureWidth, pictureWidth * .62f))
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        layout.displayName,
+                        fontSize = 11.sp,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -2354,6 +2574,7 @@ private fun NowPlayingPanel(
     selectTab: (NowPlayingTab) -> Unit,
     state: AppState,
     modifier: Modifier = Modifier,
+    largeLyrics: Boolean = false,
 ) {
     // Transparent so the ambient backdrop reads through the glass panel behind this.
     Surface(modifier, color = Color.Transparent) {
@@ -2369,7 +2590,7 @@ private fun NowPlayingPanel(
                         shape = RoundedCornerShape(20.dp),
                     ) {
                         Text(
-                            tab.label,
+                            tab.displayName,
                             color = if (selected) MaterialTheme.colorScheme.onSurface else ink(.6f),
                             fontSize = 12.sp,
                             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
@@ -2381,7 +2602,7 @@ private fun NowPlayingPanel(
             Spacer(Modifier.height(12.dp))
             when (selectedTab) {
                 NowPlayingTab.UP_NEXT -> UpNextPanel(queue, state)
-                NowPlayingTab.LYRICS -> queue.current?.let { LyricsPanel(it, state) }
+                NowPlayingTab.LYRICS -> queue.current?.let { LyricsPanel(it, state, large = largeLyrics) }
                 NowPlayingTab.RELATED -> PanelPlaceholder(
                     icon = Icons.Default.AutoAwesome,
                     title = "Related music",
@@ -2393,7 +2614,7 @@ private fun NowPlayingPanel(
 }
 
 @Composable
-private fun LyricsPanel(track: Track, state: AppState) {
+private fun LyricsPanel(track: Track, state: AppState, large: Boolean = false) {
     val lyrics by state.lyrics.collectAsState()
     val playback by state.playback.collectAsState()
     val selectedOutcome = lyrics.outcomes.firstOrNull { it.provider == lyrics.selectedProvider }
@@ -2486,7 +2707,7 @@ private fun LyricsPanel(track: Track, state: AppState) {
                 }
             }
             selectedResult != null && selectedResult.lines.isNotEmpty() -> {
-                LyricsContent(selectedOutcome, playback.positionMs, state)
+                LyricsContent(selectedOutcome, playback.positionMs, state, large)
             }
             selectedResult != null && providerPage != null -> {
                 Column(
@@ -2578,7 +2799,7 @@ private fun LyricsProviderStatusIcon(outcome: LyricsProviderOutcome) {
 }
 
 @Composable
-private fun LyricsContent(outcome: LyricsProviderOutcome, positionMs: Long, state: AppState) {
+private fun LyricsContent(outcome: LyricsProviderOutcome, positionMs: Long, state: AppState, large: Boolean = false) {
     val result = outcome.result ?: return
     val listState = rememberLazyListState()
     val activeIndex = remember(result.lines, positionMs) {
@@ -2586,7 +2807,8 @@ private fun LyricsContent(outcome: LyricsProviderOutcome, positionMs: Long, stat
     }
 
     LaunchedEffect(activeIndex, result.provider) {
-        if (activeIndex >= 0) listState.animateScrollToItem((activeIndex - 2).coerceAtLeast(0))
+        // Large lines sit further down, so the one being sung is nearer the middle than the top.
+        if (activeIndex >= 0) listState.animateScrollToItem((activeIndex - if (large) 3 else 2).coerceAtLeast(0))
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -2611,11 +2833,23 @@ private fun LyricsContent(outcome: LyricsProviderOutcome, positionMs: Long, stat
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 12.dp + chromeBottom()),
-                verticalArrangement = Arrangement.spacedBy(if (result.synced) 13.dp else 8.dp),
+                contentPadding = PaddingValues(
+                    start = if (large) 36.dp else 18.dp,
+                    end = if (large) 36.dp else 18.dp,
+                    top = 12.dp,
+                    bottom = 12.dp + chromeBottom(),
+                ),
+                verticalArrangement = Arrangement.spacedBy(
+                    when {
+                        large && result.synced -> 20.dp
+                        large -> 12.dp
+                        result.synced -> 13.dp
+                        else -> 8.dp
+                    },
+                ),
             ) {
                 itemsIndexed(result.lines) { index, line ->
-                    LyricLineText(line, active = index == activeIndex, synced = result.synced)
+                    LyricLineText(line, active = index == activeIndex, synced = result.synced, large = large)
                 }
                 result.attribution?.let { attribution ->
                     item {
@@ -2629,7 +2863,7 @@ private fun LyricsContent(outcome: LyricsProviderOutcome, positionMs: Long, stat
 }
 
 @Composable
-private fun LyricLineText(line: LyricLine, active: Boolean, synced: Boolean) {
+private fun LyricLineText(line: LyricLine, active: Boolean, synced: Boolean, large: Boolean = false) {
     // The line being sung brightens into the accent, and the one before fades back, rather than flicking.
     val colour by animateColorAsState(
         when {
@@ -2640,12 +2874,26 @@ private fun LyricLineText(line: LyricLine, active: Boolean, synced: Boolean) {
         motionSpec(MotionTiming.STANDARD),
         label = "lyric-line",
     )
+    // Large for singing along: centred, and big enough to read from across the room.
     Text(
         line.text,
         color = colour,
-        fontSize = if (active) 18.sp else if (synced) 15.sp else 14.sp,
+        fontSize = when {
+            large && active -> 30.sp
+            large && synced -> 22.sp
+            large -> 19.sp
+            active -> 18.sp
+            synced -> 15.sp
+            else -> 14.sp
+        },
         fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-        lineHeight = if (active) 23.sp else 20.sp,
+        lineHeight = when {
+            large && active -> 38.sp
+            large -> 29.sp
+            active -> 23.sp
+            else -> 20.sp
+        },
+        textAlign = if (large) androidx.compose.ui.text.style.TextAlign.Center else null,
         modifier = Modifier.fillMaxWidth().animateContentSize(),
     )
 }
@@ -3441,6 +3689,8 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
             ChoiceRow("Right-hand figure", TimeDisplay.entries, preferences.timeDisplay, { it.displayName }, state::setTimeDisplay)
         }
 
+        NowPlayingSettingsCard(preferences, state)
+
         SettingsPanelCard {
             CardHeading(Icons.Default.Palette, "Theme")
             Spacer(Modifier.height(6.dp))
@@ -3495,13 +3745,6 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
                 fontSize = 11.sp,
             )
             Spacer(Modifier.height(16.dp))
-            ToggleRow(
-                "Ambient backdrop on now playing",
-                "Tints the screen with colours sampled from the cover.",
-                preferences.ambientBackdrop,
-                state::setAmbientBackdrop,
-            )
-            Spacer(Modifier.height(12.dp))
             ToggleRow(
                 "Animations",
                 "Screens ease in, pages slide, and a new track's name rises into place. Off makes every change instant.",
@@ -3573,6 +3816,66 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
             Spacer(Modifier.height(12.dp))
             ChoiceRow("Open Noctorium on", StartPage.entries, preferences.startPage, { it.displayName }, state::setStartPage)
         }
+    }
+}
+
+/** The now playing screen: its layout, the cover, what is behind it and what sits beside it. */
+@Composable
+internal fun NowPlayingSettingsCard(preferences: NoctoriumPreferences, state: AppState) {
+    val look = preferences.desktop.nowPlaying
+    val backdrop = preferences.nowPlayingBackdrop
+    SettingsPanelCard {
+        CardHeading(Icons.Default.Album, "Now playing")
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "The screen the player bar opens. The sliders button on that screen changes all of this in place, " +
+                "and the sidebar button beside it tucks the panel away.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(15.dp))
+        Text("Layout", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(9.dp))
+        NowPlayingLayoutPicker(look.layout) { layout -> state.updateNowPlaying { copy(layout = layout) } }
+        Spacer(Modifier.height(7.dp))
+        Text(look.layout.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+        Spacer(Modifier.height(16.dp))
+        ChoiceRow("Cover", CoverStyle.entries, look.cover, { it.displayName }) { cover -> state.updateNowPlaying { copy(cover = cover) } }
+        Spacer(Modifier.height(6.dp))
+        Text(look.cover.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+        Spacer(Modifier.height(16.dp))
+        ChoiceRow("Cover size", CoverSize.entries, look.coverSize, { it.displayName }) { size -> state.updateNowPlaying { copy(coverSize = size) } }
+        Spacer(Modifier.height(16.dp))
+        ChoiceRow("Backdrop", NowPlayingBackdrop.entries, backdrop, { it.displayName }, state::setNowPlayingBackdrop)
+        Spacer(Modifier.height(6.dp))
+        Text(backdrop.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+        Spacer(Modifier.height(16.dp))
+        ChoiceRow("Panel width", NowPlayingPanelWidth.entries, look.panelWidth, { it.displayName }) { width ->
+            state.updateNowPlaying { copy(panelWidth = width) }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "For the side by side layouts. Sing along gives the lyrics everything the column leaves.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
+        Spacer(Modifier.height(16.dp))
+        // Related is not offered: it has nothing to show yet, and opening on it would be opening on nothing.
+        ChoiceRow("Open the panel on", listOf(NowPlayingTab.UP_NEXT, NowPlayingTab.LYRICS), look.openOn, { it.displayName }) { tab ->
+            state.updateNowPlaying { copy(openOn = tab) }
+        }
+        Spacer(Modifier.height(16.dp))
+        ToggleRow(
+            "The line being sung, under the cover",
+            "Off shows the album's name there instead.",
+            look.lyricLine,
+        ) { on -> state.updateNowPlaying { copy(lyricLine = on) } }
+        Spacer(Modifier.height(12.dp))
+        ToggleRow(
+            "Follow button under the artist",
+            "For following the artist on the service the track came from.",
+            look.followButton,
+        ) { on -> state.updateNowPlaying { copy(followButton = on) } }
     }
 }
 
