@@ -186,7 +186,7 @@ compose.desktop {
                 menuGroup = "Audio"
                 appCategory = "AudioVideo"
                 debMaintainer = "noctorium@users.noreply.github.com"
-                rpmLicenseType = "Proprietary"
+                rpmLicenseType = "GPL-3.0-only"
             }
         }
     }
