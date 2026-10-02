@@ -40,6 +40,9 @@ internal object CefRuntime {
             // instead; see [CefRequester].
             builder.cefSettings.windowless_rendering_enabled = false
             builder.cefSettings.cache_path = installDir.resolve("cache").toString()
+            // Chromium's own sandbox is built on the kind of namespace a Flatpak does not allow inside its
+            // own, and without this the sign-in page never opens there. The Flatpak is the sandbox.
+            if (!System.getenv("FLATPAK_ID").isNullOrBlank()) builder.addJcefArgs("--no-sandbox", "--no-zygote")
             builder.setProgressHandler { state, percent ->
                 // States read like INSTALL / EXTRACTING / INITIALIZING; DOWNLOADING should never appear now
                 // that the natives are bundled, and if it does the platform artifact is missing from the build.

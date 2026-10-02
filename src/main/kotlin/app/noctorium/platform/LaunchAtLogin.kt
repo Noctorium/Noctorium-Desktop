@@ -70,9 +70,13 @@ class LaunchAtLogin(
 
         /** This machine's, worked out once. */
         val system: LaunchAtLogin by lazy {
-            val launcher = System.getProperty("jpackage.app-path")?.takeIf(String::isNotBlank)
+            // An AppImage runs from a mount that is gone after it closes; the file itself is what to start.
+            val launcher = System.getenv("APPIMAGE")?.takeIf(String::isNotBlank)
+                ?: System.getProperty("jpackage.app-path")?.takeIf(String::isNotBlank)
             val os = System.getProperty("os.name").orEmpty()
             val entry = when {
+                // A Flatpak's ~/.config is its own, and an autostart entry written there starts nothing.
+                !System.getenv("FLATPAK_ID").isNullOrBlank() -> null
                 os.startsWith("Windows", ignoreCase = true) -> WindowsRunEntry()
                 os.startsWith("Linux", ignoreCase = true) -> XdgAutostartEntry.forThisUser()
                 else -> null

@@ -29,6 +29,8 @@ class DesktopUpdateInstaller(
         UpdateChannel.WINDOWS_INSTALLER -> runWindowsInstaller(file)
         UpdateChannel.DEBIAN_PACKAGE -> runLinuxPackage(file, listOf("dpkg", "--install", file.toString()))
         UpdateChannel.FEDORA_PACKAGE -> runLinuxPackage(file, listOf("rpm", "--upgrade", "--force", file.toString()))
+        UpdateChannel.ARCH_PACKAGE -> runLinuxPackage(file, listOf("pacman", "--upgrade", "--noconfirm", file.toString()))
+        UpdateChannel.APPIMAGE -> replaceAppImage(file)
         else -> "This copy of Noctorium was not installed by an installer, so it cannot update itself."
     }
 
@@ -86,7 +88,32 @@ class DesktopUpdateInstaller(
      * same launcher goes into the app image that gets zipped up; what that means per platform is decided
      * below.
      */
+    /**
+     * An AppImage is one file, and updating it is putting the new one where the old one was.
+     *
+     * Written beside it and moved over it in one step, so a failure halfway leaves the old one working;
+     * then the new one is started and this one leaves, which is the restart an update needs anyway.
+     */
+    private fun replaceAppImage(file: Path): String? {
+        val current = System.getenv("APPIMAGE")?.takeIf(String::isNotBlank)?.let(Path::of)
+            ?: return "Could not tell where this AppImage is. The new one is at $file."
+        return runCatching {
+            val incoming = current.resolveSibling(".${current.fileName}.new")
+            Files.copy(file, incoming, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            incoming.toFile().setExecutable(true, false)
+            Files.move(incoming, current, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+            ProcessBuilder(current.toString()).start()
+            Thread.sleep(800)
+            exitProcess(0)
+            @Suppress("UNREACHABLE_CODE") null
+        }.getOrElse { "Could not replace ${current.fileName}: ${it.message}. The new one is at $file." }
+    }
+
     private fun detectChannel(): UpdateChannel {
+        // The two that say so themselves, before anything else is asked: inside either, the launcher's
+        // path is the sandbox's or a temporary mount's and no package manager knows it.
+        if (!System.getenv("FLATPAK_ID").isNullOrBlank()) return UpdateChannel.FLATPAK
+        if (!System.getenv("APPIMAGE").isNullOrBlank()) return UpdateChannel.APPIMAGE
         val launcher = System.getProperty("jpackage.app-path")?.takeIf { it.isNotBlank() }
             ?: return UpdateChannel.UNMANAGED
 
@@ -98,6 +125,7 @@ class DesktopUpdateInstaller(
         // distribution's name: plenty of machines have both, and only one of them owns this file.
         if (owns(listOf("dpkg", "--search", launcher))) return UpdateChannel.DEBIAN_PACKAGE
         if (owns(listOf("rpm", "--query", "--file", launcher))) return UpdateChannel.FEDORA_PACKAGE
+        if (owns(listOf("pacman", "--query", "--owns", launcher))) return UpdateChannel.ARCH_PACKAGE
         return UpdateChannel.UNMANAGED
     }
 
