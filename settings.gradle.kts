@@ -35,7 +35,9 @@ val baseCheckout: File = listOfNotNull(
     System.getenv("NOCTORIUM_BASE")?.takeIf { it.isNotBlank() }?.let(::file),
     file("../Noctorium-Base"),
     file("base"),
-).firstOrNull { File(it, "core/build.gradle.kts").isFile }
+// A checkout counts only if it has both modules: one from before `jvm` existed would build a desktop with
+// half its playback missing, and the next candidate is the better answer.
+).firstOrNull { File(it, "core/build.gradle.kts").isFile && File(it, "jvm/build.gradle.kts").isFile }
     ?: error(
         "Noctorium-Base was not found. Either check it out beside this repository as ../Noctorium-Base, " +
             "run `git submodule update --init` to fetch the base/ submodule, or set NOCTORIUM_BASE to a checkout.",
@@ -43,3 +45,7 @@ val baseCheckout: File = listOfNotNull(
 
 include(":core")
 project(":core").projectDir = File(baseCheckout, "core")
+// yt-dlp, mpv, Discord and the credential store: everything under the window that the terminal player
+// shares. It lived here until Noctorium-cli needed it too.
+include(":jvm")
+project(":jvm").projectDir = File(baseCheckout, "jvm")

@@ -95,6 +95,7 @@ fun jcefNativesArtifacts(): List<String> {
 dependencies {
     // Everything portable lives in core; this module adds only what a desktop can do that a phone cannot.
     implementation(project(":core"))
+    implementation(project(":jvm"))
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     implementation(compose.materialIconsExtended)
