@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateContentSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -57,6 +58,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
@@ -138,8 +140,13 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
         queue.current?.provider ?: ProviderType.LOCAL,
         fallback = ArtworkPalette(Color(theme.accent), Color(theme.card)),
     )
-    val accentTarget = if (preferences.accent == AccentPreset.ARTWORK) artworkPalette.primary else Color(preferences.resolvedAccent(null))
-    val accent by animateColorAsState(accentTarget, tween(600), label = "accent")
+    // A colour being dragged to in the accent picker wins while the pointer is down, and is followed at once
+    // rather than eased towards: easing would leave the window trailing behind the pointer.
+    val previewAccent = accentPreview.value
+    val accentTarget = previewAccent
+        ?: if (preferences.accent == AccentPreset.ARTWORK) artworkPalette.primary else Color(preferences.resolvedAccent(null))
+    val accent by animateColorAsState(accentTarget, if (previewAccent != null) snap() else tween(600), label = "accent")
+    val typography = remember(preferences.font) { noctoriumTypography(preferences.font) }
 
     // The title bar is Windows', not ours, so it has to be told the colour separately — and told again
     // whenever the theme changes, or a switch to a light theme would leave a black strip above it.
@@ -238,6 +245,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     MaterialTheme(
         colorScheme = noctoriumColorScheme(theme, accent),
         shapes = noctoriumShapes(preferences.cornerStyle),
+        typography = typography,
     ) {
       // Text size, applied to the density rather than to the typography.
       //
@@ -262,7 +270,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                 .onKeyEvent(::handle),
         ) {
             Row {
-                NavigationRail(ui.destination, appState::navigate)
+                NavigationRail(ui.destination, preferences.desktop.hiddenDestinations, appState::navigate)
                 Column(Modifier.weight(1f)) {
                     PlaybackToolsBanner {
                         pendingSettingsPage = SettingsPage.PLAYBACK_TOOLS
@@ -348,8 +356,20 @@ private fun BoxScope.GlassContent(
     }
 }
 
+/**
+ * The sidebar, without the items the listener put away in [hidden].
+ *
+ * Putting one away only takes it out of here. Its number key, the player bar and every link that leads to
+ * it still go there, so a page somebody rarely visits costs them no room and is still a key away.
+ */
 @Composable
-private fun NavigationRail(selected: Destination, navigate: (Destination) -> Unit) {
+private fun NavigationRail(selected: Destination, hidden: Set<Destination>, navigate: (Destination) -> Unit) {
+    @Composable
+    fun item(destination: Destination) {
+        if (sidebarShows(destination, hidden)) {
+            NavItem(destination.sidebarLabel(), destination.sidebarIcon(), selected == destination) { navigate(destination) }
+        }
+    }
     Column(
         Modifier.width(RAIL_WIDTH).fillMaxHeight().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 18.dp),
     ) {
@@ -375,25 +395,27 @@ private fun NavigationRail(selected: Destination, navigate: (Destination) -> Uni
             )
         }
         Spacer(Modifier.height(26.dp))
-        NavItem("Home", Icons.Default.Home, selected == Destination.HOME) { navigate(Destination.HOME) }
-        NavItem("Search", Icons.Default.Search, selected == Destination.SEARCH) { navigate(Destination.SEARCH) }
-        NavItem("Paste link", Icons.Default.Link, selected == Destination.LINK) { navigate(Destination.LINK) }
-        NavItem("Library", Icons.Default.LibraryMusic, selected == Destination.LIBRARY) { navigate(Destination.LIBRARY) }
-        NavItem("Downloads", Icons.Default.DownloadForOffline, selected == Destination.DOWNLOADS) { navigate(Destination.DOWNLOADS) }
-        Spacer(Modifier.height(18.dp))
-        Text(
-            "PLAYING",
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .6f),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 12.dp, bottom = 6.dp),
-        )
+        item(Destination.HOME)
+        item(Destination.SEARCH)
+        item(Destination.LINK)
+        item(Destination.LIBRARY)
+        item(Destination.DOWNLOADS)
         // Now Playing and Queue were reachable only by clicking the player bar; they are destinations, so they
-        // belong in the rail alongside everything else.
-        NavItem("Now playing", Icons.Default.GraphicEq, selected == Destination.NOW_PLAYING) { navigate(Destination.NOW_PLAYING) }
-        NavItem("Queue", Icons.AutoMirrored.Filled.QueueMusic, selected == Destination.QUEUE) { navigate(Destination.QUEUE) }
+        // belong in the rail alongside everything else. Their heading goes when both of them have.
+        if (sidebarShows(Destination.NOW_PLAYING, hidden) || sidebarShows(Destination.QUEUE, hidden)) {
+            Spacer(Modifier.height(18.dp))
+            Text(
+                "PLAYING",
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .6f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 12.dp, bottom = 6.dp),
+            )
+            item(Destination.NOW_PLAYING)
+            item(Destination.QUEUE)
+        }
         Spacer(Modifier.weight(1f))
-        NavItem("Settings", Icons.Default.Settings, selected == Destination.SETTINGS) { navigate(Destination.SETTINGS) }
+        item(Destination.SETTINGS)
     }
 }
 
@@ -423,18 +445,20 @@ private fun NavItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
 }
 
 @Composable
-private fun HomeScreen(ui: AppUiState, state: AppState) {
-    val filtered = ui.homeSections.filter { section ->
-        ui.providerFilter == ProviderFilter.ALL || section.provider.name == ui.providerFilter.name
-    }
-    val recent = ui.recentTracks.filter { track ->
-        ui.providerFilter == ProviderFilter.ALL || track.provider.name == ui.providerFilter.name
-    }
+internal fun HomeScreen(ui: AppUiState, state: AppState) {
+    val hidden = state.settings.collectAsState().value.preferences.hiddenHomeParts
+    // The filter at the top and the parts put away in Settings, decided together in one place.
+    val home = homeContent(ui, hidden)
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 32.dp), contentPadding = chromePadding(bottom = 36.dp)) {
         item {
             Spacer(Modifier.height(28.dp))
             Row(verticalAlignment = Alignment.Bottom) {
-                Text(greeting(), fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                // The filter stays when the greeting goes: it is how the rest of the page is chosen.
+                if (home.greeting) {
+                    Text(greeting(), fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
                 FilterChips(ui.providerFilter, state::setFilter)
             }
             Spacer(Modifier.height(20.dp))
@@ -444,23 +468,23 @@ private fun HomeScreen(ui: AppUiState, state: AppState) {
         }
         // The listener's own row first: what they decided to keep within reach beats what happened to be
         // played last, which beats anything the services suggest.
-        val pinned = ui.pinnedTracks.filter { track ->
-            ui.providerFilter == ProviderFilter.ALL || track.provider.name == ui.providerFilter.name
-        }
-        if (pinned.isNotEmpty()) {
+        if (home.pinned.isNotEmpty()) {
             item {
-                TrackRowSection("Pinned", "Kept here by you", pinned, state)
+                TrackRowSection("Pinned", "Kept here by you", home.pinned, state)
             }
         }
-        if (recent.isNotEmpty()) {
+        if (home.recent.isNotEmpty()) {
             item {
-                TrackRowSection("Jump back in", "Where you left off", recent, state)
+                TrackRowSection("Jump back in", "Where you left off", home.recent, state)
             }
         }
-        if (ui.homeLoading) {
+        if (home.nothingToShow) {
+            item { HomePutAway(everything = hidden.containsAll(HomePart.entries), state) }
+        }
+        if (home.loading) {
             items(2) { LoadingSection() }
         } else {
-            items(filtered, key = { it.id }) { section ->
+            items(home.sections, key = { it.id }) { section ->
                 // A row is songs or cards, never both -- the services build them that way, and a row
                 // mixing things that play with things that open would make every click a guess.
                 if (section.playlists.isNotEmpty()) {
@@ -469,6 +493,41 @@ private fun HomeScreen(ui: AppUiState, state: AppState) {
                     TrackRowSection(section.title, section.subtitle, section.tracks, state)
                 }
             }
+        }
+    }
+}
+
+/**
+ * What Home says when there is nothing left on it to draw, rather than an empty page that looks broken.
+ *
+ * [everything] is every part put away on purpose, which deserves a different word from parts that are
+ * still on but have nothing in them yet. Either way the way back is one click.
+ */
+@Composable
+private fun HomePutAway(everything: Boolean, state: AppState) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(Icons.Default.AutoAwesome, null, Modifier.size(44.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(12.dp))
+        Text(if (everything) "Home is all put away" else "Nothing here just now", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            if (everything) {
+                "You have hidden every part of it. The music is a search away, and Home comes back whenever you like."
+            } else {
+                "Play something and it will be waiting here, or bring back more of Home."
+            },
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.widthIn(max = 460.dp),
+        )
+        Spacer(Modifier.height(18.dp))
+        FilledTonalButton({
+            pendingSettingsPage = SettingsPage.CUSTOMIZATION
+            state.navigate(Destination.SETTINGS)
+        }) {
+            Icon(Icons.Default.Tune, null, Modifier.size(17.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Choose what Home shows")
         }
     }
 }
@@ -1875,6 +1934,7 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
     val current = queue.current
     var addToPlaylist by remember { mutableStateOf(false) }
     val library by state.library.collectAsState()
+    val shown = playerBarButtons(PlayerBarStyle.INLINE, narrow = false, preferences.desktop.hiddenPlayerButtons)
 
     if (addToPlaylist && current != null) {
         AddToPlaylistDialog(current, library.localPlaylists, state) { addToPlaylist = false }
@@ -1891,13 +1951,15 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                 Modifier.fillMaxWidth().weight(1f).padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(state::toggleShuffle, Modifier.size(34.dp)) {
-                    Icon(
-                        Icons.Default.Shuffle,
-                        "Shuffle",
-                        Modifier.size(18.dp),
-                        tint = if (queue.shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                if (PlayerButton.SHUFFLE in shown) {
+                    IconButton(state::toggleShuffle, Modifier.size(34.dp)) {
+                        Icon(
+                            Icons.Default.Shuffle,
+                            "Shuffle",
+                            Modifier.size(18.dp),
+                            tint = if (queue.shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 IconButton(state::previous, Modifier.size(34.dp)) {
                     Icon(Icons.Default.SkipPrevious, "Previous track", Modifier.size(20.dp))
@@ -1919,16 +1981,18 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                 IconButton(state::next, Modifier.size(34.dp)) {
                     Icon(Icons.Default.SkipNext, "Next track", Modifier.size(20.dp))
                 }
-                IconButton(state::cycleRepeat, Modifier.size(34.dp)) {
-                    Icon(
-                        if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
-                        "Repeat",
-                        Modifier.size(18.dp),
-                        tint = if (queue.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                if (PlayerButton.REPEAT in shown) {
+                    IconButton(state::cycleRepeat, Modifier.size(34.dp)) {
+                        Icon(
+                            if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                            "Repeat",
+                            Modifier.size(18.dp),
+                            tint = if (queue.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 current?.let { track ->
-                    LikeButton(track, state, size = 34.dp)
+                    if (PlayerButton.LIKE in shown) LikeButton(track, state, size = 34.dp)
                     DownloadButton(track, state, size = 34.dp)
                     IconButton({ addToPlaylist = true }, Modifier.size(34.dp)) {
                         Icon(
@@ -1985,17 +2049,21 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                 // Outside the badge, not inside it. BadgedBox has one content slot: a second child in
                 // there is laid on top of the first, so this button was drawn over the queue button and
                 // every click on it went to the queue instead.
-                ConnectButton(state)
-                SleepTimerButton(state)
-                BadgedBox(badge = { if (queue.tracks.isNotEmpty()) Badge { Text(queue.tracks.size.toString()) } }) {
-                    IconButton({ state.navigate(Destination.QUEUE) }, Modifier.size(34.dp)) {
-                        Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", Modifier.size(19.dp))
+                if (PlayerButton.DEVICES in shown) ConnectButton(state)
+                if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
+                if (PlayerButton.QUEUE in shown) {
+                    BadgedBox(badge = { if (queue.tracks.isNotEmpty()) Badge { Text(queue.tracks.size.toString()) } }) {
+                        IconButton({ state.navigate(Destination.QUEUE) }, Modifier.size(34.dp)) {
+                            Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", Modifier.size(19.dp))
+                        }
                     }
                 }
-                IconButton({ state.navigate(Destination.NOW_PLAYING) }, Modifier.size(34.dp)) {
-                    Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (PlayerButton.LYRICS in shown) {
+                    IconButton({ state.navigate(Destination.NOW_PLAYING) }, Modifier.size(34.dp)) {
+                        Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                VolumeControl(playback, state)
+                if (PlayerButton.VOLUME in shown) VolumeControl(playback, state)
             }
             if (atTop && !LocalInGlass.current) HorizontalDivider(color = rule)
         }
@@ -2030,6 +2098,7 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 760.dp
+            val shown = playerBarButtons(PlayerBarStyle.STACKED, narrow = compact, playerPreferences.desktop.hiddenPlayerButtons)
             Column {
                 // As above: the rule marks the edge the content is on.
                 if (!stackedAtTop && !LocalInGlass.current) HorizontalDivider(color = stackedRule)
@@ -2071,7 +2140,7 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                                 fontSize = 12.sp,
                             )
                         }
-                        current?.let { LikeButton(it, state) }
+                        if (PlayerButton.LIKE in shown) current?.let { LikeButton(it, state) }
                         current?.let { DownloadButton(it, state) }
                     }
 
@@ -2080,12 +2149,14 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconButton(state::toggleShuffle, Modifier.size(36.dp)) {
-                            Icon(
-                                Icons.Default.Shuffle,
-                                "Shuffle",
-                                tint = if (queue.shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        if (PlayerButton.SHUFFLE in shown) {
+                            IconButton(state::toggleShuffle, Modifier.size(36.dp)) {
+                                Icon(
+                                    Icons.Default.Shuffle,
+                                    "Shuffle",
+                                    tint = if (queue.shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                         FilledTonalIconButton(state::previous, Modifier.size(40.dp)) {
                             Icon(Icons.Default.SkipPrevious, "Previous track")
@@ -2106,16 +2177,18 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                         FilledTonalIconButton(state::next, Modifier.size(40.dp)) {
                             Icon(Icons.Default.SkipNext, "Next track")
                         }
-                        IconButton(state::cycleRepeat, Modifier.size(36.dp)) {
-                            Icon(
-                                if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
-                                when (queue.repeatMode) {
-                                    RepeatMode.OFF -> "Repeat off"
-                                    RepeatMode.ALL -> "Repeat all"
-                                    RepeatMode.ONE -> "Repeat one"
-                                },
-                                tint = if (queue.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        if (PlayerButton.REPEAT in shown) {
+                            IconButton(state::cycleRepeat, Modifier.size(36.dp)) {
+                                Icon(
+                                    if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                                    when (queue.repeatMode) {
+                                        RepeatMode.OFF -> "Repeat off"
+                                        RepeatMode.ALL -> "Repeat all"
+                                        RepeatMode.ONE -> "Repeat one"
+                                    },
+                                    tint = if (queue.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
 
@@ -2126,19 +2199,22 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                     ) {
                         // Volume, its readout and the boost toggle used to sit permanently in the bar. They now
                         // live behind the speaker icon, which is the only one of the four you reach for often.
-                        if (!compact) {
+                        // A compact bar leaves it off; playerBarButtons says so along with the rest.
+                        if (PlayerButton.VOLUME in shown) {
                             VolumeControl(playback, state)
                             Spacer(Modifier.width(4.dp))
                         }
-                        ConnectButton(state)
-                        SleepTimerButton(state)
-                        BadgedBox(
-                            badge = {
-                                if (queue.tracks.isNotEmpty()) Badge { Text(queue.tracks.size.toString()) }
-                            },
-                        ) {
-                            IconButton({ state.navigate(Destination.QUEUE) }) {
-                                Icon(Icons.AutoMirrored.Filled.QueueMusic, "Open queue")
+                        if (PlayerButton.DEVICES in shown) ConnectButton(state)
+                        if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
+                        if (PlayerButton.QUEUE in shown) {
+                            BadgedBox(
+                                badge = {
+                                    if (queue.tracks.isNotEmpty()) Badge { Text(queue.tracks.size.toString()) }
+                                },
+                            ) {
+                                IconButton({ state.navigate(Destination.QUEUE) }) {
+                                    Icon(Icons.AutoMirrored.Filled.QueueMusic, "Open queue")
+                                }
                             }
                         }
                     }
@@ -2799,8 +2875,11 @@ private fun LyricsProviderStatusIcon(outcome: LyricsProviderOutcome) {
 }
 
 @Composable
-private fun LyricsContent(outcome: LyricsProviderOutcome, positionMs: Long, state: AppState, large: Boolean = false) {
+internal fun LyricsContent(outcome: LyricsProviderOutcome, positionMs: Long, state: AppState, large: Boolean = false) {
     val result = outcome.result ?: return
+    val look = state.settings.collectAsState().value.preferences.lyrics
+    // The gaps grow with the words, so a larger size reads as larger lyrics rather than as a crowded page.
+    val spacing = look.size.scale
     val listState = rememberLazyListState()
     val activeIndex = remember(result.lines, positionMs) {
         if (!result.synced) -1 else result.lines.indexOfLast { (it.startTimeMs ?: Long.MAX_VALUE) <= positionMs }
@@ -2845,11 +2924,11 @@ private fun LyricsContent(outcome: LyricsProviderOutcome, positionMs: Long, stat
                         large -> 12.dp
                         result.synced -> 13.dp
                         else -> 8.dp
-                    },
+                    } * spacing,
                 ),
             ) {
                 itemsIndexed(result.lines) { index, line ->
-                    LyricLineText(line, active = index == activeIndex, synced = result.synced, large = large)
+                    LyricLineText(line, active = index == activeIndex, synced = result.synced, large = large, look = look)
                 }
                 result.attribution?.let { attribution ->
                     item {
@@ -2862,18 +2941,25 @@ private fun LyricsContent(outcome: LyricsProviderOutcome, positionMs: Long, stat
     }
 }
 
+/**
+ * One line of the lyrics, as the listener asked for them to be set in [look]: its size scaled, leaning the
+ * way they chose, and the lines not being sung dimmed or not. The defaults draw exactly what this always
+ * drew.
+ */
 @Composable
-private fun LyricLineText(line: LyricLine, active: Boolean, synced: Boolean, large: Boolean = false) {
+internal fun LyricLineText(line: LyricLine, active: Boolean, synced: Boolean, large: Boolean = false, look: LyricsLook = LyricsLook()) {
     // The line being sung brightens into the accent, and the one before fades back, rather than flicking.
+    // Without the dimming the others stay at full strength, and the accent alone says which line is sung.
     val colour by animateColorAsState(
         when {
             active -> MaterialTheme.colorScheme.primary
-            synced -> MaterialTheme.colorScheme.onSurfaceVariant
+            synced && look.dimOtherLines -> MaterialTheme.colorScheme.onSurfaceVariant
             else -> MaterialTheme.colorScheme.onSurface
         },
         motionSpec(MotionTiming.STANDARD),
         label = "lyric-line",
     )
+    val scale = look.size.scale
     // Large for singing along: centred, and big enough to read from across the room.
     Text(
         line.text,
@@ -2885,15 +2971,19 @@ private fun LyricLineText(line: LyricLine, active: Boolean, synced: Boolean, lar
             active -> 18.sp
             synced -> 15.sp
             else -> 14.sp
-        },
+        } * scale,
         fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
         lineHeight = when {
             large && active -> 38.sp
             large -> 29.sp
             active -> 23.sp
             else -> 20.sp
+        } * scale,
+        textAlign = when (look.alignment) {
+            LyricsAlignment.AUTO -> if (large) androidx.compose.ui.text.style.TextAlign.Center else null
+            LyricsAlignment.START -> androidx.compose.ui.text.style.TextAlign.Start
+            LyricsAlignment.CENTRE -> androidx.compose.ui.text.style.TextAlign.Center
         },
-        textAlign = if (large) androidx.compose.ui.text.style.TextAlign.Center else null,
         modifier = Modifier.fillMaxWidth().animateContentSize(),
     )
 }
@@ -3388,7 +3478,7 @@ private fun PlaybackError(message: String) {
 }
 
 private enum class SettingsPage {
-    ACCOUNT, PROFILE, CUSTOMIZATION, YOUTUBE, SOUNDCLOUD, SPOTIFY, SCROBBLING, LYRICS, STARTUP, DISCORD, UPDATES,
+    ACCOUNT, PROFILE, CUSTOMIZATION, SOUND, YOUTUBE, SOUNDCLOUD, SPOTIFY, SCROBBLING, LYRICS, STARTUP, DISCORD, UPDATES,
     PLAYBACK_TOOLS, DIAGNOSTICS
 }
 
@@ -3413,6 +3503,7 @@ private fun SettingsScreen(state: AppState) {
                     SettingsPage.ACCOUNT -> NoctoriumAccountPanel(state)
                     SettingsPage.PROFILE -> ProfileSettingsPanel(settings.preferences, state)
                     SettingsPage.CUSTOMIZATION -> CustomizationPanel(settings.preferences, state)
+                    SettingsPage.SOUND -> SoundSettingsPanel(settings.preferences, state)
                     SettingsPage.YOUTUBE -> YouTubeAccountPanel(settings, state)
                     SettingsPage.SOUNDCLOUD -> AccountConnectionPanel(
                         ProviderType.SOUNDCLOUD,
@@ -3486,9 +3577,21 @@ private fun SettingsHome(settings: SettingsState, state: AppState, open: (Settin
         item {
             SettingsCard(
                 "Customization",
-                "Seek bar style and how the player looks",
+                "Theme, colour, typeface, lyrics, Home and the player",
                 Icons.Default.Tune,
                 { open(SettingsPage.CUSTOMIZATION) },
+            )
+        }
+        item {
+            // Its own page rather than a card under Customization: how the music sounds is not how
+            // Noctorium looks, and somebody looking for an equaliser looks for the word Sound.
+            val equalizer = settings.preferences.equalizer
+            SettingsCard(
+                "Sound",
+                if (equalizer.enabled) "Equaliser on · ${equalizer.preset.displayName}" else "Equaliser off",
+                Icons.Default.Equalizer,
+                { open(SettingsPage.SOUND) },
+                equalizer.enabled,
             )
         }
         item {
@@ -3602,6 +3705,7 @@ private fun pageTitle(page: SettingsPage) = when (page) {
     SettingsPage.ACCOUNT -> "Noctorium account"
     SettingsPage.PROFILE -> "Your Noctorium profile"
     SettingsPage.CUSTOMIZATION -> "Customization"
+    SettingsPage.SOUND -> "Sound"
     SettingsPage.YOUTUBE -> "YouTube Music account"
     SettingsPage.SOUNDCLOUD -> "SoundCloud account"
     SettingsPage.SPOTIFY -> "Spotify library"
@@ -3673,6 +3777,8 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
             )
+            Spacer(Modifier.height(15.dp))
+            PlayerButtonsSetting(preferences, state)
             Spacer(Modifier.height(18.dp))
             SaveMusicSetting(preferences, state)
             Spacer(Modifier.height(18.dp))
@@ -3690,6 +3796,8 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
         }
 
         NowPlayingSettingsCard(preferences, state)
+
+        LyricsLookCard(preferences.lyrics, state)
 
         SettingsPanelCard {
             CardHeading(Icons.Default.Palette, "Theme")
@@ -3723,55 +3831,7 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
             }
         }
 
-        SettingsPanelCard {
-            CardHeading(Icons.Default.Palette, "Colour")
-            Spacer(Modifier.height(12.dp))
-            Text("Accent", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(9.dp))
-            // Swatches rather than names: the colour is the label.
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AccentPreset.entries.forEach { option ->
-                    AccentSwatch(option, Color(preferences.themeColours().accent), preferences.accent == option) { state.setAccent(option) }
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                when (preferences.accent) {
-                    AccentPreset.ARTWORK -> "The interface follows the cover of whatever is playing."
-                    AccentPreset.THEME -> "The accent the theme was designed with."
-                    else -> preferences.accent.displayName
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-            )
-            Spacer(Modifier.height(16.dp))
-            ToggleRow(
-                "Animations",
-                "Screens ease in, pages slide, and a new track's name rises into place. Off makes every change instant.",
-                preferences.animations,
-                state::setAnimations,
-            )
-            Spacer(Modifier.height(16.dp))
-            ChoiceRow(
-                "Surfaces",
-                SurfaceStyle.entries,
-                preferences.surfaceStyle,
-                { it.displayName },
-                state::setSurfaceStyle,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(preferences.surfaceStyle.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-            Spacer(Modifier.height(16.dp))
-            ChoiceRow("Corners", CornerStyle.entries, preferences.cornerStyle, { it.displayName }, state::setCornerStyle)
-            Spacer(Modifier.height(16.dp))
-            ChoiceRow("Text size", TextSize.entries, preferences.textSize, { it.displayName }, state::setTextSize)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "Everything at once, on top of whatever text size the machine is already set to.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-            )
-        }
+        ColourSettingsCard(preferences, state)
 
         SettingsPanelCard {
             CardHeading(Icons.Default.PlayCircle, "Playback")
@@ -3781,41 +3841,178 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
                 "Intros, outros, sponsor reads and talking, as marked by SponsorBlock's contributors. " +
                     "YouTube Music tracks are never touched. Asks sponsor.ajay.app by a hash of the video id.",
                 preferences.skipNonMusic,
-                state::setSkipNonMusic,
+                change = state::setSkipNonMusic,
             )
         }
 
-        SettingsPanelCard {
-            CardHeading(Icons.Default.GridView, "Browsing")
-            Spacer(Modifier.height(12.dp))
-            ChoiceRow("Card size", CardSize.entries, preferences.cardSize, { it.displayName }, state::setCardSize)
-            Spacer(Modifier.height(16.dp))
-            ChoiceRow(
-                "Service badges",
-                BadgePolicy.entries,
-                preferences.badgePolicy,
-                { it.displayName },
-                state::setBadgePolicy,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(preferences.badgePolicy.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-            Spacer(Modifier.height(16.dp))
-            ChoiceRow(
-                "Play and menu buttons",
-                HoverControls.entries,
-                preferences.hoverControls,
-                { it.displayName },
-                state::setHoverControls,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(preferences.hoverControls.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-        }
+        BrowsingSettingsCard(preferences, state)
 
         SettingsPanelCard {
             CardHeading(Icons.Default.Start, "Startup")
             Spacer(Modifier.height(12.dp))
             ChoiceRow("Open Noctorium on", StartPage.entries, preferences.startPage, { it.displayName }, state::setStartPage)
         }
+    }
+}
+
+/**
+ * The colours and the type: the accent, with a picker for the listener's own, then animations, surfaces,
+ * corners, the text size and the typeface.
+ */
+@Composable
+internal fun ColourSettingsCard(preferences: NoctoriumPreferences, state: AppState) {
+    SettingsPanelCard {
+        CardHeading(Icons.Default.Palette, "Colour")
+        Spacer(Modifier.height(12.dp))
+        Text("Accent", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(9.dp))
+        // Swatches rather than names: the colour is the label.
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            AccentPreset.entries.forEach { option ->
+                AccentSwatch(
+                    option,
+                    Color(preferences.themeColours().accent),
+                    Color(preferences.customAccent or 0xFF000000L),
+                    preferences.accent == option,
+                ) { state.setAccent(option) }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            when (preferences.accent) {
+                AccentPreset.ARTWORK -> "The interface follows the cover of whatever is playing."
+                AccentPreset.THEME -> "The accent the theme was designed with."
+                AccentPreset.CUSTOM -> "Your own colour, wherever the theme would have put its accent."
+                else -> preferences.accent.displayName
+            },
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
+        // Shown only once Your own is chosen, so the card stays short for everybody happy with a swatch.
+        if (preferences.accent == AccentPreset.CUSTOM) {
+            Spacer(Modifier.height(14.dp))
+            AccentColourPicker(preferences.customAccent or 0xFF000000L, preferences.themeColours().background, state::setCustomAccent)
+        }
+        Spacer(Modifier.height(16.dp))
+        ToggleRow(
+            "Animations",
+            "Screens ease in, pages slide, and a new track's name rises into place. Off makes every change instant.",
+            preferences.animations,
+            change = state::setAnimations,
+        )
+        Spacer(Modifier.height(16.dp))
+        ChoiceRow(
+            "Surfaces",
+            SurfaceStyle.entries,
+            preferences.surfaceStyle,
+            { it.displayName },
+            state::setSurfaceStyle,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(preferences.surfaceStyle.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+        Spacer(Modifier.height(16.dp))
+        ChoiceRow("Corners", CornerStyle.entries, preferences.cornerStyle, { it.displayName }, state::setCornerStyle)
+        Spacer(Modifier.height(16.dp))
+        ChoiceRow("Text size", TextSize.entries, preferences.textSize, { it.displayName }, state::setTextSize)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Everything at once, on top of whatever text size the machine is already set to.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
+        Spacer(Modifier.height(16.dp))
+        FontChooser(preferences.font, state::setFont)
+    }
+}
+
+/** Which of the player bar's buttons it carries, under the layout and the position that arrange them. */
+@Composable
+internal fun PlayerButtonsSetting(preferences: NoctoriumPreferences, state: AppState) {
+    val hidden = preferences.desktop.hiddenPlayerButtons
+    Column {
+        ToggleChips(
+            "Buttons on the player bar",
+            PlayerButton.entries,
+            on = { it !in hidden },
+            name = { it.displayName },
+            icon = { it.icon() },
+        ) { button, shown ->
+            state.updateDesktop { copy(hiddenPlayerButtons = if (shown) hiddenPlayerButtons - button else hiddenPlayerButtons + button) }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Lit ones are on the bar, in every layout. Play, pause and the two skips always stay, and so do " +
+                "download and add to playlist. Connect only appears once there is a device to play on.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
+    }
+}
+
+/** How the pages are browsed: the cards, the badges, the buttons on them, what Home holds, what the sidebar offers. */
+@Composable
+internal fun BrowsingSettingsCard(preferences: NoctoriumPreferences, state: AppState) {
+    SettingsPanelCard {
+        CardHeading(Icons.Default.GridView, "Browsing")
+        Spacer(Modifier.height(12.dp))
+        ChoiceRow("Card size", CardSize.entries, preferences.cardSize, { it.displayName }, state::setCardSize)
+        Spacer(Modifier.height(16.dp))
+        ChoiceRow(
+            "Service badges",
+            BadgePolicy.entries,
+            preferences.badgePolicy,
+            { it.displayName },
+            state::setBadgePolicy,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(preferences.badgePolicy.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+        Spacer(Modifier.height(16.dp))
+        ChoiceRow(
+            "Play and menu buttons",
+            HoverControls.entries,
+            preferences.hoverControls,
+            { it.displayName },
+            state::setHoverControls,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(preferences.hoverControls.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+        Spacer(Modifier.height(16.dp))
+        val hiddenHome = preferences.hiddenHomeParts
+        ToggleChips(
+            "On Home",
+            HomePart.entries,
+            on = { it !in hiddenHome },
+            name = { it.displayName },
+        ) { part, shown -> state.setHomePartHidden(part, !shown) }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            // The parts put away are named, so nobody is left wondering where a row went.
+            if (hiddenHome.isEmpty()) {
+                "Everything is on Home. Click a part to put it away."
+            } else {
+                "Put away: " + HomePart.entries.filter { it in hiddenHome }.joinToString { it.displayName } + "."
+            },
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
+        Spacer(Modifier.height(16.dp))
+        val hiddenPages = preferences.desktop.hiddenDestinations
+        ToggleChips(
+            "In the sidebar",
+            HIDEABLE_DESTINATIONS,
+            on = { sidebarShows(it, hiddenPages) },
+            name = { it.sidebarLabel() },
+            icon = { it.sidebarIcon() },
+        ) { destination, shown ->
+            state.updateDesktop { copy(hiddenDestinations = if (shown) hiddenDestinations - destination else hiddenDestinations + destination) }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Home and Settings are always there. A page left out is still a key away, since 1 to 8 go to each " +
+                "in the sidebar's order, and the player bar still opens now playing and the queue.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
     }
 }
 
@@ -3880,7 +4077,7 @@ internal fun NowPlayingSettingsCard(preferences: NoctoriumPreferences, state: Ap
 }
 
 @Composable
-private fun CardHeading(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String) {
+internal fun CardHeading(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(9.dp))
@@ -3891,7 +4088,7 @@ private fun CardHeading(icon: androidx.compose.ui.graphics.vector.ImageVector, t
 /** A labelled row of pills. Generic so every choice in this panel looks and behaves identically. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun <T> ChoiceRow(
+internal fun <T> ChoiceRow(
     label: String,
     options: List<T>,
     selected: T,
@@ -3928,13 +4125,15 @@ private fun <T> ChoiceRow(
 }
 
 @Composable
-private fun ToggleRow(title: String, description: String, checked: Boolean, change: (Boolean) -> Unit) {
+internal fun ToggleRow(title: String, description: String, checked: Boolean, enabled: Boolean = true, change: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         }
-        Switch(checked, change)
+        // A gap, so a description long enough to wrap does not run right up against the switch.
+        Spacer(Modifier.width(16.dp))
+        Switch(checked, change, enabled = enabled)
     }
 }
 
@@ -4046,9 +4245,12 @@ private fun HexField(label: String, value: String, change: (String) -> Unit) {
 }
 
 @Composable
-private fun AccentSwatch(option: AccentPreset, themeAccent: Color, selected: Boolean, choose: () -> Unit) {
-    // The theme's own accent is shown as itself, since it is a real colour; only the artwork option has none.
-    val colour = option.argb?.let { Color(it) } ?: themeAccent.takeIf { option == AccentPreset.THEME }
+private fun AccentSwatch(option: AccentPreset, themeAccent: Color, customAccent: Color, selected: Boolean, choose: () -> Unit) {
+    // The theme's own accent is shown as itself, since it is a real colour, and so is the listener's own;
+    // only the artwork option has none.
+    val colour = option.argb?.let { Color(it) }
+        ?: themeAccent.takeIf { option == AccentPreset.THEME }
+        ?: customAccent.takeIf { option == AccentPreset.CUSTOM }
     Surface(
         onClick = choose,
         shape = CircleShape,
@@ -4062,6 +4264,15 @@ private fun AccentSwatch(option: AccentPreset, themeAccent: Color, selected: Boo
         Box(Modifier.padding(5.dp), contentAlignment = Alignment.Center) {
             if (colour != null) {
                 Box(Modifier.fillMaxSize().clip(CircleShape).background(colour))
+                // A dropper on the listener's own, which is the one swatch that opens something.
+                if (option == AccentPreset.CUSTOM) {
+                    Icon(
+                        Icons.Default.Colorize,
+                        "Your own colour",
+                        Modifier.size(14.dp),
+                        tint = if (colour.luminance() > .45f) Color.Black.copy(alpha = .7f) else Color.White,
+                    )
+                }
             } else {
                 // The artwork option shows a spectrum rather than a single colour, since it has none of its own.
                 Box(
@@ -5383,6 +5594,23 @@ internal fun StartupSettingsPanel(preferences: NoctoriumPreferences, state: AppS
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
             )
+        }
+
+        SettingsPanelCard {
+            CardHeading(Icons.Default.NotificationsActive, "Announcing tracks")
+            Spacer(Modifier.height(12.dp))
+            ToggleRow(
+                "Say what is playing when a song starts",
+                if (trayAvailable) {
+                    "A small note from the tray with the title and the artist. Not while you are looking at " +
+                        "Noctorium, and not for the same song twice in a row. The note comes from Noctorium's " +
+                        "icon, so the icon stays in the tray while this is on."
+                } else {
+                    "This desktop has no system tray for the note to come from."
+                },
+                preferences.desktop.announceTracks && trayAvailable,
+                enabled = trayAvailable,
+            ) { on -> state.updateDesktop { copy(announceTracks = on) } }
         }
 
         SettingsPanelCard {

@@ -2,11 +2,14 @@ package app.noctorium.ui
 
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.font.FontFamily
+import app.noctorium.settings.FontChoice
 import app.noctorium.settings.ThemeColours
 import app.noctorium.settings.ThemePreset
 
@@ -98,5 +101,43 @@ fun noctoriumColorScheme(theme: ThemeColours, accent: Color): ColorScheme {
         /* surfaceContainerHighest = */ card.mix(text, .06f),
         /* surfaceContainerLow = */ panel.mix(background, .5f),
         /* surfaceContainerLowest = */ background,
+    )
+}
+
+/** The typeface a [FontChoice] means here, or null for the system's own, which is what Material uses unasked. */
+fun FontChoice.fontFamily(): FontFamily? = when (this) {
+    FontChoice.DEFAULT -> null
+    FontChoice.SERIF -> FontFamily.Serif
+    FontChoice.MONO -> FontFamily.Monospace
+}
+
+/**
+ * Material's type scale, set in the chosen typeface.
+ *
+ * Every style is given the family rather than only the body ones, because the menus, the buttons and the
+ * chips each take a different style from the scale, and a typeface that stopped at the edge of a button
+ * would look like a mistake. The default choice returns Material's own scale untouched, which is exactly
+ * what the window used before there was a choice. Sizes are left alone: the text size setting already
+ * scales every size there is, through the density.
+ */
+fun noctoriumTypography(font: FontChoice): Typography {
+    val base = Typography()
+    val family = font.fontFamily() ?: return base
+    return base.copy(
+        displayLarge = base.displayLarge.copy(fontFamily = family),
+        displayMedium = base.displayMedium.copy(fontFamily = family),
+        displaySmall = base.displaySmall.copy(fontFamily = family),
+        headlineLarge = base.headlineLarge.copy(fontFamily = family),
+        headlineMedium = base.headlineMedium.copy(fontFamily = family),
+        headlineSmall = base.headlineSmall.copy(fontFamily = family),
+        titleLarge = base.titleLarge.copy(fontFamily = family),
+        titleMedium = base.titleMedium.copy(fontFamily = family),
+        titleSmall = base.titleSmall.copy(fontFamily = family),
+        bodyLarge = base.bodyLarge.copy(fontFamily = family),
+        bodyMedium = base.bodyMedium.copy(fontFamily = family),
+        bodySmall = base.bodySmall.copy(fontFamily = family),
+        labelLarge = base.labelLarge.copy(fontFamily = family),
+        labelMedium = base.labelMedium.copy(fontFamily = family),
+        labelSmall = base.labelSmall.copy(fontFamily = family),
     )
 }

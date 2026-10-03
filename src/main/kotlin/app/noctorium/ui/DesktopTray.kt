@@ -77,6 +77,16 @@ class DesktopTray(
         if (installed) icon.displayMessage(title, message, TrayIcon.MessageType.INFO)
     }
 
+    /**
+     * The song that has just started, as a note from the tray: its title, and its artist beneath.
+     *
+     * Without the information symbol the note above carries, since a new song is not news about Noctorium.
+     * Shortened the way the tooltip is, because the system cuts a long note off wherever it likes.
+     */
+    fun announce(title: String, artist: String?) {
+        if (installed) icon.displayMessage(title.take(60), artist?.takeIf { it.isNotBlank() }?.take(120).orEmpty(), TrayIcon.MessageType.NONE)
+    }
+
     override fun close() {
         if (installed) runCatching { SystemTray.getSystemTray().remove(icon) }
         installed = false

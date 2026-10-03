@@ -78,6 +78,8 @@ import app.noctorium.playback.PlaybackStatus
 import app.noctorium.playback.QueueState
 import app.noctorium.playback.RepeatMode
 import app.noctorium.settings.PlayerBarPosition
+import app.noctorium.settings.PlayerBarStyle
+import app.noctorium.settings.PlayerButton
 import app.noctorium.settings.TimeDisplay
 
 /*
@@ -106,6 +108,7 @@ internal fun CenteredPlayerBar(queue: QueueState, playback: PlaybackState, state
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val middle = (maxWidth * .42f).coerceIn(300.dp, 560.dp)
             val narrow = maxWidth < 900.dp
+            val shown = playerBarButtons(PlayerBarStyle.CENTERED, narrow, preferences.desktop.hiddenPlayerButtons)
             Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     BarCover(current, 52.dp, 10.dp, state)
@@ -113,12 +116,12 @@ internal fun CenteredPlayerBar(queue: QueueState, playback: PlaybackState, state
                     BarTitle(current, playback, Modifier.weight(1f, fill = false), state = state)
                     current?.let { track ->
                         Spacer(Modifier.width(4.dp))
-                        LikeButton(track, state, size = 34.dp)
+                        if (PlayerButton.LIKE in shown) LikeButton(track, state, size = 34.dp)
                         if (!narrow) DownloadButton(track, state, size = 34.dp)
                     }
                 }
                 Column(Modifier.width(middle), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Transport(queue, playback, state, playSize = 40.dp, modes = true)
+                    Transport(queue, playback, state, playSize = 40.dp, shown = shown)
                     PlaybackProgressBar(
                         playback = playback,
                         onSeek = state::seekTo,
@@ -128,7 +131,7 @@ internal fun CenteredPlayerBar(queue: QueueState, playback: PlaybackState, state
                     )
                 }
                 Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                    BarTools(queue, playback, state, lyrics = !narrow)
+                    BarTools(queue, playback, state, shown)
                 }
             }
         }
@@ -164,12 +167,17 @@ internal fun SlimPlayerBar(queue: QueueState, playback: PlaybackState, state: Ap
             if (!atTop && !inGlass) Hairline(playback, state::seekTo)
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val narrow = maxWidth < 960.dp
+                val shown = playerBarButtons(
+                    if (controlsFirst) PlayerBarStyle.SLIM_LEFT else PlayerBarStyle.SLIM,
+                    narrow,
+                    preferences.desktop.hiddenPlayerButtons,
+                )
                 Row(
                     Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val controls: @Composable () -> Unit = {
-                        Transport(queue, playback, state, playSize = 34.dp, modes = true, buttonSize = 30.dp)
+                        Transport(queue, playback, state, playSize = 34.dp, shown = shown, buttonSize = 30.dp)
                     }
                     if (controlsFirst) {
                         controls()
@@ -188,10 +196,10 @@ internal fun SlimPlayerBar(queue: QueueState, playback: PlaybackState, state: Ap
                     Spacer(Modifier.width(8.dp))
                     if (!controlsFirst) controls()
                     current?.let { track ->
-                        LikeButton(track, state, size = 32.dp)
+                        if (PlayerButton.LIKE in shown) LikeButton(track, state, size = 32.dp)
                         if (!narrow) DownloadButton(track, state, size = 32.dp)
                     }
-                    BarTools(queue, playback, state, lyrics = !narrow)
+                    BarTools(queue, playback, state, shown)
                 }
             }
             if (atTop && !inGlass) Hairline(playback, state::seekTo)
@@ -230,6 +238,7 @@ internal fun SpotlightPlayerBar(queue: QueueState, playback: PlaybackState, stat
         ) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val narrow = maxWidth < 900.dp
+                val shown = playerBarButtons(PlayerBarStyle.SPOTLIGHT, narrow, preferences.desktop.hiddenPlayerButtons)
                 Row(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     BarCover(current, 92.dp, 14.dp, state)
                     Spacer(Modifier.width(18.dp))
@@ -245,10 +254,10 @@ internal fun SpotlightPlayerBar(queue: QueueState, playback: PlaybackState, stat
                         )
                     }
                     Spacer(Modifier.width(18.dp))
-                    Transport(queue, playback, state, playSize = 52.dp, modes = true, buttonSize = 40.dp)
+                    Transport(queue, playback, state, playSize = 52.dp, shown = shown, buttonSize = 40.dp)
                     Spacer(Modifier.width(10.dp))
-                    current?.let { LikeButton(it, state, size = 36.dp) }
-                    BarTools(queue, playback, state, lyrics = !narrow)
+                    if (PlayerButton.LIKE in shown) current?.let { LikeButton(it, state, size = 36.dp) }
+                    BarTools(queue, playback, state, shown)
                 }
             }
         }
@@ -364,20 +373,20 @@ internal fun PlayPauseIcon(playing: Boolean, modifier: Modifier = Modifier, tint
     }
 }
 
-/** Previous, play and next, with shuffle and repeat either side when [modes] is asked for. */
+/** Previous, play and next, with shuffle and repeat either side when the bar has them in [shown]. */
 @Composable
 private fun Transport(
     queue: QueueState,
     playback: PlaybackState,
     state: AppState,
     playSize: Dp,
-    modes: Boolean,
+    shown: Set<PlayerButton>,
     buttonSize: Dp = 36.dp,
 ) {
     val lit = MaterialTheme.colorScheme.primary
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        if (modes) {
+        if (PlayerButton.SHUFFLE in shown) {
             IconButton(state::toggleShuffle, Modifier.size(buttonSize)) {
                 Icon(Icons.Default.Shuffle, "Shuffle", Modifier.size(18.dp), tint = if (queue.shuffleEnabled) lit else quiet)
             }
@@ -395,7 +404,7 @@ private fun Transport(
         IconButton(state::next, Modifier.size(buttonSize)) {
             Icon(Icons.Default.SkipNext, "Next track", Modifier.size(buttonSize * .58f))
         }
-        if (modes) {
+        if (PlayerButton.REPEAT in shown) {
             IconButton(state::cycleRepeat, Modifier.size(buttonSize)) {
                 Icon(
                     if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
@@ -412,18 +421,21 @@ private fun Transport(
     }
 }
 
-/** Connect, the sleep timer, the queue, lyrics and volume, in the order Inline has them. */
+/**
+ * Connect, the sleep timer, the queue, lyrics and volume, in the order Inline has them -- those of them in
+ * [shown], which is the layout's own choice at its width less whatever the listener put away.
+ */
 @Composable
-private fun BarTools(queue: QueueState, playback: PlaybackState, state: AppState, lyrics: Boolean) {
-    ConnectButton(state)
-    SleepTimerButton(state)
-    QueueButton(queue, state, 34.dp)
-    if (lyrics) {
+private fun BarTools(queue: QueueState, playback: PlaybackState, state: AppState, shown: Set<PlayerButton>) {
+    if (PlayerButton.DEVICES in shown) ConnectButton(state)
+    if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
+    if (PlayerButton.QUEUE in shown) QueueButton(queue, state, 34.dp)
+    if (PlayerButton.LYRICS in shown) {
         IconButton({ state.navigate(Destination.NOW_PLAYING) }, Modifier.size(34.dp)) {
             Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-    VolumeControl(playback, state)
+    if (PlayerButton.VOLUME in shown) VolumeControl(playback, state)
 }
 
 @Composable

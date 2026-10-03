@@ -26,12 +26,15 @@ import app.noctorium.settings.AppDirectories
 import app.noctorium.ui.AppIcon
 import app.noctorium.ui.DesktopTray
 import app.noctorium.ui.NoctoriumApp
+import app.noctorium.ui.TrackAnnouncer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import java.awt.Desktop
 import java.awt.Dimension
 import java.awt.Frame
 import java.awt.GraphicsEnvironment
+import java.awt.KeyboardFocusManager
+import java.util.concurrent.atomic.AtomicReference
 
 fun main(args: Array<String>) {
     // Answers its questions and leaves, before anything else -- including the claim below, so it can run
@@ -114,14 +117,28 @@ fun main(args: Array<String>) {
                 null
             }
         }
-        // In the tray whenever closing the window leads there, and whenever the window is waiting in it.
-        val inTray = tray != null && (desktop.closeToTray || !visible)
+        // In the tray whenever closing the window leads there, and whenever the window is waiting in it; and
+        // while tracks are announced, because the note comes from the icon and there is no note without one.
+        val inTray = tray != null && (desktop.closeToTray || !visible || desktop.announceTracks)
         DisposableEffect(tray, inTray) {
             if (inTray) tray?.install()
             onDispose { tray?.close() }
         }
         LaunchedEffect(tray, playback.track, playback.status) {
             tray?.show(playback.track?.title, playback.track?.artistLine, playback.status == PlaybackStatus.PLAYING)
+        }
+
+        // A note from the tray when a new song starts, if the listener asked for one. Told about every change
+        // to what is playing; the announcer decides which of them is a start worth announcing, and the window
+        // is asked whether it is in front at that moment rather than watched the rest of the time.
+        val frame = remember { AtomicReference<java.awt.Window?>(null) }
+        val announcer = remember { TrackAnnouncer() }
+        LaunchedEffect(tray, playback.track?.queueKey, playback.status == PlaybackStatus.PLAYING) {
+            val track = playback.track ?: return@LaunchedEffect
+            val inFront = visible && !windowState.isMinimized && isInFront(frame.get())
+            if (announcer.shouldAnnounce(track.queueKey, playback.status == PlaybackStatus.PLAYING, desktop.announceTracks, inFront)) {
+                tray?.announce(track.title, track.artistLine)
+            }
         }
 
         val wake by wakes.collectAsState()
@@ -181,6 +198,7 @@ fun main(args: Array<String>) {
             state = windowState,
         ) {
             window.minimumSize = Dimension(760, 560)
+            LaunchedEffect(window) { frame.set(window) }
             // Each size is drawn at its own size, so the taskbar's small icon is rendered rather than shrunk.
             window.iconImages = AppIcon.images()
             LaunchedEffect(raises) { if (raises > 0) raise(window) }
@@ -205,4 +223,14 @@ private fun raise(window: java.awt.Window) {
     window.toFront()
     window.requestFocus()
     window.isAlwaysOnTop = false
+}
+
+/**
+ * Whether Noctorium is the window being looked at: its own window is the active one, or a window of its own
+ * is -- a sign-in window opened from it still counts as looking at Noctorium.
+ */
+private fun isInFront(window: java.awt.Window?): Boolean {
+    if (window == null) return false
+    val active = KeyboardFocusManager.getCurrentKeyboardFocusManager().activeWindow ?: return false
+    return generateSequence(active) { it.owner }.any { it === window }
 }
