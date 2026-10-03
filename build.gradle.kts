@@ -307,6 +307,9 @@ val fetchPlaybackTools by tasks.registering {
     // same build, so a rebuild should not go and ask GitHub again.
     val cache = layout.buildDirectory.dir("tools-cache")
     val target = bundledToolsDir
+    // Copied into the task, because the configuration cache cannot keep a reference to the build script.
+    val onMac = isMacHost
+    val onArm = isArmHost
 
     doLast {
         val cacheDir = cache.get().asFile.apply { mkdirs() }
@@ -343,7 +346,7 @@ val fetchPlaybackTools by tasks.registering {
                 ?: error("No asset matching $match in the latest $repository release")
         }
 
-        fun mac(vararg command: String) {
+        fun runTool(vararg command: String) {
             val process = ProcessBuilder(*command).redirectErrorStream(true).start()
             val output = process.inputStream.bufferedReader().use { it.readText() }
             check(process.waitFor() == 0) { "${command.joinToString(" ")} failed: $output" }
@@ -356,21 +359,21 @@ val fetchPlaybackTools by tasks.registering {
          * is why there are two Mac disk images. Unpacked with ditto, which keeps the permissions and the
          * signature the bundle came with.
          */
-        if (isMacHost) {
+        if (onMac) {
             val ytDlp = File(outDir, "yt-dlp")
             fetch("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos", ytDlp)
             ytDlp.setExecutable(true, false)
 
-            val architecture = if (isArmHost) "arm64" else "x86_64"
+            val architecture = if (onArm) "arm64" else "x86_64"
             val mpvUrl = latestAsset("eko5624/mpv-mac", Regex("""^mpv-$architecture-git-[0-9a-f]+\.zip$"""))
             val archive = File(cacheDir, mpvUrl.substringAfterLast('/'))
             fetch(mpvUrl, archive)
             val unpacked = File(cacheDir, "mpv-mac").apply { deleteRecursively(); mkdirs() }
-            mac("/usr/bin/ditto", "-x", "-k", archive.absolutePath, unpacked.absolutePath)
+            runTool("/usr/bin/ditto", "-x", "-k", archive.absolutePath, unpacked.absolutePath)
             val bundle = unpacked.walkTopDown().firstOrNull { it.isDirectory && it.name == "mpv.app" }
                 ?: error("The mpv archive contained no mpv.app")
             val placed = File(outDir, "mpv.app").apply { deleteRecursively() }
-            mac("/usr/bin/ditto", bundle.absolutePath, placed.absolutePath)
+            runTool("/usr/bin/ditto", bundle.absolutePath, placed.absolutePath)
             println("Bundled: yt-dlp (${ytDlp.length() / 1_048_576} MB), mpv.app from ${archive.name}")
             return@doLast
         }
@@ -430,13 +433,6 @@ listOf(
     tasks.matching { it.name == name }.configureEach { dependsOn(fetchPlaybackTools) }
 }
 
-/** Runs one of the Mac's own tools to the end, failing the build with what it said if it fails. */
-fun macTool(vararg command: String) {
-    val process = ProcessBuilder(*command).redirectErrorStream(true).start()
-    val output = process.inputStream.bufferedReader().use { it.readText() }
-    check(process.waitFor() == 0) { "${command.joinToString(" ")} failed: $output" }
-}
-
 /**
  * The Mac's icon, an .icns, made from the 512 pixel png the Linux packages use.
  *
@@ -450,8 +446,16 @@ val macIcon by tasks.registering {
     val icns = layout.buildDirectory.file("macIcon/noctorium.icns")
     inputs.file(png)
     outputs.file(icns)
-    onlyIf { isMacHost }
+    val onMac = isMacHost
+    onlyIf { onMac }
     doLast {
+        // Defined here, inside the action, so that no task holds a reference to the build script: the
+        // configuration cache refuses to store one.
+        fun macTool(vararg command: String) {
+            val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            check(process.waitFor() == 0) { "${command.joinToString(" ")} failed: $output" }
+        }
         val set = File(temporaryDir, "noctorium.iconset").apply { deleteRecursively(); mkdirs() }
         listOf(
             "16x16" to 16, "16x16@2x" to 32, "32x32" to 32, "32x32@2x" to 64, "128x128" to 128,
@@ -481,11 +485,21 @@ val macDmg by tasks.registering {
     group = "distribution"
     description = "Builds the macOS disk image from the application bundle. Only on a Mac."
     dependsOn("createDistributable")
-    onlyIf { isMacHost }
+    val onMac = isMacHost
+    val shownVersion = packagedVersion
+    val build = buildNumber
+    onlyIf { onMac }
     val app = layout.buildDirectory.dir("compose/binaries/main/app/Noctorium.app")
     val image = layout.buildDirectory.file("compose/binaries/main/dmg/Noctorium-$appVersion-macos-$macArch.dmg")
     outputs.file(image)
     doLast {
+        // Defined here, inside the action, so that no task holds a reference to the build script: the
+        // configuration cache refuses to store one.
+        fun macTool(vararg command: String) {
+            val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            check(process.waitFor() == 0) { "${command.joinToString(" ")} failed: $output" }
+        }
         val bundle = app.get().asFile
         check(bundle.isDirectory) { "No application bundle at $bundle" }
         val tools = File(bundle, "Contents/app/resources/bin")
@@ -493,8 +507,8 @@ val macDmg by tasks.registering {
         File(tools, "mpv.app/Contents/MacOS/mpv").takeIf { it.isFile }?.setExecutable(true, false)
 
         val plist = File(bundle, "Contents/Info.plist").absolutePath
-        macTool("/usr/libexec/PlistBuddy", "-c", "Set :CFBundleShortVersionString $packagedVersion", plist)
-        macTool("/usr/libexec/PlistBuddy", "-c", "Set :CFBundleVersion $buildNumber", plist)
+        macTool("/usr/libexec/PlistBuddy", "-c", "Set :CFBundleShortVersionString $shownVersion", plist)
+        macTool("/usr/libexec/PlistBuddy", "-c", "Set :CFBundleVersion $build", plist)
 
         // Extended attributes picked up on the way -- a quarantine mark, Finder information -- make codesign
         // refuse with "resource fork, Finder information, or similar detritus not allowed".
