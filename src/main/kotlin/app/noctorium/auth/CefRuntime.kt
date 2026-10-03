@@ -52,4 +52,22 @@ internal object CefRuntime {
             builder.build().also { app = it }
         }
     }
+
+    /**
+     * Shuts Chromium down and waits until it says it has, up to [timeoutMillis].
+     *
+     * A process that simply ends while Chromium is still closing a browser can be taken down by Chromium on
+     * the way out -- on a Mac it was, inside its font code, after everything it had been asked to do had
+     * succeeded. Not for the interface thread: on a Mac, Chromium finishes shutting down on that thread, so
+     * waiting there would wait for itself.
+     */
+    fun shutdown(timeoutMillis: Long) {
+        val running = app ?: return
+        app = null
+        runCatching { running.dispose() }
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (CefApp.getState() != CefApp.CefAppState.TERMINATED && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50)
+        }
+    }
 }

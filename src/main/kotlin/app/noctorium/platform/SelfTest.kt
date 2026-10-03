@@ -1,6 +1,7 @@
 package app.noctorium.platform
 
 import app.noctorium.auth.CefRequester
+import app.noctorium.auth.CefRuntime
 import app.noctorium.playback.BackendLocator
 import app.noctorium.settings.AppDirectories
 import app.noctorium.settings.SecureCredentialStore
@@ -54,19 +55,19 @@ object SelfTest {
             val folder = SettingsRepository.defaultSettingsPath()?.parent?.resolve("chromium")
                 ?: error("nowhere to unpack it")
             val requester = CefRequester(folder)
-            try {
-                val reply = runBlocking { withTimeout(120_000) { requester.send("GET", PUBLIC_READ, emptyMap(), null) } }
-                    ?: error("started, but the page never answered")
-                // Any answer is the browser working: SoundCloud judging the request is past everything that
-                // can go wrong on the machine.
-                "answered HTTP ${reply.status}"
-            } finally {
-                runCatching { requester.close() }
-            }
+            val reply = runBlocking { withTimeout(120_000) { requester.send("GET", PUBLIC_READ, emptyMap(), null) } }
+                ?: error("started, but the page never answered")
+            // Any answer is the browser working: SoundCloud judging the request is past everything that can go
+            // wrong on the machine.
+            "answered HTTP ${reply.status}"
         }
+        // Chromium is shut down, and waited for, before the process ends: ending it while Chromium was still
+        // closing its browser crashed it on the way out on a Mac, after every check above had passed. The
+        // browser goes with it.
+        CefRuntime.shutdown(timeoutMillis = 15_000)
         say(if (failed) "SELFTEST FAILED" else "SELFTEST PASSED")
         System.out.flush()
-        // Chromium keeps threads of its own that nothing here is waiting for.
+        // Whatever else is still running -- the hidden window Chromium was given -- is nothing to wait for.
         Runtime.getRuntime().halt(if (failed) 1 else 0)
         error("unreachable")
     }
