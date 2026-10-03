@@ -54,6 +54,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -138,7 +139,12 @@ import kotlin.math.roundToInt
  * Stacked has never had a lyrics button and gives up the volume when it is narrow, and the newer layouts
  * give up the lyrics button when narrow. [narrow] is whichever width the layout itself calls narrow.
  */
-internal fun playerBarButtons(style: PlayerBarStyle, narrow: Boolean, hidden: Set<PlayerButton>): Set<PlayerButton> {
+internal fun playerBarButtons(
+    style: PlayerBarStyle,
+    narrow: Boolean,
+    hidden: Set<PlayerButton>,
+    inUse: Set<PlayerButton> = emptySet(),
+): Set<PlayerButton> {
     val drawn = PlayerButton.entries.toMutableSet()
     when (style) {
         PlayerBarStyle.INLINE -> Unit
@@ -149,7 +155,20 @@ internal fun playerBarButtons(style: PlayerBarStyle, narrow: Boolean, hidden: Se
         PlayerBarStyle.CENTERED, PlayerBarStyle.SLIM, PlayerBarStyle.SLIM_LEFT, PlayerBarStyle.SPOTLIGHT ->
             if (narrow) drawn -= PlayerButton.LYRICS
     }
-    return drawn - hidden
+    // A button showing something under way stays, put away or not: a sleep timer counting down, or the music
+    // playing on another device, is not something to lose sight of because its button was hidden.
+    return drawn - (hidden - inUse)
+}
+
+/** The buttons showing something under way just now, which [playerBarButtons] keeps whatever was put away. */
+@Composable
+internal fun playerButtonsInUse(state: AppState): Set<PlayerButton> {
+    val timer by state.sleepTimer.collectAsState()
+    val connect by state.connect.collectAsState()
+    return buildSet {
+        if (timer != null) add(PlayerButton.SLEEP_TIMER)
+        if (connect.target != null) add(PlayerButton.DEVICES)
+    }
 }
 
 /** The picture each button has on the bar, so the choice in Settings looks like the thing it puts away. */

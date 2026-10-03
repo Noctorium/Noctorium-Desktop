@@ -61,6 +61,20 @@ class PersonalisationUiTest {
         assertTrue(playerBarButtons(PlayerBarStyle.SLIM, narrow = false, PlayerButton.entries.toSet()).isEmpty())
     }
 
+    @Test
+    fun `a hidden sleep timer or Connect still shows while it is in use`() {
+        val hidden = setOf(PlayerButton.SLEEP_TIMER, PlayerButton.DEVICES, PlayerButton.SHUFFLE)
+        PlayerBarStyle.entries.forEach { style ->
+            val idle = playerBarButtons(style, narrow = false, hidden)
+            assertFalse(PlayerButton.SLEEP_TIMER in idle || PlayerButton.DEVICES in idle, "$style draws them idle")
+            val busy = playerBarButtons(style, narrow = false, hidden, inUse = setOf(PlayerButton.SLEEP_TIMER, PlayerButton.DEVICES))
+            assertTrue(PlayerButton.SLEEP_TIMER in busy && PlayerButton.DEVICES in busy, "$style hides them in use")
+            assertFalse(PlayerButton.SHUFFLE in busy, "in use brings back only what is in use")
+        }
+        // In use does not add a button the layout never had.
+        assertEquals(playerBarButtons(PlayerBarStyle.STACKED, narrow = true, emptySet()), playerBarButtons(PlayerBarStyle.STACKED, narrow = true, emptySet(), PlayerButton.entries.toSet()))
+    }
+
     // --- Home ---
 
     private fun track(id: String, provider: ProviderType) = Track(

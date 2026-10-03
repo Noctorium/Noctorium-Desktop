@@ -108,7 +108,7 @@ internal fun CenteredPlayerBar(queue: QueueState, playback: PlaybackState, state
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val middle = (maxWidth * .42f).coerceIn(300.dp, 560.dp)
             val narrow = maxWidth < 900.dp
-            val shown = playerBarButtons(PlayerBarStyle.CENTERED, narrow, preferences.desktop.hiddenPlayerButtons)
+            val shown = playerBarButtons(PlayerBarStyle.CENTERED, narrow, preferences.desktop.hiddenPlayerButtons, playerButtonsInUse(state))
             Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     BarCover(current, 52.dp, 10.dp, state)
@@ -171,6 +171,7 @@ internal fun SlimPlayerBar(queue: QueueState, playback: PlaybackState, state: Ap
                     if (controlsFirst) PlayerBarStyle.SLIM_LEFT else PlayerBarStyle.SLIM,
                     narrow,
                     preferences.desktop.hiddenPlayerButtons,
+                    playerButtonsInUse(state),
                 )
                 Row(
                     Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 12.dp),
@@ -238,7 +239,7 @@ internal fun SpotlightPlayerBar(queue: QueueState, playback: PlaybackState, stat
         ) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val narrow = maxWidth < 900.dp
-                val shown = playerBarButtons(PlayerBarStyle.SPOTLIGHT, narrow, preferences.desktop.hiddenPlayerButtons)
+                val shown = playerBarButtons(PlayerBarStyle.SPOTLIGHT, narrow, preferences.desktop.hiddenPlayerButtons, playerButtonsInUse(state))
                 Row(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     BarCover(current, 92.dp, 14.dp, state)
                     Spacer(Modifier.width(18.dp))

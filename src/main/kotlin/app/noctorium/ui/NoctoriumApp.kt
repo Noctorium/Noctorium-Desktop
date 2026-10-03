@@ -1934,7 +1934,7 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
     val current = queue.current
     var addToPlaylist by remember { mutableStateOf(false) }
     val library by state.library.collectAsState()
-    val shown = playerBarButtons(PlayerBarStyle.INLINE, narrow = false, preferences.desktop.hiddenPlayerButtons)
+    val shown = playerBarButtons(PlayerBarStyle.INLINE, narrow = false, preferences.desktop.hiddenPlayerButtons, playerButtonsInUse(state))
 
     if (addToPlaylist && current != null) {
         AddToPlaylistDialog(current, library.localPlaylists, state) { addToPlaylist = false }
@@ -2098,7 +2098,7 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 760.dp
-            val shown = playerBarButtons(PlayerBarStyle.STACKED, narrow = compact, playerPreferences.desktop.hiddenPlayerButtons)
+            val shown = playerBarButtons(PlayerBarStyle.STACKED, narrow = compact, playerPreferences.desktop.hiddenPlayerButtons, playerButtonsInUse(state))
             Column {
                 // As above: the rule marks the edge the content is on.
                 if (!stackedAtTop && !LocalInGlass.current) HorizontalDivider(color = stackedRule)
@@ -3942,7 +3942,7 @@ internal fun PlayerButtonsSetting(preferences: NoctoriumPreferences, state: AppS
         Spacer(Modifier.height(6.dp))
         Text(
             "Lit ones are on the bar, in every layout. Play, pause and the two skips always stay, and so do " +
-                "download and add to playlist. Connect only appears once there is a device to play on.",
+                "download and add to playlist. Connect only appears once there is a device to play on, and a hidden sleep timer or Connect still shows while it is in use.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 11.sp,
         )
