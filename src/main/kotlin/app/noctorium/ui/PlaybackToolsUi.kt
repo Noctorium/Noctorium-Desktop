@@ -36,7 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.noctorium.playback.hostPlatform
-import app.noctorium.playback.linuxInstallHint
+import app.noctorium.playback.manualInstallHint
 import app.noctorium.playback.PlaybackTool
 import app.noctorium.playback.PlaybackToolInstaller
 import app.noctorium.playback.PlaybackToolsState
@@ -56,7 +56,9 @@ import kotlinx.coroutines.launch
 internal fun PlaybackToolsPanel() {
     val tools by PlaybackToolInstaller.state.collectAsState()
     val scope = rememberCoroutineScope()
-    val windows = hostPlatform().isWindows
+    val platform = hostPlatform()
+    // Where Noctorium can fetch mpv itself: Windows and the Mac, which have builds of it to download.
+    val windows = platform.isWindows || platform.isMac
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = chromeBottom())) {
         SettingsPanelCard {
@@ -118,8 +120,10 @@ internal fun PlaybackToolsPanel() {
             Text("Where these come from", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             Spacer(Modifier.height(6.dp))
             AccountFact("yt-dlp is downloaded from its own releases and checked against the checksum published with it.")
-            if (windows) {
+            if (platform.isWindows) {
                 AccountFact("mpv is downloaded from the Windows builds mpv.org points at, and unpacked with the tar that ships in Windows.")
+            } else if (platform.isMac) {
+                AccountFact("mpv comes inside Noctorium, from the macOS builds mpv.org points at; one installed with Homebrew is used if it is there.")
             } else {
                 AccountFact("mpv comes from your distribution's package manager, which is the only sensible place for it on Linux.")
             }
@@ -193,7 +197,7 @@ private fun describe(tool: PlaybackTool, tools: PlaybackToolsState, windows: Boo
         ToolOrigin.SYSTEM -> "${tool.purpose} — already on this machine at ${status.path}"
         ToolOrigin.MISSING -> when {
             windows || tool == PlaybackTool.YT_DLP -> "${tool.purpose} — not installed"
-            else -> "${tool.purpose} — not installed. " + linuxInstallHint(tool)
+            else -> "${tool.purpose} — not installed. " + (manualInstallHint(tool) ?: "")
         }
     }
 }

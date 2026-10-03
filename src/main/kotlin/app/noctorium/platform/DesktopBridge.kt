@@ -29,14 +29,21 @@ class DesktopBridge : SystemBridge {
      * Selects the file in Explorer rather than merely opening the folder it sits in.
      *
      * A folder with four hundred things in it, opened at the top, has not shown anybody the file they just
-     * saved. Explorer is asked directly because awt has no way to express "and highlight this one"; where
-     * that is not available — another platform, or Explorer missing — opening the folder is the fallback.
+     * saved. Explorer, or the Finder on a Mac, is asked directly because awt has no way to express "and highlight
+     * this one"; where that is not available — Linux, or Explorer missing — opening the folder is the fallback.
      */
     override fun revealFile(path: Path) {
-        val isWindows = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
-        val opened = isWindows && runCatching {
-            ProcessBuilder("explorer.exe", "/select,${path.toAbsolutePath()}").start()
-        }.isSuccess
+        val os = System.getProperty("os.name").orEmpty()
+        val opened = runCatching {
+            when {
+                os.startsWith("Windows", ignoreCase = true) ->
+                    ProcessBuilder("explorer.exe", "/select,${path.toAbsolutePath()}").start()
+                // The Finder does the same with open -R.
+                os.startsWith("Mac", ignoreCase = true) ->
+                    ProcessBuilder("/usr/bin/open", "-R", path.toAbsolutePath().toString()).start()
+                else -> null
+            } != null
+        }.getOrDefault(false)
         if (opened) return
         runCatching {
             val folder = path.parent ?: return

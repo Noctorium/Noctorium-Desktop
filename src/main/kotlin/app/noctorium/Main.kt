@@ -17,6 +17,8 @@ import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import app.noctorium.platform.LaunchAtLogin
+import app.noctorium.platform.MacBundle
+import app.noctorium.platform.SelfTest
 import app.noctorium.platform.SingleInstance
 import app.noctorium.playback.PlaybackStatus
 import app.noctorium.settings.AppDirectories
@@ -25,11 +27,17 @@ import app.noctorium.ui.DesktopTray
 import app.noctorium.ui.NoctoriumApp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import java.awt.Desktop
 import java.awt.Dimension
 import java.awt.Frame
 import java.awt.GraphicsEnvironment
 
 fun main(args: Array<String>) {
+    // Answers its questions and leaves, before anything else -- including the claim below, so it can run
+    // beside a copy that is already open.
+    if (SelfTest.ARGUMENT in args) SelfTest.run()
+    MacBundle.tidy()
+
     // Started with the computer into the tray: no window until somebody asks for one.
     val intoTray = LaunchAtLogin.TRAY_ARGUMENT in args
     // Counts the times a later start asked this one to show itself; the window follows the count.
@@ -101,6 +109,26 @@ fun main(args: Array<String>) {
 
         val wake by wakes.collectAsState()
         LaunchedEffect(wake) { if (wake > 0) open() }
+
+        // On a Mac, Quit in the menu or Command-Q goes through the system rather than through the window,
+        // so the player is shut down here before the process ends; and clicking the Dock icon of a copy
+        // whose window was closed into the menu bar brings the window back, as a Mac application does.
+        DisposableEffect(Unit) {
+            if (MacBundle.isMac && Desktop.isDesktopSupported()) {
+                val system = Desktop.getDesktop()
+                if (system.isSupported(Desktop.Action.APP_QUIT_HANDLER)) {
+                    system.setQuitHandler { _, response ->
+                        runCatching { appState.close() }
+                        runCatching { instance?.close() }
+                        response.performQuit()
+                    }
+                }
+                if (system.isSupported(Desktop.Action.APP_EVENT_REOPENED)) {
+                    system.addAppEventListener(java.awt.desktop.AppReopenedListener { open() })
+                }
+            }
+            onDispose { }
+        }
 
         Window(
             onCloseRequest = {

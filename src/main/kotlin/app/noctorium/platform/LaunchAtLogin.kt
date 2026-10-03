@@ -79,6 +79,7 @@ class LaunchAtLogin(
                 !System.getenv("FLATPAK_ID").isNullOrBlank() -> null
                 os.startsWith("Windows", ignoreCase = true) -> WindowsRunEntry()
                 os.startsWith("Linux", ignoreCase = true) -> XdgAutostartEntry.forThisUser()
+                os.startsWith("Mac", ignoreCase = true) -> LaunchAgentEntry.forThisUser()
                 else -> null
             }
             LaunchAtLogin(entry, launcher)
@@ -185,5 +186,74 @@ class XdgAutostartEntry(private val folder: Path) : StartupEntry {
                 ?: return null
             return XdgAutostartEntry(config.resolve("autostart"))
         }
+    }
+}
+
+/**
+ * A launch agent: the property list in `~/Library/LaunchAgents` that macOS reads at sign-in.
+ *
+ * It names the launcher inside the application bundle and the arguments, as separate strings, so a path with
+ * spaces in it needs no quoting. macOS lists it under Login Items as something that runs in the background,
+ * where it can be switched off; switched off that way, the file stays and launchd simply does not run it,
+ * which this cannot see -- the settings page then shows it on, which is the honest reading of the file.
+ */
+class LaunchAgentEntry(private val folder: Path) : StartupEntry {
+    private val file: Path get() = folder.resolve(FILE_NAME)
+
+    override fun read(): String? {
+        if (!Files.isRegularFile(file)) return null
+        val text = Files.readString(file)
+        val arguments = Regex("""<key>ProgramArguments</key>\s*<array>(.*?)</array>""", RegexOption.DOT_MATCHES_ALL)
+            .find(text)?.groupValues?.get(1) ?: return null
+        val parts = Regex("""<string>(.*?)</string>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(arguments).map { unescape(it.groupValues[1]) }.toList()
+        val program = parts.firstOrNull() ?: return null
+        return LaunchAtLogin.command(program, tray = LaunchAtLogin.TRAY_ARGUMENT in parts.drop(1))
+    }
+
+    override fun write(command: String) {
+        val program = Regex("^\"([^\"]+)\"").find(command)?.groupValues?.get(1) ?: command.substringBefore(' ')
+        val arguments = listOf(program) + command.removePrefix("\"$program\"").trim().split(' ').filter(String::isNotBlank)
+        Files.createDirectories(folder)
+        // Line by line rather than one indented block: the XML declaration has to be the very first thing in
+        // the file, and the number of arguments varies.
+        val lines = listOf(
+            """<?xml version="1.0" encoding="UTF-8"?>""",
+            """<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">""",
+            """<plist version="1.0">""",
+            "<dict>",
+            "    <key>Label</key>",
+            "    <string>$LABEL</string>",
+            "    <key>ProgramArguments</key>",
+            "    <array>",
+        ) + arguments.map { "        <string>${escape(it)}</string>" } + listOf(
+            "    </array>",
+            "    <key>RunAtLoad</key>",
+            "    <true/>",
+            "    <key>ProcessType</key>",
+            "    <string>Interactive</string>",
+            "</dict>",
+            "</plist>",
+        )
+        Files.writeString(file, lines.joinToString("\n", postfix = "\n"))
+    }
+
+    override fun remove() {
+        Files.deleteIfExists(file)
+    }
+
+    companion object {
+        const val LABEL = "app.noctorium.desktop"
+        const val FILE_NAME = "$LABEL.plist"
+
+        fun forThisUser(): LaunchAgentEntry? =
+            System.getProperty("user.home")?.takeIf(String::isNotBlank)
+                ?.let { LaunchAgentEntry(Path.of(it, "Library", "LaunchAgents")) }
+
+        private fun escape(text: String) =
+            text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+
+        private fun unescape(text: String) =
+            text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&")
     }
 }

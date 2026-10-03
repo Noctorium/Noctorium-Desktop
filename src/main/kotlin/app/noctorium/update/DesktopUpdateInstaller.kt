@@ -1,7 +1,9 @@
 package app.noctorium.update
 
+import app.noctorium.platform.MacBundle
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
 /**
@@ -31,6 +33,7 @@ class DesktopUpdateInstaller(
         UpdateChannel.FEDORA_PACKAGE -> runLinuxPackage(file, listOf("rpm", "--upgrade", "--force", file.toString()))
         UpdateChannel.ARCH_PACKAGE -> runLinuxPackage(file, listOf("pacman", "--upgrade", "--noconfirm", file.toString()))
         UpdateChannel.APPIMAGE -> replaceAppImage(file)
+        UpdateChannel.MAC_DMG -> replaceMacApp(file)
         else -> "This copy of Noctorium was not installed by an installer, so it cannot update itself."
     }
 
@@ -109,6 +112,72 @@ class DesktopUpdateInstaller(
         }.getOrElse { "Could not replace ${current.fileName}: ${it.message}. The new one is at $file." }
     }
 
+    /**
+     * On a Mac, the application is one folder, and updating it is putting the new folder where the old one is.
+     *
+     * The disk image is opened out of sight, its Noctorium.app copied beside the running one with ditto (which
+     * keeps everything a bundle relies on), and the two swapped by renaming -- which macOS allows while the old
+     * one is running -- so that at every moment there is a whole application in place. The one replaced is
+     * left under a hidden name until the next start clears it, because this process is still running out of
+     * it. Then the new copy is started, a moment after this one has gone so it does not find this one still
+     * holding the single-instance claim and hand itself back to it.
+     *
+     * Where the folder it sits in cannot be written -- an account that is not an administrator, with
+     * Noctorium in /Applications -- the disk image is opened in the Finder instead, for dragging across.
+     */
+    private fun replaceMacApp(file: Path): String? {
+        val bundle = MacBundle.current() ?: return "Could not tell where this copy of Noctorium is. The update is at $file."
+        val folder = bundle.parent ?: return "Could not tell where this copy of Noctorium is. The update is at $file."
+        if (!Files.isWritable(folder)) {
+            runCatching { ProcessBuilder("/usr/bin/open", file.toString()).start() }
+            return "Drag Noctorium from the window that opened into $folder to finish updating."
+        }
+        val mount = runCatching { Files.createTempDirectory("noctorium-update") }.getOrNull()
+            ?: return "Could not open the update. It is at $file."
+        if (!quietly("/usr/bin/hdiutil", "attach", "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mount.toString(), file.toString())) {
+            return "Could not open the update. It is at $file."
+        }
+        return try {
+            val incoming = mount.resolve("Noctorium.app")
+            if (!Files.isDirectory(incoming)) return "The update holds no Noctorium.app. It is at $file."
+            val staged = folder.resolve(".Noctorium.app.new")
+            MacBundle.deleteRecursively(staged)
+            if (!quietly("/usr/bin/ditto", incoming.toString(), staged.toString())) {
+                MacBundle.deleteRecursively(staged)
+                return "Could not copy the update into $folder. It is at $file."
+            }
+            quietly("/usr/bin/xattr", "-dr", "com.apple.quarantine", staged.toString())
+            val previous = MacBundle.previous(bundle)
+            MacBundle.deleteRecursively(previous)
+            Files.move(bundle, previous)
+            try {
+                Files.move(staged, bundle)
+            } catch (failure: Exception) {
+                Files.move(previous, bundle)
+                throw failure
+            }
+            ProcessBuilder("/bin/sh", "-c", "sleep 2; /usr/bin/open -n \"$0\"", bundle.toString()).start()
+            exitProcess(0)
+            @Suppress("UNREACHABLE_CODE") null
+        } catch (failure: Exception) {
+            "Could not replace Noctorium: ${failure.message}. The update is at $file."
+        } finally {
+            if (!quietly("/usr/bin/hdiutil", "detach", mount.toString())) quietly("/usr/bin/hdiutil", "detach", "-force", mount.toString())
+            runCatching { Files.deleteIfExists(mount) }
+        }
+    }
+
+    /** Runs a system tool to the end and says whether it worked, keeping its output out of the way. */
+    private fun quietly(vararg command: String): Boolean = runCatching {
+        val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+        process.inputStream.readAllBytes()
+        if (!process.waitFor(5, TimeUnit.MINUTES)) {
+            process.destroyForcibly()
+            return false
+        }
+        process.exitValue() == 0
+    }.getOrDefault(false)
+
     private fun detectChannel(): UpdateChannel {
         // The two that say so themselves, before anything else is asked: inside either, the launcher's
         // path is the sandbox's or a temporary mount's and no package manager knows it.
@@ -119,6 +188,7 @@ class DesktopUpdateInstaller(
 
         val os = System.getProperty("os.name").orEmpty().lowercase()
         if (os.startsWith("windows")) return windowsChannel(launcher)
+        if (os.startsWith("mac")) return macChannel(launcher)
         if (!os.startsWith("linux")) return UpdateChannel.UNMANAGED
 
         // Which package manager put it there, asked of the package manager rather than guessed from the
@@ -153,6 +223,18 @@ class DesktopUpdateInstaller(
         } else {
             UpdateChannel.UNMANAGED
         }
+    }
+
+    /**
+     * On a Mac, any bundle can be replaced except one that is not where it will stay: still inside the disk
+     * image it came in, or run from the read-only copy macOS makes of a quarantined application it has not
+     * been allowed to settle -- App Translocation, under /private/var/folders. Replacing either would update
+     * something that disappears, so those are told to move Noctorium into Applications first.
+     */
+    private fun macChannel(launcher: String): UpdateChannel {
+        val bundle = MacBundle.bundleOf(launcher)?.toString() ?: return UpdateChannel.UNMANAGED
+        if (bundle.startsWith("/Volumes/") || "/AppTranslocation/" in bundle) return UpdateChannel.UNMANAGED
+        return UpdateChannel.MAC_DMG
     }
 
     private fun owns(command: List<String>): Boolean = runCatching {

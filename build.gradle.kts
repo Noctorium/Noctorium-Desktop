@@ -54,6 +54,22 @@ val packagedVersion: String = appVersion.substringBefore('-').let { numeric ->
     if (parts.size >= 3) parts.take(3).joinToString(".") else "1.0.0"
 }
 
+/** The machine this build runs on, which is the only one jpackage can package for. */
+val hostOs: String = System.getProperty("os.name").lowercase()
+val isMacHost: Boolean = hostOs.startsWith("mac")
+val isArmHost: Boolean = System.getProperty("os.arch").lowercase().let { it == "aarch64" || it.startsWith("arm") }
+
+/** What a Mac build is called after: `arm64` for Apple silicon, `x64` for Intel, as the release files are. */
+val macArch: String = if (isArmHost) "arm64" else "x64"
+
+/**
+ * One number that only ever goes up, for macOS's CFBundleVersion -- the same arithmetic as the phone's
+ * versionCode, so 0.8.0 is 800 on both.
+ */
+val buildNumber: Int = packagedVersion.split('.').map(String::toInt).let { (major, minor, patch) ->
+    major * 10_000 + minor * 100 + patch
+}
+
 version = appVersion
 
 kotlin {
@@ -123,6 +139,17 @@ compose.desktop {
     application {
         mainClass = "app.noctorium.MainKt"
 
+        // Embedded Chromium reaches into the Mac half of AWT to put its browser in a window, which the module
+        // system closes off unless it is opened by name. jcefmaven asks for exactly these three; they mean
+        // nothing on Windows or Linux, where the packages do not exist, so they are only added on a Mac.
+        if (isMacHost) {
+            jvmArgs += listOf(
+                "--add-opens=java.desktop/sun.awt=ALL-UNNAMED",
+                "--add-opens=java.desktop/sun.lwawt=ALL-UNNAMED",
+                "--add-opens=java.desktop/sun.lwawt.macosx=ALL-UNNAMED",
+            )
+        }
+
         nativeDistributions {
             /*
              * Every format each platform can actually produce.
@@ -133,11 +160,9 @@ compose.desktop {
              * Rpm because Fedora was previously not served at all.
              */
             /*
-             * No Dmg. macOS refuses a bundle version whose major is 0, where msi, deb and rpm all accept
-             * one, so declaring it fails the build at configuration time for every platform while this
-             * project is still 0.x. Nothing here is built or tested on a Mac either -- the bundled
-             * Chromium is chosen per host and no runner produces one. Add it back with a macOS-specific
-             * packageVersion when there is a Mac to test on.
+             * No Dmg here: the Mac's disk image is made by macDmg below, from the application bundle, so the
+             * bundle can be given its real version and signed before it is packed -- jpackage's own disk
+             * image would be packed from a bundle carrying the stand-in version it insists on (see macOS).
              */
             targetFormats(
                 TargetFormat.Msi,
@@ -187,6 +212,21 @@ compose.desktop {
                 appCategory = "AudioVideo"
                 debMaintainer = "noctorium@users.noreply.github.com"
                 rpmLicenseType = "GPL-3.0-only"
+            }
+
+            macOS {
+                bundleID = "app.noctorium.desktop"
+                dockName = "Noctorium"
+                appCategory = "public.app-category.music"
+                // Drawn from the same 512 pixel mark as the Linux icon, by macIcon, on the Mac that builds it.
+                iconFile.set(layout.buildDirectory.file("macIcon/noctorium.icns"))
+                /*
+                 * A stand-in, because jpackage refuses any Mac version whose first number is 0 and this
+                 * project is still 0.x. macDmg writes the real one into the bundle afterwards -- macOS
+                 * itself has no such rule -- so the Finder shows 0.8.0 and not this.
+                 */
+                packageVersion = "1.0.$buildNumber"
+                packageBuildVersion = "$buildNumber"
             }
         }
     }
@@ -254,7 +294,11 @@ tasks.test {
  * there is no packaged copy, and replacing a yt-dlp that has aged out -- YouTube changes, and a yt-dlp
  * frozen at release time stops working long before the next release.
  */
-val bundledToolsDir: Provider<Directory> = layout.buildDirectory.dir("appResources/windows-x64/bin")
+val bundledToolsDir: Provider<Directory> = layout.buildDirectory.dir(
+    // Compose takes a platform's extra files from a folder named after it; a Mac's is per architecture,
+    // because mpv is.
+    if (isMacHost) "appResources/macos-$macArch/bin" else "appResources/windows-x64/bin",
+)
 
 val fetchPlaybackTools by tasks.registering {
     description = "Downloads mpv and yt-dlp so they can be packaged with the application."
@@ -267,14 +311,6 @@ val fetchPlaybackTools by tasks.registering {
     doLast {
         val cacheDir = cache.get().asFile.apply { mkdirs() }
         val outDir = target.get().asFile.apply { mkdirs() }
-
-        // The folder is made on every platform even though only Windows fills it: Compose is handed
-        // appResourcesRootDir unconditionally, and a root that does not exist is not something to find
-        // out about twenty minutes into the Linux half of a release.
-        if (!org.gradle.internal.os.OperatingSystem.current().isWindows) {
-            println("Not Windows: mpv and yt-dlp come from the package manager here, so nothing is bundled.")
-            return@doLast
-        }
 
         fun fetch(url: String, into: File) {
             if (into.exists() && into.length() > 0) return
@@ -305,6 +341,46 @@ val fetchPlaybackTools by tasks.registering {
                 .map { it.groupValues[1] }
                 .firstOrNull { match.containsMatchIn(it.substringAfterLast('/')) }
                 ?: error("No asset matching $match in the latest $repository release")
+        }
+
+        fun mac(vararg command: String) {
+            val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            check(process.waitFor() == 0) { "${command.joinToString(" ")} failed: $output" }
+        }
+
+        /*
+         * A Mac carries both as well. yt-dlp's macOS build is one universal file. mpv is the weekly build
+         * mpv's own site points Mac users to, from eko5624/mpv-mac -- a whole mpv.app, kept whole because the
+         * program inside it loads libraries from beside itself -- for this machine's architecture only, which
+         * is why there are two Mac disk images. Unpacked with ditto, which keeps the permissions and the
+         * signature the bundle came with.
+         */
+        if (isMacHost) {
+            val ytDlp = File(outDir, "yt-dlp")
+            fetch("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos", ytDlp)
+            ytDlp.setExecutable(true, false)
+
+            val architecture = if (isArmHost) "arm64" else "x86_64"
+            val mpvUrl = latestAsset("eko5624/mpv-mac", Regex("""^mpv-$architecture-git-[0-9a-f]+\.zip$"""))
+            val archive = File(cacheDir, mpvUrl.substringAfterLast('/'))
+            fetch(mpvUrl, archive)
+            val unpacked = File(cacheDir, "mpv-mac").apply { deleteRecursively(); mkdirs() }
+            mac("/usr/bin/ditto", "-x", "-k", archive.absolutePath, unpacked.absolutePath)
+            val bundle = unpacked.walkTopDown().firstOrNull { it.isDirectory && it.name == "mpv.app" }
+                ?: error("The mpv archive contained no mpv.app")
+            val placed = File(outDir, "mpv.app").apply { deleteRecursively() }
+            mac("/usr/bin/ditto", bundle.absolutePath, placed.absolutePath)
+            println("Bundled: yt-dlp (${ytDlp.length() / 1_048_576} MB), mpv.app from ${archive.name}")
+            return@doLast
+        }
+
+        // The folder is made on every platform even though only Windows and the Mac fill it: Compose is
+        // handed appResourcesRootDir unconditionally, and a root that does not exist is not something to
+        // find out about twenty minutes into the Linux half of a release.
+        if (!org.gradle.internal.os.OperatingSystem.current().isWindows) {
+            println("Not Windows: mpv and yt-dlp come from the package manager here, so nothing is bundled.")
+            return@doLast
         }
 
         // One standalone executable, straight into place.
@@ -352,6 +428,92 @@ listOf(
     "run",
 ).forEach { name ->
     tasks.matching { it.name == name }.configureEach { dependsOn(fetchPlaybackTools) }
+}
+
+/** Runs one of the Mac's own tools to the end, failing the build with what it said if it fails. */
+fun macTool(vararg command: String) {
+    val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+    val output = process.inputStream.bufferedReader().use { it.readText() }
+    check(process.waitFor() == 0) { "${command.joinToString(" ")} failed: $output" }
+}
+
+/**
+ * The Mac's icon, an .icns, made from the 512 pixel png the Linux packages use.
+ *
+ * Made at build time with the two tools every Mac has for it, rather than committed: an .icns is a dozen
+ * images of one drawing, and keeping a second copy of the mark in the repository is one more thing to forget
+ * when the mark changes.
+ */
+val macIcon by tasks.registering {
+    description = "Draws the macOS .icns from the committed png."
+    val png = file("src/main/resources/noctorium.png")
+    val icns = layout.buildDirectory.file("macIcon/noctorium.icns")
+    inputs.file(png)
+    outputs.file(icns)
+    onlyIf { isMacHost }
+    doLast {
+        val set = File(temporaryDir, "noctorium.iconset").apply { deleteRecursively(); mkdirs() }
+        listOf(
+            "16x16" to 16, "16x16@2x" to 32, "32x32" to 32, "32x32@2x" to 64, "128x128" to 128,
+            "128x128@2x" to 256, "256x256" to 256, "256x256@2x" to 512, "512x512" to 512,
+        ).forEach { (name, size) ->
+            macTool("/usr/bin/sips", "-z", "$size", "$size", png.absolutePath, "--out", File(set, "icon_$name.png").absolutePath)
+        }
+        icns.get().asFile.parentFile.mkdirs()
+        macTool("/usr/bin/iconutil", "-c", "icns", set.absolutePath, "-o", icns.get().asFile.absolutePath)
+    }
+}
+
+tasks.matching { it.name == "createDistributable" || it.name == "runDistributable" }.configureEach { dependsOn(macIcon) }
+
+/**
+ * Noctorium-<version>-macos-<arm64|x64>.dmg: the application bundle, finished and packed for dragging into
+ * Applications.
+ *
+ * Three things happen to the bundle jpackage made before it is packed. Its version is put right, since
+ * jpackage would only take the stand-in above. Then it is signed -- ad hoc, with no developer identity behind
+ * it, because Noctorium has none -- which is still what Apple silicon requires of every program before it
+ * will run it at all, and what turns macOS's verdict on a downloaded copy from "damaged" into the question
+ * an unidentified developer gets. The bundled mpv and yt-dlp are signed first and the whole after, so the
+ * outer seal covers them as they are. And the disk image gets the usual link to Applications beside it.
+ */
+val macDmg by tasks.registering {
+    group = "distribution"
+    description = "Builds the macOS disk image from the application bundle. Only on a Mac."
+    dependsOn("createDistributable")
+    onlyIf { isMacHost }
+    val app = layout.buildDirectory.dir("compose/binaries/main/app/Noctorium.app")
+    val image = layout.buildDirectory.file("compose/binaries/main/dmg/Noctorium-$appVersion-macos-$macArch.dmg")
+    outputs.file(image)
+    doLast {
+        val bundle = app.get().asFile
+        check(bundle.isDirectory) { "No application bundle at $bundle" }
+        val tools = File(bundle, "Contents/app/resources/bin")
+        File(tools, "yt-dlp").takeIf { it.isFile }?.setExecutable(true, false)
+        File(tools, "mpv.app/Contents/MacOS/mpv").takeIf { it.isFile }?.setExecutable(true, false)
+
+        val plist = File(bundle, "Contents/Info.plist").absolutePath
+        macTool("/usr/libexec/PlistBuddy", "-c", "Set :CFBundleShortVersionString $packagedVersion", plist)
+        macTool("/usr/libexec/PlistBuddy", "-c", "Set :CFBundleVersion $buildNumber", plist)
+
+        // Extended attributes picked up on the way -- a quarantine mark, Finder information -- make codesign
+        // refuse with "resource fork, Finder information, or similar detritus not allowed".
+        macTool("/usr/bin/xattr", "-cr", bundle.absolutePath)
+        File(tools, "yt-dlp").takeIf { it.isFile }?.let { macTool("/usr/bin/codesign", "--force", "--sign", "-", it.absolutePath) }
+        File(tools, "mpv.app").takeIf { it.isDirectory }?.let { macTool("/usr/bin/codesign", "--force", "--deep", "--sign", "-", it.absolutePath) }
+        macTool("/usr/bin/codesign", "--force", "--deep", "--sign", "-", bundle.absolutePath)
+        macTool("/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", bundle.absolutePath)
+
+        val stage = File(temporaryDir, "stage").apply { deleteRecursively(); mkdirs() }
+        macTool("/usr/bin/ditto", bundle.absolutePath, File(stage, "Noctorium.app").absolutePath)
+        Files.createSymbolicLink(File(stage, "Applications").toPath(), File("/Applications").toPath())
+        val out = image.get().asFile.apply { parentFile.mkdirs(); delete() }
+        macTool(
+            "/usr/bin/hdiutil", "create", "-volname", "Noctorium", "-srcfolder", stage.absolutePath,
+            "-ov", "-format", "UDZO", out.absolutePath,
+        )
+        println("Made ${out.name} (${out.length() / 1_048_576} MB)")
+    }
 }
 
 /**

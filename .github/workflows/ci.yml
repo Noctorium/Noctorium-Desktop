@@ -15,8 +15,14 @@ concurrency:
 
 jobs:
   build:
-    name: Tests and compilation
-    runs-on: ubuntu-latest
+    name: Tests and compilation (${{ matrix.os }})
+    # Linux and a Mac, since nobody working on this has a Mac and this is where its half is compiled and
+    # tested on one.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
 
     steps:

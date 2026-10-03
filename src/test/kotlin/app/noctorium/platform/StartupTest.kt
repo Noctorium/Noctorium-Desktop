@@ -89,6 +89,51 @@ class StartupTest {
     }
 
     @Test
+    fun `the Mac entry is a launch agent naming the launcher and its arguments separately`() {
+        val folder = Files.createTempDirectory("noctorium-agents")
+        try {
+            val entry = LaunchAgentEntry(folder.resolve("LaunchAgents"))
+            val launcher = "/Applications/Noctorium & Friends.app/Contents/MacOS/Noctorium"
+            val startup = LaunchAtLogin(entry, launcher = launcher)
+
+            assertTrue(startup.set(StartupMode.TRAY))
+            val file = folder.resolve("LaunchAgents").resolve(LaunchAgentEntry.FILE_NAME)
+            val written = Files.readString(file)
+            assertTrue(written.startsWith("<?xml"), "the declaration has to come first: $written")
+            assertTrue("<string>/Applications/Noctorium &amp; Friends.app/Contents/MacOS/Noctorium</string>" in written, written)
+            assertTrue("<string>--tray</string>" in written, written)
+            assertTrue("<key>RunAtLoad</key>" in written)
+            assertEquals(StartupMode.TRAY, startup.mode())
+
+            assertTrue(startup.set(StartupMode.WINDOW))
+            assertFalse("--tray" in Files.readString(file))
+            assertEquals(StartupMode.WINDOW, startup.mode())
+
+            assertTrue(startup.set(StartupMode.OFF))
+            assertFalse(Files.exists(file))
+        } finally {
+            folder.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a Mac launcher is traced back to its application bundle`() {
+        assertEquals(
+            java.nio.file.Path.of("/Applications/Noctorium.app"),
+            MacBundle.bundleOf("/Applications/Noctorium.app/Contents/MacOS/Noctorium"),
+        )
+        assertEquals(
+            java.nio.file.Path.of("/Users/me/Applications/Noctorium.app"),
+            MacBundle.current("/Users/me/Applications/Noctorium.app/Contents/MacOS/Noctorium"),
+        )
+        assertNull(MacBundle.bundleOf("/opt/noctorium/bin/Noctorium"))
+        assertEquals(
+            java.nio.file.Path.of("/Applications/.Noctorium.app.old"),
+            MacBundle.previous(java.nio.file.Path.of("/Applications/Noctorium.app")),
+        )
+    }
+
+    @Test
     fun `a second start wakes the first instead of running beside it`() {
         val folder = Files.createTempDirectory("noctorium-instance")
         val woken = CountDownLatch(1)

@@ -5331,9 +5331,15 @@ private fun startupSubtitle(preferences: NoctoriumPreferences): String {
     return listOfNotNull(starting, closing).joinToString(" · ")
 }
 
-/** Windows by name, where it is Windows; anything else is the computer. */
-private fun computerName(): String =
-    if (System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)) "Windows" else "the computer"
+/** Windows by name, where it is Windows; the Mac, on a Mac; anything else is the computer. */
+private fun computerName(): String {
+    val os = System.getProperty("os.name").orEmpty()
+    return when {
+        os.startsWith("Windows", ignoreCase = true) -> "Windows"
+        os.startsWith("Mac", ignoreCase = true) -> "your Mac"
+        else -> "the computer"
+    }
+}
 
 /**
  * What the close button does, and whether Noctorium starts with the computer.
