@@ -1,5 +1,6 @@
 package app.noctorium.update
 
+import app.noctorium.auth.CefRuntime
 import app.noctorium.platform.MacBundle
 import java.nio.file.Files
 import java.nio.file.Path
@@ -49,7 +50,7 @@ class DesktopUpdateInstaller(
         // Long enough for the installer to be on screen before this window disappears, so it does not
         // look as though Noctorium closed for no reason.
         Thread.sleep(1_200)
-        exitProcess(0)
+        leave()
         @Suppress("UNREACHABLE_CODE") null
     }.getOrElse { "Could not start the installer: ${it.message}" }
 
@@ -73,7 +74,7 @@ class DesktopUpdateInstaller(
             }
             when (process.exitValue()) {
                 0 -> {
-                    exitProcess(0)
+                    leave()
                     @Suppress("UNREACHABLE_CODE") null
                 }
                 // polkit answers 126 when the prompt is dismissed, which is a decision rather than a fault.
@@ -107,7 +108,7 @@ class DesktopUpdateInstaller(
             Files.move(incoming, current, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
             ProcessBuilder(current.toString()).start()
             Thread.sleep(800)
-            exitProcess(0)
+            leave()
             @Suppress("UNREACHABLE_CODE") null
         }.getOrElse { "Could not replace ${current.fileName}: ${it.message}. The new one is at $file." }
     }
@@ -157,7 +158,7 @@ class DesktopUpdateInstaller(
                 throw failure
             }
             ProcessBuilder("/bin/sh", "-c", "sleep 2; /usr/bin/open -n \"$0\"", bundle.toString()).start()
-            exitProcess(0)
+            leave()
             @Suppress("UNREACHABLE_CODE") null
         } catch (failure: Exception) {
             "Could not replace Noctorium: ${failure.message}. The update is at $file."
@@ -165,6 +166,15 @@ class DesktopUpdateInstaller(
             if (!quietly("/usr/bin/hdiutil", "detach", mount.toString())) quietly("/usr/bin/hdiutil", "detach", "-force", mount.toString())
             runCatching { Files.deleteIfExists(mount) }
         }
+    }
+
+    /**
+     * Ends this copy so the new one can take its place -- with Chromium shut down first, if a sign-in started
+     * it, since ending the process while it was still running could crash it on the way out.
+     */
+    private fun leave(): Nothing {
+        CefRuntime.shutdown(timeoutMillis = 5_000)
+        exitProcess(0)
     }
 
     /** Runs a system tool to the end and says whether it worked, keeping its output out of the way. */

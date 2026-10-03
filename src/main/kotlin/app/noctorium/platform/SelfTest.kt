@@ -29,6 +29,23 @@ import java.util.concurrent.TimeUnit
 object SelfTest {
     const val ARGUMENT = "--self-test"
 
+    /**
+     * `Noctorium --start-chromium`: an ordinary start, with embedded Chromium started in the background as a
+     * sign-in would start it. For the release's check that quitting with Chromium running ends cleanly.
+     */
+    const val START_CHROMIUM = "--start-chromium"
+
+    fun startChromium() {
+        Thread({
+            runCatching {
+                val folder = chromiumFolder() ?: return@runCatching
+                runBlocking { withTimeout(120_000) { CefRequester(folder).send("GET", PUBLIC_READ, emptyMap(), null) } }
+            }
+        }, "noctorium-start-chromium").apply { isDaemon = true }.start()
+    }
+
+    private fun chromiumFolder(): Path? = SettingsRepository.defaultSettingsPath()?.parent?.resolve("chromium")
+
     private var failed = false
 
     fun run(): Nothing {
@@ -52,8 +69,7 @@ object SelfTest {
             if (store.persistent) "kept by the system" else "kept for this session only"
         }
         check("chromium") {
-            val folder = SettingsRepository.defaultSettingsPath()?.parent?.resolve("chromium")
-                ?: error("nowhere to unpack it")
+            val folder = chromiumFolder() ?: error("nowhere to unpack it")
             val requester = CefRequester(folder)
             val reply = runBlocking { withTimeout(120_000) { requester.send("GET", PUBLIC_READ, emptyMap(), null) } }
                 ?: error("started, but the page never answered")

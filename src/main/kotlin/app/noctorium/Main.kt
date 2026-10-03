@@ -16,6 +16,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import app.noctorium.auth.CefRuntime
 import app.noctorium.platform.LaunchAtLogin
 import app.noctorium.platform.MacBundle
 import app.noctorium.platform.SelfTest
@@ -37,6 +38,7 @@ fun main(args: Array<String>) {
     // beside a copy that is already open.
     if (SelfTest.ARGUMENT in args) SelfTest.run()
     MacBundle.tidy()
+    if (SelfTest.START_CHROMIUM in args) SelfTest.startChromium()
 
     // Started with the computer into the tray: no window until somebody asks for one.
     val intoTray = LaunchAtLogin.TRAY_ARGUMENT in args
@@ -73,10 +75,25 @@ fun main(args: Array<String>) {
         )
         LaunchedEffect(Unit) { if (intoTray && !trayAvailable) windowState.isMinimized = true }
 
+        var quitting by remember { mutableStateOf(false) }
         val quit: () -> Unit = {
-            appState.close()
-            instance?.close()
-            exitApplication()
+            if (!quitting) {
+                quitting = true
+                visible = false
+                appState.close()
+                instance?.close()
+                // Chromium, once a sign-in has started it, is shut down and waited for before the process
+                // ends -- ending it while Chromium is still closing can crash it on the way out. Waited for on
+                // a thread of its own, because Chromium finishes on this one.
+                if (CefRuntime.running) {
+                    Thread({
+                        CefRuntime.shutdown(timeoutMillis = 5_000)
+                        javax.swing.SwingUtilities.invokeLater { exitApplication() }
+                    }, "noctorium-quit").start()
+                } else {
+                    exitApplication()
+                }
+            }
         }
         val open: () -> Unit = {
             visible = true
@@ -120,7 +137,15 @@ fun main(args: Array<String>) {
                     system.setQuitHandler { _, response ->
                         runCatching { appState.close() }
                         runCatching { instance?.close() }
-                        response.performQuit()
+                        // macOS waits for the answer, so Chromium can be shut down first, as above.
+                        if (CefRuntime.running) {
+                            Thread({
+                                CefRuntime.shutdown(timeoutMillis = 5_000)
+                                response.performQuit()
+                            }, "noctorium-quit").start()
+                        } else {
+                            response.performQuit()
+                        }
                     }
                 }
                 if (system.isSupported(Desktop.Action.APP_EVENT_REOPENED)) {
