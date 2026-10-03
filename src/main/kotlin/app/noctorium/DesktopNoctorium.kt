@@ -43,14 +43,9 @@ fun desktopAppState(): AppState {
         playbackEngine = MpvPlaybackEngine(backend, downloadedFile = downloads::localFile),
         accountProbe = AccountProbe(),
         discordPresence = DiscordPresenceManager(),
-        // What this machine calls itself, which is what shows up in the list on the phone. The computer
-        // name is what somebody already recognises; the hostname is a fallback for when Windows has not
-        // set one in the environment.
-        deviceName = {
-            System.getenv("COMPUTERNAME")?.takeIf(String::isNotBlank)
-                ?: runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()
-                ?: "This computer"
-        },
+        // What this machine calls itself, which is what shows up in the list on the phone. See computerName
+        // for why a Mac is asked for its sharing name rather than its host name.
+        deviceName = { app.noctorium.platform.computerName() ?: "This computer" },
         deviceKind = DeviceKind.DESKTOP,
         likeClient = SoundCloudLikeClient(soundCloudBrowser),
         playlistClient = SoundCloudPlaylistClient(soundCloudBrowser),

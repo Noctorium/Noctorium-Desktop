@@ -509,6 +509,13 @@ val macDmg by tasks.registering {
         val plist = File(bundle, "Contents/Info.plist").absolutePath
         macTool("/usr/libexec/PlistBuddy", "-c", "Set :CFBundleShortVersionString $shownVersion", plist)
         macTool("/usr/libexec/PlistBuddy", "-c", "Set :CFBundleVersion $build", plist)
+        // What macOS says when Connect first looks for the listener's other devices, in place of its generic
+        // "find devices on local networks".
+        macTool(
+            "/usr/libexec/PlistBuddy", "-c",
+            "Add :NSLocalNetworkUsageDescription string Noctorium Connect finds your other devices with Noctorium on this network, so the music can move between them.",
+            plist,
+        )
 
         // Extended attributes picked up on the way -- a quarantine mark, Finder information -- make codesign
         // refuse with "resource fork, Finder information, or similar detritus not allowed".
