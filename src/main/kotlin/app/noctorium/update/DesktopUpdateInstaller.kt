@@ -10,8 +10,8 @@ import kotlin.system.exitProcess
 /**
  * What a desktop Noctorium can do about a new version of itself.
  *
- * Nothing here replaces the running application. Windows hands the file to the installer that built it and
- * quits so its own files stop being locked; Linux hands the package to the package manager through a
+ * Nothing here replaces the running application. Windows hands the msi to Windows Installer and quits so its
+ * own files stop being locked; Linux hands the package to the package manager through a
  * graphical privilege prompt, because /opt belongs to the package manager and a program that writes there
  * behind its back leaves a machine whose package database is a lie.
  *
@@ -39,20 +39,52 @@ class DesktopUpdateInstaller(
     }
 
     /**
-     * Starts the installer and gets out of its way.
+     * Installs the msi with nothing to click, and opens the new Noctorium when it is done.
      *
-     * The installer cannot replace files this process is holding open, so Noctorium quits rather than
-     * waiting to be told to. It is started visibly rather than silently: the same window somebody would
-     * see if they had downloaded it themselves, which is also their last chance to say no.
+     * The installer cannot replace files this process is holding open, so the work is handed to a hidden
+     * PowerShell that outlives it (see [WindowsUpdate]) and Noctorium quits. What is left on screen is the
+     * UAC prompt, which is the last chance to say no, and then a progress bar -- not the whole wizard again,
+     * after somebody has already said yes in Noctorium.
+     *
+     * Should PowerShell not start, the msi is opened the way it always was, wizard and all, so an update is
+     * never stuck behind the faster way of doing it.
      */
-    private fun runWindowsInstaller(file: Path): String? = runCatching {
-        ProcessBuilder(file.toString()).start()
-        // Long enough for the installer to be on screen before this window disappears, so it does not
-        // look as though Noctorium closed for no reason.
-        Thread.sleep(1_200)
-        leave()
-        @Suppress("UNREACHABLE_CODE") null
-    }.getOrElse { "Could not start the installer: ${it.message}" }
+    private fun runWindowsInstaller(file: Path): String? {
+        val launcher = System.getProperty("jpackage.app-path")?.takeIf(String::isNotBlank)
+            ?: return "Could not tell where Noctorium is installed. The update is at $file."
+        val windows = System.getenv("SystemRoot")?.takeIf(String::isNotBlank) ?: "C:\\Windows"
+        val script = WindowsUpdate.script(file.toString(), launcher, outlive = processesToOutlive(launcher))
+        val unattended = runCatching {
+            ProcessBuilder(
+                "$windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                "-EncodedCommand", WindowsUpdate.encoded(script),
+            ).start()
+        }
+        if (unattended.isSuccess) leave()
+        return runCatching {
+            ProcessBuilder("$windows\\System32\\msiexec.exe", "/i", file.toString()).start()
+            // Long enough for the installer to be on screen before this window disappears, so it does not
+            // look as though Noctorium closed for no reason.
+            Thread.sleep(1_200)
+            leave()
+            @Suppress("UNREACHABLE_CODE") null
+        }.getOrElse { "Could not start the installer: ${it.message}" }
+    }
+
+    /**
+     * This process, and the launcher above it when there is one.
+     *
+     * jpackage's launcher sometimes starts the JVM as a second process and waits for it, and that launcher
+     * is Noctorium.exe in the install folder -- a file the installer has to replace -- so it is waited for as
+     * well as the JVM itself.
+     */
+    private fun processesToOutlive(launcher: String): List<Long> {
+        val self = ProcessHandle.current()
+        val parent = self.parent().orElse(null)
+            ?.takeIf { it.info().command().orElse("").equals(launcher, ignoreCase = true) }
+        return listOfNotNull(self.pid(), parent?.pid())
+    }
 
     /**
      * Asks the package manager, through whatever this desktop uses to ask for a password.
