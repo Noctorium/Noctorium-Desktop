@@ -2592,7 +2592,7 @@ internal fun NowPlayingScreen(queue: QueueState, playback: PlaybackState, state:
             }
             // One arrangement easing into the next, so a change made from the menu is seen happening.
             MotionContent(arrangement, Modifier.fillMaxSize()) { shown ->
-                NowPlayingArranged(shown, current, playback, state, look.panelWidth.widthDp.dp, { arranging = true }, panel, queue.hasNext)
+                NowPlayingArranged(shown, queue, current, playback, state, look.panelWidth.widthDp.dp, { arranging = true }, panel, queue.hasNext)
             }
         }
         // Anchored to the top right whatever the layout, so the menu stays put while the screen rearranges
@@ -2608,6 +2608,7 @@ internal fun NowPlayingScreen(queue: QueueState, playback: PlaybackState, state:
 @Composable
 private fun NowPlayingArranged(
     shown: NowPlayingArrangement,
+    queue: QueueState,
     track: Track,
     playback: PlaybackState,
     state: AppState,
@@ -2617,10 +2618,18 @@ private fun NowPlayingArranged(
     hasNext: Boolean,
 ) {
     val layout = shown.layout
+    val look = state.settings.collectAsState().value.preferences.desktop.nowPlaying
     val hero: @Composable (HeroArrangement, Modifier) -> Unit = { heroArrangement, modifier ->
         NowPlayingHero(track, playback, state, heroArrangement, arrange, modifier, hasNext)
     }
     when {
+        layout == NowPlayingLayout.IMMERSIVE -> ImmersiveNowPlaying(track, playback, state, look, arrange, hasNext)
+        layout == NowPlayingLayout.SPLIT ->
+            SplitNowPlaying(track, playback, state, look, shown.panel, shown.wide, panelWidth, panel, arrange, hasNext)
+        layout == NowPlayingLayout.COVER_FLOW -> CoverFlowNowPlaying(queue, track, playback, state, look, arrange, hasNext)
+        layout == NowPlayingLayout.TURNTABLE ->
+            TurntableNowPlaying(track, playback, state, look, shown.panel, shown.wide, panelWidth, panel, arrange, hasNext)
+        layout == NowPlayingLayout.POSTER -> PosterNowPlaying(track, playback, state, look, arrange, hasNext)
         layout == NowPlayingLayout.BANNER -> Column(
             Modifier.fillMaxSize().padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -2813,7 +2822,7 @@ private fun NowPlayingHero(
  * leads somewhere -- autoplay's lined-up songs count -- as on the bars; see QueueState.hasNext.
  */
 @Composable
-private fun TransportControls(playback: PlaybackState, state: AppState, hasNext: Boolean) {
+internal fun TransportControls(playback: PlaybackState, state: AppState, hasNext: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(state::previous, Modifier.size(44.dp)) {
             Icon(Icons.Default.SkipPrevious, "Previous track", Modifier.size(28.dp), tint = ink(.82f))
@@ -2839,7 +2848,7 @@ private fun TransportControls(playback: PlaybackState, state: AppState, hasNext:
  * to the screen: the panel tucked away or brought back, and the menu that rearranges it.
  */
 @Composable
-private fun HeroFooter(track: Track, playback: PlaybackState, state: AppState, look: NowPlayingPreferences, arrange: () -> Unit) {
+internal fun HeroFooter(track: Track, playback: PlaybackState, state: AppState, look: NowPlayingPreferences, arrange: () -> Unit) {
     val lyrics by state.lyrics.collectAsState()
     // Not where the lyrics are already the size of the screen beside it: the same line twice is one too many.
     val singingBeside = look.layout == NowPlayingLayout.SING_ALONG && !look.panelHidden
@@ -2906,7 +2915,7 @@ internal fun NowPlayingArranger(look: NowPlayingPreferences, backdrop: NowPlayin
         ChoiceRow("Cover size", CoverSize.entries, look.coverSize, { it.displayName }) { size -> state.updateNowPlaying { copy(coverSize = size) } }
         Spacer(Modifier.height(14.dp))
         ChoiceRow("Backdrop", NowPlayingBackdrop.entries, backdrop, { it.displayName }, state::setNowPlayingBackdrop)
-        if (look.layout == NowPlayingLayout.SIDE_BY_SIDE || look.layout == NowPlayingLayout.PANEL_LEFT) {
+        if (look.layout in PANEL_BESIDE) {
             Spacer(Modifier.height(14.dp))
             ChoiceRow("Panel width", NowPlayingPanelWidth.entries, look.panelWidth, { it.displayName }) { width ->
                 state.updateNowPlaying { copy(panelWidth = width) }
@@ -2923,7 +2932,18 @@ internal fun NowPlayingArranger(look: NowPlayingPreferences, backdrop: NowPlayin
     }
 }
 
-/** The six layouts, each as a picture of itself with its name under it. */
+/**
+ * The layouts whose panel width means something: the two side by side, the turntable with its panel beside it,
+ * and Split, whose half is never narrower than it.
+ */
+private val PANEL_BESIDE = setOf(
+    NowPlayingLayout.SIDE_BY_SIDE,
+    NowPlayingLayout.PANEL_LEFT,
+    NowPlayingLayout.TURNTABLE,
+    NowPlayingLayout.SPLIT,
+)
+
+/** The layouts, each as a picture of itself with its name under it. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NowPlayingLayoutPicker(selected: NowPlayingLayout, compact: Boolean = false, choose: (NowPlayingLayout) -> Unit) {
@@ -4524,7 +4544,8 @@ internal fun NowPlayingSettingsCard(preferences: NoctoriumPreferences, state: Ap
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            "For the side by side layouts. Sing along gives the lyrics everything the column leaves.",
+            "For the layouts with the panel at the side, the turntable's included, and Split's right half is never " +
+                "narrower. Sing along gives the lyrics everything the column leaves.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 11.sp,
         )
