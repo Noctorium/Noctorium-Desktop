@@ -4,7 +4,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.runtime.Composable
@@ -102,6 +104,7 @@ internal fun skinShapes(skin: ThemeSkin, corners: CornerStyle): Shapes = when (s
  * What the window is drawn in, and what a test drawing part of the window should wrap it in. Under the
  * standard skin it is exactly the theme the window always had.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SkinnedMaterialTheme(
     skin: ThemeSkin,
@@ -127,6 +130,8 @@ fun SkinnedMaterialTheme(
                 LocalSkin provides skin,
                 LocalWindowColours provides MaterialTheme.colorScheme,
                 LocalTextSelectionColors provides TextSelectionColors(selection, selection.copy(alpha = .35f)),
+                // Nothing on either desktop rippled: a pressed button went in, and a pointed-at row lit up.
+                LocalRippleConfiguration provides null,
                 content = content,
             )
         }
