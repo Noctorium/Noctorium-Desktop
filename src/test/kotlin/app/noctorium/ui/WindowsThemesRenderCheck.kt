@@ -66,6 +66,18 @@ class WindowsThemesRenderCheck {
             tour.go(Destination.HOME)
             tour.hover(if (xp) Offset(320f, 230f) else Offset(207f, 240f))
             tour.capture("home-pointed")
+            tour.go(Destination.DOWNLOADS)
+            tour.capture("downloads")
+            tour.go(Destination.LINK)
+            tour.capture("link")
+            // The pages of Settings the tour leaves out, which are mostly each service's account.
+            listOf(
+                "ACCOUNT", "PROFILE", "YOUTUBE", "SOUNDCLOUD", "SPOTIFY", "BANDCAMP", "VK", "SCROBBLING", "DISCORD",
+                "UPDATES", "PLAYBACK_TOOLS", "DIAGNOSTICS",
+            ).forEach { page ->
+                tour.settingsPage(page)
+                tour.capture("settings-${page.lowercase()}")
+            }
             tour.go(Destination.LIBRARY)
             tour.settle()
             tour.fill()
@@ -95,6 +107,9 @@ class WindowsThemesRenderCheck {
             state.setPlayerBarStyle(PlayerBarStyle.TASKBAR)
             tour.go(Destination.NOW_PLAYING)
             tour.capture("taskbar-now-playing")
+            // The panel's Lyrics tab, which made-up songs have none behind.
+            tour.click(if (xp) Offset(913f, 63f) else Offset(913f, 60f))
+            tour.capture("now-playing-lyrics", frames = 14)
             state.setPlayerBarPosition(PlayerBarPosition.TOP)
             tour.go(Destination.HOME)
             tour.capture("taskbar-top")
@@ -103,6 +118,11 @@ class WindowsThemesRenderCheck {
             tour.fill()
             tour.capture("taskbar-narrow")
             state.setPlayerBarStyle(PlayerBarStyle.INLINE)
+            // The whole of Customization at once, in a window tall enough to hold it.
+            tour.open(width = 1280, height = 3600)
+            tour.fill()
+            tour.settingsPage("CUSTOMIZATION")
+            tour.capture("settings-customization-whole")
         } finally {
             tour.close()
         }
