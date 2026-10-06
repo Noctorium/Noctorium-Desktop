@@ -320,7 +320,11 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                 .onKeyEvent(::handle),
         ) {
             Row {
-                NavigationRail(ui.destination, preferences.desktop.hiddenDestinations, appState::navigate)
+                if (skin.isWindows) {
+                    SkinRail(ui.destination, preferences.desktop.hiddenDestinations, queue.current, appState::navigate)
+                } else {
+                    NavigationRail(ui.destination, preferences.desktop.hiddenDestinations, appState::navigate)
+                }
                 Column(Modifier.weight(1f)) {
                     PlaybackToolsBanner {
                         pendingSettingsPage = SettingsPage.PLAYBACK_TOOLS
@@ -330,26 +334,31 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                     val screens: @Composable () -> Unit = {
                         // One screen easing in over the last rather than the window cutting between them.
                         MotionContent(ui.destination, Modifier.fillMaxSize()) { destination ->
+                            // The pages for browsing sit in a folder's white pane under a Windows skin.
                             when (destination) {
-                                Destination.HOME -> HomeScreen(ui, appState)
-                                Destination.SEARCH -> SearchScreen(ui, appState, focusSearch)
-                                Destination.LINK -> LinkScreen(appState)
-                                Destination.LIBRARY -> LibraryScreen(appState)
-                                Destination.DOWNLOADS -> DownloadsScreen(appState)
+                                Destination.HOME -> BrowsingPane { HomeScreen(ui, appState) }
+                                Destination.SEARCH -> BrowsingPane { SearchScreen(ui, appState, focusSearch) }
+                                Destination.LINK -> BrowsingPane { LinkScreen(appState) }
+                                Destination.LIBRARY -> BrowsingPane { LibraryScreen(appState) }
+                                Destination.DOWNLOADS -> BrowsingPane { DownloadsScreen(appState) }
                                 Destination.NOW_PLAYING -> NowPlayingScreen(queue, playback, appState)
-                                Destination.QUEUE -> QueueScreen(queue, appState)
+                                Destination.QUEUE -> BrowsingPane { QueueScreen(queue, appState) }
                                 Destination.SETTINGS -> SettingsScreen(appState)
                             }
                         }
                     }
-                    if (preferences.surfaceStyle.isGlass) {
+                    // Glass belongs to the standard look: a 98 window had no panes of it to float a player in.
+                    if (preferences.surfaceStyle.isGlass && !skin.isWindows) {
                         Box(Modifier.weight(1f)) {
                             GlassContent(queue, playback, appState, Color(theme.background), playerAtTop, screens)
                         }
                     } else {
-                        if (playerAtTop) PlayerBar(queue, playback, appState)
+                        val bar: @Composable () -> Unit = {
+                            SkinnedPlayerBar(preferences.playerBarPosition, preferences.playerBarStyle) { PlayerBar(queue, playback, appState) }
+                        }
+                        if (playerAtTop) bar()
                         Box(Modifier.weight(1f)) { screens() }
-                        if (!playerAtTop) PlayerBar(queue, playback, appState)
+                        if (!playerAtTop) bar()
                     }
                 }
             }
@@ -499,7 +508,8 @@ internal fun HomeScreen(ui: AppUiState, state: AppState) {
     val hidden = state.settings.collectAsState().value.preferences.hiddenHomeParts
     // The filter at the top and the parts put away in Settings, decided together in one place.
     val home = homeContent(ui, hidden)
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 32.dp), contentPadding = chromePadding(bottom = 36.dp)) {
+    val list = rememberLazyListState()
+    LazyColumn(Modifier.fillMaxSize().classicScrollbar(list).padding(horizontal = 32.dp), state = list, contentPadding = chromePadding(bottom = 36.dp)) {
         item {
             Spacer(Modifier.height(28.dp))
             // The filter stays when the greeting goes: it is how the rest of the page is chosen.
@@ -588,7 +598,7 @@ private fun HomePutAway(everything: Boolean, state: AppState) {
 private fun HomeHeader(greeting: String?, filter: @Composable () -> Unit) {
     Layout(
         content = {
-            if (greeting != null) Text(greeting, fontSize = 32.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            if (greeting != null) ScreenTitle(greeting, 32.sp, maxLines = 1)
             Box { filter() }
         },
     ) { measurables, constraints ->
@@ -628,6 +638,15 @@ private fun greeting(): String = when (java.time.LocalTime.now().hour) {
 
 @Composable
 private fun FilterChips(selected: ProviderFilter, select: (ProviderFilter) -> Unit) {
+    // A row of buttons that stay pressed in under a Windows skin, as a toolbar's choice of view did.
+    if (skinned()) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            ProviderFilter.entries.forEach { filter ->
+                FilterChip(selected == filter, { select(filter) }, label = { Text(filter.displayName) })
+            }
+        }
+        return
+    }
     // Sideways, when even a line of its own is narrower than every service's name: see HomeHeader.
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ProviderFilter.entries.forEach { filter ->
@@ -717,6 +736,15 @@ internal fun Playlist.isArtist(): Boolean = BandcampMusicProvider.isArtist(this)
 @Composable
 private fun PlaylistCard(playlist: Playlist, width: Dp, state: AppState) {
     val artist = playlist.isArtist()
+    if (skinned()) {
+        val owner = playlist.ownerName?.takeIf { it.isNotBlank() }
+        val line = if (artist) listOfNotNull("Artist", owner?.takeUnless { it.equals("Artist", ignoreCase = true) }).joinToString(" · ") else owner
+        SkinPlaylistCard(playlist, width, artist, line) {
+            state.openPlaylist(playlist)
+            state.navigate(Destination.LIBRARY)
+        }
+        return
+    }
     val shape = if (artist) CircleShape else RoundedCornerShape(11.dp)
     Column(
         Modifier
@@ -766,6 +794,17 @@ private fun PlaylistCard(playlist: Playlist, width: Dp, state: AppState) {
 @Composable
 private fun TrackCard(track: Track, sourceQueue: List<Track>, state: AppState, showBadge: Boolean = false) {
     val preferences = state.settings.collectAsState().value.preferences
+    if (skinned()) {
+        SkinTrackCard(
+            track,
+            track.displayArtist(),
+            preferences.cardSize.widthDp.dp,
+            showBadge,
+            alwaysShowControls = preferences.hoverControls == HoverControls.ALWAYS,
+            play = { state.play(track, PlaybackOrigin.HOME, sourceQueue) },
+        ) { TrackMenu(track, state) }
+        return
+    }
     val interaction = remember { MutableInteractionSource() }
     val isHovered by interaction.collectIsHoveredAsState()
     // Whether controls hide until pointed at is a preference; some people would rather always see them.
@@ -884,11 +923,12 @@ private fun LibraryScreen(state: AppState) {
 /** The library itself: the playlists made here, and the ones from the connected accounts. */
 @Composable
 private fun LibraryList(library: LibraryState, state: AppState, newPlaylist: () -> Unit, importLink: () -> Unit) {
+    val accountLists = rememberLazyListState()
     Column(Modifier.fillMaxSize().padding(horizontal = 30.dp)) {
         Spacer(Modifier.height(26.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Your library", fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                ScreenTitle("Your library", 34.sp)
                 Text(
                     "Playlists you made here, and playlists from the accounts you connected.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -940,6 +980,8 @@ private fun LibraryList(library: LibraryState, state: AppState, newPlaylist: () 
             library.errorMessage != null && library.playlists.isEmpty() -> LibraryProblem(library.errorMessage!!, state)
             library.playlists.isEmpty() -> EmptyScreen("No playlists yet", "Playlists you own on a connected service appear here.")
             else -> LazyColumn(
+                Modifier.classicScrollbar(accountLists),
+                state = accountLists,
                 verticalArrangement = Arrangement.spacedBy(9.dp),
                 contentPadding = chromePadding(bottom = 28.dp),
             ) {
@@ -971,10 +1013,10 @@ private fun LibraryNotice(message: String, dismiss: () -> Unit) {
 
 @Composable
 private fun LocalPlaylistRow(playlist: LocalPlaylist, state: AppState, open: () -> Unit) {
-    Surface(onClick = open, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(13.dp)) {
+    ListRow(onClick = open, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(13.dp)) {
         Row(Modifier.fillMaxWidth().padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(52.dp).clip(RoundedCornerShape(9.dp))
+                Modifier.size(52.dp).clip(skinShape(RoundedCornerShape(9.dp)))
                     .background(Brush.linearGradient(listOf(NoctoriumLavender, NoctoriumPurpleStrong))),
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, Modifier.size(24.dp), tint = Color.White) }
@@ -999,6 +1041,7 @@ private fun LocalPlaylistRow(playlist: LocalPlaylist, state: AppState, open: () 
 private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, state: AppState) {
     var renameOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    val songs = rememberLazyListState()
 
     if (renameOpen) {
         PlaylistNameDialog("Rename playlist", playlist.title, "Rename") { title ->
@@ -1024,7 +1067,7 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, state:
             IconButton(state::closeLocalPlaylist) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to library") }
             Spacer(Modifier.width(6.dp))
             Column(Modifier.weight(1f)) {
-                Text(playlist.title, fontSize = 27.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                ScreenTitle(playlist.title, 27.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     "${playlist.trackCount} ${if (playlist.trackCount == 1) "track" else "tracks"} • made in Noctorium",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1090,7 +1133,7 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, state:
         if (playlist.tracks.isEmpty()) {
             EmptyScreen("Nothing here yet", "Use the ⋮ menu on any track to add it to this playlist.")
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = chromePadding(bottom = 28.dp)) {
+            LazyColumn(Modifier.classicScrollbar(songs), state = songs, verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = chromePadding(bottom = 28.dp)) {
                 items(playlist.tracks, key = { it.queueKey }) { track ->
                     // Rows glide to where they belong when one is taken out, instead of the rest jumping up.
                     Row(if (LocalMotion.current) Modifier.animateItem() else Modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -1314,9 +1357,9 @@ private fun SoundCloudNamePrompt(state: AppState) {
 
 @Composable
 private fun PlaylistRow(playlist: Playlist, open: () -> Unit) {
-    Surface(onClick = open, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(13.dp)) {
+    ListRow(onClick = open, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(13.dp)) {
         Row(Modifier.fillMaxWidth().padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(52.dp).clip(RoundedCornerShape(9.dp)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(52.dp).clip(skinShape(RoundedCornerShape(9.dp))), contentAlignment = Alignment.Center) {
                 if (playlist.artworkUrl != null) {
                     RemoteArtwork(playlist.artworkUrl, playlist.provider, Modifier.fillMaxSize())
                 } else {
@@ -1351,13 +1394,14 @@ private fun PlaylistRow(playlist: Playlist, open: () -> Unit) {
 
 @Composable
 internal fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: AppState) {
+    val songs = rememberLazyListState()
     Column(Modifier.fillMaxSize().padding(horizontal = 30.dp)) {
         Spacer(Modifier.height(22.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(state::closePlaylist) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to library") }
             Spacer(Modifier.width(6.dp))
             Column(Modifier.weight(1f)) {
-                Text(playlist.title, fontSize = 27.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                ScreenTitle(playlist.title, 27.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         listOfNotNull(
@@ -1418,6 +1462,8 @@ internal fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: Ap
             library.openPlaylistError != null -> LibraryProblem(library.openPlaylistError!!, state)
             playlist.tracks.isEmpty() -> EmptyScreen("Nothing to play", "This playlist came back empty.")
             else -> LazyColumn(
+                Modifier.classicScrollbar(songs),
+                state = songs,
                 verticalArrangement = Arrangement.spacedBy(7.dp),
                 contentPadding = chromePadding(bottom = 28.dp),
             ) {
@@ -1599,7 +1645,7 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
     LaunchedEffect(focusRequest) { if (focusRequest > 0) runCatching { box.requestFocus() } }
 
     Column(Modifier.fillMaxSize().padding(32.dp)) {
-        Text("Search", fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        ScreenTitle("Search", 32.sp)
         Spacer(Modifier.height(18.dp))
         OutlinedTextField(
             value = ui.searchQuery,
@@ -1691,7 +1737,8 @@ internal fun searchHint(
 private fun SearchResultsList(results: SearchResults, state: AppState) {
     // The cards are keyed, and a service that listed the same album twice would otherwise end the screen.
     val shelf = remember(results.playlists) { results.playlists.distinctBy { it.playlistKey } }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = chromePadding()) {
+    val list = rememberLazyListState()
+    LazyColumn(Modifier.classicScrollbar(list), state = list, verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = chromePadding()) {
         if (shelf.isNotEmpty()) {
             item(key = "search:shelf") {
                 PlaylistRowSection(
@@ -1732,13 +1779,13 @@ private fun SearchModePicker(selected: SearchMode, select: (SearchMode) -> Unit)
 
 @Composable
 private fun TrackRow(track: Track, sourceQueue: List<Track>, state: AppState) {
-    Surface(
+    ListRow(
         onClick = { state.play(track, PlaybackOrigin.SEARCH, sourceQueue) },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .36f),
         shape = RoundedCornerShape(12.dp),
     ) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(48.dp).clip(RoundedCornerShape(9.dp)))
+            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(48.dp).clip(skinShape(RoundedCornerShape(9.dp))))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(track.title, fontWeight = FontWeight.SemiBold)
@@ -2293,10 +2340,10 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (current != null) {
-                        RemoteArtwork(current.artworkUrl, current.provider, Modifier.size(40.dp).clip(RoundedCornerShape(7.dp)))
+                        RemoteArtwork(current.artworkUrl, current.provider, Modifier.size(40.dp).clip(skinShape(RoundedCornerShape(7.dp))))
                     } else {
                         Box(
-                            Modifier.size(40.dp).clip(RoundedCornerShape(7.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                            Modifier.size(40.dp).clip(skinShape(RoundedCornerShape(7.dp))).background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center,
                         ) { Icon(Icons.Default.MusicNote, null, Modifier.size(18.dp)) }
                     }
@@ -2419,10 +2466,10 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                         if (!compact) {
                             if (current != null) {
-                                RemoteArtwork(current.artworkUrl, current.provider, Modifier.size(52.dp).clip(RoundedCornerShape(11.dp)))
+                                RemoteArtwork(current.artworkUrl, current.provider, Modifier.size(52.dp).clip(skinShape(RoundedCornerShape(11.dp))))
                             } else {
                                 Box(
-                                    Modifier.size(52.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.primaryContainer),
+                                    Modifier.size(52.dp).clip(skinShape(RoundedCornerShape(11.dp))).background(MaterialTheme.colorScheme.primaryContainer),
                                     contentAlignment = Alignment.Center,
                                 ) { Icon(Icons.Default.MusicNote, null) }
                             }
@@ -3423,7 +3470,7 @@ private fun QueueRow(track: Track, index: Int, playing: Boolean, state: AppState
     val isHovered by interaction.collectIsHoveredAsState()
     val hovered = isHovered ||
         state.settings.collectAsState().value.preferences.hoverControls == HoverControls.ALWAYS
-    Surface(
+    ListRow(
         onClick = { state.jumpToQueueItem(index) },
         color = when {
             playing -> ink(.11f)
@@ -3431,11 +3478,12 @@ private fun QueueRow(track: Track, index: Int, playing: Boolean, state: AppState
             else -> Color.Transparent
         },
         shape = RoundedCornerShape(12.dp),
+        selected = playing,
         interactionSource = interaction,
         modifier = Modifier.hoverable(interaction),
     ) {
         Row(Modifier.fillMaxWidth().padding(7.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(42.dp).clip(skinShape(RoundedCornerShape(8.dp))), contentAlignment = Alignment.Center) {
                 RemoteArtwork(track.artworkUrl, track.provider, Modifier.fillMaxSize())
                 if (playing) {
                     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .45f)), contentAlignment = Alignment.Center) {
@@ -3498,10 +3546,11 @@ internal fun QueueScreen(queue: QueueState, state: AppState) {
     // The name the queue was just saved under, said here, where it was saved from, rather than only in the
     // library where the playlist went.
     var savedAs by remember { mutableStateOf<String?>(null) }
+    val list = rememberLazyListState()
     Column(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column {
-                Text("Queue", fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                ScreenTitle("Queue", 32.sp)
                 Text(
                     if (queue.tracks.isEmpty()) "Nothing queued" else "${pluralTracks(queue.tracks.size)} • ${queue.currentIndex + 1} playing",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -3555,7 +3604,7 @@ internal fun QueueScreen(queue: QueueState, state: AppState) {
         if (queue.tracks.isEmpty()) {
             EmptyScreen("Your queue is empty", "Play a section or add tracks from the ⋮ menu.")
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = chromePadding(bottom = 20.dp)) {
+            LazyColumn(Modifier.classicScrollbar(list), state = list, verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = chromePadding(bottom = 20.dp)) {
                 itemsIndexed(queue.tracks, key = { index, track -> "${track.queueKey}:$index" }) { index, track ->
                     QueueTrackRow(track, index, queue, state)
                 }
@@ -3573,17 +3622,18 @@ internal fun QueueScreen(queue: QueueState, state: AppState) {
 @Composable
 private fun QueueTrackRow(track: Track, index: Int, queue: QueueState, state: AppState) {
     val playing = index == queue.currentIndex
-    Surface(
+    ListRow(
         onClick = { state.jumpToQueueItem(index) },
         color = if (playing) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .58f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .28f),
         shape = RoundedCornerShape(12.dp),
+        selected = playing,
     ) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(28.dp), contentAlignment = Alignment.Center) {
                 if (playing) Icon(Icons.Default.GraphicEq, "Playing", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 else Text((index + 1).toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
-            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(48.dp).clip(RoundedCornerShape(9.dp)))
+            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(48.dp).clip(skinShape(RoundedCornerShape(9.dp))))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (playing) FontWeight.SemiBold else FontWeight.Normal)

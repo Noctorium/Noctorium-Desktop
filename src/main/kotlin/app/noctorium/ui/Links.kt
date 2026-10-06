@@ -121,13 +121,15 @@ internal fun LinkScreen(state: AppState) {
         state.openLink(value, action)
     }
 
+    val list = rememberLazyListState()
     LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 32.dp),
+        Modifier.fillMaxSize().classicScrollbar(list).padding(horizontal = 32.dp),
+        state = list,
         contentPadding = chromePadding(top = 28.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
-            Text("Paste a link", fontSize = 32.sp, fontWeight = FontWeight.Bold)
+            ScreenTitle("Paste a link", 32.sp)
             Text(
                 "A song, an album or a playlist from YouTube Music, YouTube, SoundCloud or Bandcamp. It plays as " +
                     "soon as it is pasted.",
@@ -393,7 +395,7 @@ private fun LinkTrackRow(track: Track, playing: Boolean, onClick: () -> Unit) {
         shape = RoundedCornerShape(12.dp),
     ) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(44.dp).clip(RoundedCornerShape(9.dp)))
+            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(44.dp).clip(skinShape(RoundedCornerShape(9.dp))))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (playing) FontWeight.SemiBold else FontWeight.Normal)
@@ -425,15 +427,17 @@ internal fun DownloadsScreen(state: AppState) {
         if (text.isNotBlank() && state.keepingRefused(text) == null) state.openLink(text, action)
     }
 
+    val list = rememberLazyListState()
     LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 32.dp),
+        Modifier.fillMaxSize().classicScrollbar(list).padding(horizontal = 32.dp),
+        state = list,
         contentPadding = chromePadding(top = 28.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Downloads", fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    ScreenTitle("Downloads", 32.sp)
                     Text(
                         describeDownloads(downloads) + if (downloads.entries.isNotEmpty()) " · they play with no connection" else "",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -511,7 +515,7 @@ internal fun DownloadsScreen(state: AppState) {
                     shape = RoundedCornerShape(12.dp),
                 ) {
                     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RemoteArtwork(entry.artworkUrl, entry.provider, Modifier.size(44.dp).clip(RoundedCornerShape(9.dp)))
+                        RemoteArtwork(entry.artworkUrl, entry.provider, Modifier.size(44.dp).clip(skinShape(RoundedCornerShape(9.dp))))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(entry.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -567,7 +571,7 @@ private fun SectionLabel(text: String) {
 private fun DownloadJobRow(track: Track, stage: DownloadStage, progress: Float, detail: String?, cancel: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .28f), shape = RoundedCornerShape(12.dp)) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(44.dp).clip(RoundedCornerShape(9.dp)))
+            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(44.dp).clip(skinShape(RoundedCornerShape(9.dp))))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis)

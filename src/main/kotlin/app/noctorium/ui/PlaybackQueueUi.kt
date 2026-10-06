@@ -418,7 +418,7 @@ private fun SuggestionRow(track: Track, index: Int, state: AppState) {
             Box(Modifier.width(28.dp), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.AllInclusive, null, Modifier.size(14.dp), tint = ink(.3f))
             }
-            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(48.dp).clip(RoundedCornerShape(9.dp)).alpha(.7f))
+            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(48.dp).clip(skinShape(RoundedCornerShape(9.dp))).alpha(.7f))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.72f))
@@ -444,7 +444,7 @@ private fun CompactSuggestionRow(track: Track, index: Int, state: AppState) {
         modifier = Modifier.hoverable(interaction),
     ) {
         Row(Modifier.fillMaxWidth().padding(7.dp), verticalAlignment = Alignment.CenterVertically) {
-            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)).alpha(.65f))
+            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(42.dp).clip(skinShape(RoundedCornerShape(8.dp))).alpha(.65f))
             Spacer(Modifier.width(11.dp))
             Column(Modifier.weight(1f)) {
                 Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp, color = ink(.66f))

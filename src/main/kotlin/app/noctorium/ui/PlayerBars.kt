@@ -290,7 +290,7 @@ private fun BarSurface(
 /** The cover, or a note where there is none yet. Clicking it opens the now playing screen. */
 @Composable
 private fun BarCover(track: Track?, size: Dp, corner: Dp, state: AppState) {
-    val shape = RoundedCornerShape(corner)
+    val shape = skinShape(RoundedCornerShape(corner))
     val modifier = Modifier.size(size).clip(shape).clickable(enabled = track != null) { state.navigate(Destination.NOW_PLAYING) }
     if (track != null) {
         RemoteArtwork(track.artworkUrl, track.provider, modifier)
