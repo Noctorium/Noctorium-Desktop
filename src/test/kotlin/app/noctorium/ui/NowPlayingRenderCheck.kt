@@ -1,6 +1,7 @@
 package app.noctorium.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -31,7 +32,9 @@ import app.noctorium.settings.NowPlayingBackdrop
 import app.noctorium.settings.NowPlayingLayout
 import app.noctorium.settings.NowPlayingPanelWidth
 import app.noctorium.settings.NowPlayingPreferences
+import app.noctorium.settings.PlayerBarStyle
 import app.noctorium.settings.ProgressBarStyle
+import app.noctorium.settings.SurfaceStyle
 import app.noctorium.settings.ThemePreset
 import app.noctorium.settings.nowPlayingBackdrop
 import app.noctorium.settings.resolvedAccent
@@ -206,13 +209,59 @@ class NowPlayingRenderCheck {
             }
             state.setTheme(ThemePreset.NOCTORIUM_DAY)
             panel(folder, "layout-settings-day.png", state, 760, 1300) { NowPlayingSettingsCard(it, state) }
+            state.setTheme(ThemePreset.NOCTORIUM_NIGHT)
+
+            // Under a bar that floats over the page, and under glass: what is at the screen's foot stops short of it.
+            state.setPlayerBarStyle(PlayerBarStyle.FLOATING)
+            state.updateNowPlaying { NowPlayingPreferences(layout = NowPlayingLayout.IMMERSIVE) }
+            underBar(folder, "layout-immersive-under-floating.png", state, queue, playback)
+            state.setSurfaceStyle(SurfaceStyle.GLASS)
+            underBar(folder, "layout-immersive-under-glass.png", state, queue, playback)
+            state.setPlayerBarStyle(PlayerBarStyle.INLINE)
+            state.updateNowPlaying { NowPlayingPreferences(layout = NowPlayingLayout.SIDE_BY_SIDE) }
+            underBar(folder, "layout-side_by_side-under-glass.png", state, queue, playback)
         } finally {
             state.updateNowPlaying { NowPlayingPreferences() }
             state.setNowPlayingBackdrop(NowPlayingBackdrop.WASH)
             state.setTheme(ThemePreset.NOCTORIUM_NIGHT)
             state.setProgressBarStyle(ProgressBarStyle.MINIMAL)
+            state.setPlayerBarStyle(PlayerBarStyle.INLINE)
+            state.setSurfaceStyle(SurfaceStyle.SOLID)
             Thread.sleep(300)
             state.close()
+        }
+    }
+
+    /** The screen as the window holds it under a bar that floats over it, the glass one included. */
+    private fun underBar(folder: File, name: String, state: AppState, queue: QueueState, playback: PlaybackState) {
+        val scene = ImageComposeScene(1280, 800, Density(1f)) {
+            themed(state) {
+                val preferences = state.settings.collectAsState().value.preferences
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    Column(Modifier.fillMaxSize()) {
+                        Box(Modifier.weight(1f)) {
+                            val screen: @Composable () -> Unit = { NowPlayingScreen(queue, playback, state) }
+                            if (preferences.surfaceStyle.isGlass) {
+                                GlassContent(queue, playback, state, Color(preferences.themeColours().background), false, screen)
+                            } else {
+                                FloatingContent(queue, playback, state, false, screen)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        try {
+            var image = scene.render(0)
+            repeat(40) { frame ->
+                Thread.sleep(100)
+                image = scene.render((frame + 1) * 100_000_000L)
+            }
+            val file = File(folder, name)
+            file.writeBytes(image.encodeToData()!!.bytes)
+            assertTrue(file.length() > 1_000)
+        } finally {
+            scene.close()
         }
     }
 

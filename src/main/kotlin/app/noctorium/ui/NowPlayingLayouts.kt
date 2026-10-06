@@ -66,6 +66,7 @@ import app.noctorium.playback.PlaybackState
 import app.noctorium.playback.PlaybackStatus
 import app.noctorium.playback.QueueState
 import app.noctorium.settings.CoverStyle
+import app.noctorium.settings.NowPlayingLayout
 import app.noctorium.settings.NowPlayingPreferences
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -80,6 +81,13 @@ import kotlin.math.sign
  * parts as the first six -- the transport, the seek bar, the row of actions under it, the panel -- so a control
  * behaves the same whichever layout it is in.
  */
+
+/**
+ * Whether a layout's cover runs to the edges of the screen. Under a bar that floats over the page it runs on under
+ * the bar as the backdrop does, and only the song and its controls stop short of it.
+ */
+internal val NowPlayingLayout.bleeds: Boolean
+    get() = this == NowPlayingLayout.IMMERSIVE || this == NowPlayingLayout.SPLIT
 
 /**
  * Full cover: the cover is the screen, cropped to fill it, and the song, its seek bar, its controls and its
@@ -119,6 +127,7 @@ internal fun ImmersiveNowPlaying(
             Modifier
                 .align(Alignment.BottomStart)
                 .padding(horizontal = if (wide) 44.dp else 24.dp, vertical = if (wide) 30.dp else 16.dp)
+                .padding(bottom = chromeBottom())
                 .widthIn(max = 900.dp),
         ) {
             SongHeading(track, state, titleSize, artistSize = (titleSize.value * .36f).coerceIn(15f, 27f).sp)
@@ -176,7 +185,7 @@ internal fun SplitNowPlaying(
                 Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
                     RemoteArtwork(track.artworkUrl, track.provider, Modifier.fillMaxSize())
                 }
-                Column(Modifier.width(right).fillMaxHeight().padding(horizontal = 28.dp, vertical = 24.dp)) {
+                Column(Modifier.width(right).fillMaxHeight().padding(horizontal = 28.dp, vertical = 24.dp).padding(bottom = chromeBottom())) {
                     if (!showPanel) Spacer(Modifier.weight(1f))
                     details(if (across >= 1500.dp) 36.sp else 30.sp)
                     if (showPanel) {
@@ -193,7 +202,7 @@ internal fun SplitNowPlaying(
                 Box(Modifier.fillMaxWidth().height(down * (if (stacked) .32f else .5f)).clipToBounds()) {
                     RemoteArtwork(track.artworkUrl, track.provider, Modifier.fillMaxSize())
                 }
-                Column(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 20.dp, vertical = 14.dp)) {
+                Column(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 20.dp, vertical = 14.dp).padding(bottom = chromeBottom())) {
                     details(24.sp)
                     if (stacked) {
                         Spacer(Modifier.height(12.dp))

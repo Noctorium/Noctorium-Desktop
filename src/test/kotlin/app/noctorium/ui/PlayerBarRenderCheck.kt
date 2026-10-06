@@ -142,13 +142,16 @@ class PlayerBarRenderCheck {
                 state.setPlayerBarStyle(style)
                 window(folder, "window-${style.name.lowercase()}-luna.png", state, queue, playback, 1084)
             }
-            state.setProgressBarStyle(ProgressBarStyle.BARS)
+            // Display's seek bar is the compact one, in the display's foot: every style has to fit there.
             state.setPlayerBarStyle(PlayerBarStyle.DISPLAY)
-            window(folder, "window-display-bars.png", state, queue, playback, 1084)
+            ProgressBarStyle.entries.forEach { style ->
+                state.setProgressBarStyle(style)
+                window(folder, "window-display-${style.name.lowercase()}.png", state, queue, playback, 1084)
+            }
             state.setProgressBarStyle(ProgressBarStyle.MINIMAL)
 
-            // The Island opened: the pointer on it, then moved up onto the part that has grown over the page,
-            // where it should still count as on it, and then away, after which it shuts.
+            // The Island opened: the pointer on it, then moved onto the part that has grown out over the page and
+            // left there past the Island's wait, where it should still count as on it and keep it open.
             state.setPlayerBarStyle(PlayerBarStyle.ISLAND)
             listOf(PlayerBarPosition.BOTTOM, PlayerBarPosition.TOP).forEach { position ->
                 state.setPlayerBarPosition(position)
@@ -168,6 +171,18 @@ class PlayerBarRenderCheck {
                     )
                 }
             }
+            // And away again, after which it shuts.
+            state.setPlayerBarPosition(PlayerBarPosition.BOTTOM)
+            state.setSurfaceStyle(SurfaceStyle.SOLID)
+            window(
+                folder,
+                "window-island-shut-again.png",
+                state,
+                queue,
+                playback,
+                1084,
+                pointer = listOf(Offset(542f, 300f - 12f - 26f), Offset(560f, 300f - 12f - 52f - 18f), Offset(40f, 40f)),
+            )
         } finally {
             state.setPlayerBarStyle(PlayerBarStyle.INLINE)
             state.setPlayerBarPosition(PlayerBarPosition.BOTTOM)
@@ -278,8 +293,9 @@ class PlayerBarRenderCheck {
             pointer.forEachIndexed { index, at ->
                 scene.sendPointerEvent(if (index == 0) PointerEventType.Enter else PointerEventType.Move, at)
                 scene.sendPointerEvent(PointerEventType.Move, at)
-                // Past the Island's wait before it shuts, so a pointer it has lost shows as a shut Island.
-                repeat(8) {
+                // Past the Island's wait before it shuts and the shutting itself, so a pointer it has lost shows
+                // as a shut Island rather than one on its way.
+                repeat(14) {
                     Thread.sleep(80)
                     time += 80_000_000L
                     image = scene.render(time)

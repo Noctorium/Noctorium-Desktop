@@ -2571,8 +2571,9 @@ internal fun NowPlayingScreen(queue: QueueState, playback: PlaybackState, state:
         // The backdrop takes its colour from the cover, so the room changes with the record.
         NowPlayingBackground(current, preferences.nowPlayingBackdrop)
         // The backdrop runs on under a bar that floats; what is on it stops short, or the controls at its foot
-        // would be under the bar with no way to reach them, since this screen does not scroll.
-        BoxWithConstraints(Modifier.fillMaxSize().padding(bottom = chromeBottom())) {
+        // would be under the bar with no way to reach them, since this screen does not scroll. A cover that runs to
+        // the screen's edges runs on under it too, and its layout keeps its own controls clear.
+        BoxWithConstraints(Modifier.fillMaxSize().padding(bottom = if (look.layout.bleeds) 0.dp else chromeBottom())) {
             val arrangement = NowPlayingArrangement(
                 layout = look.layout,
                 panel = look.layout.hasPanel && !look.panelHidden,
