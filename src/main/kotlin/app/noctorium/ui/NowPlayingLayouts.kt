@@ -25,7 +25,14 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import app.noctorium.ui.skins.HeroWindow
+import app.noctorium.ui.skins.PictureWindow
+import app.noctorium.ui.skins.SongWindow
+import app.noctorium.ui.skins.Text
+import app.noctorium.ui.skins.listWell
+import app.noctorium.ui.skins.skinCorners
+import app.noctorium.ui.skins.posterType
+import app.noctorium.ui.skins.skinned
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -106,6 +113,21 @@ internal fun ImmersiveNowPlaying(
     arrange: () -> Unit,
     hasNext: Boolean,
 ) {
+    // Under a Windows skin the cover fills a window's client area, as a picture opened in a viewer did, and the
+    // song and its controls are on the window's face under it.
+    if (skinned()) {
+        PictureWindow(track, "${track.title} - Noctorium", Modifier.fillMaxSize().padding(14.dp).padding(bottom = chromeBottom())) {
+            SongHeading(track, state, 22.sp, artistSize = 13.sp, maxLines = 1)
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TransportControls(playback, state, hasNext)
+                Spacer(Modifier.width(16.dp))
+                LayoutSeekBar(playback, state, Modifier.weight(1f))
+            }
+            HeroFooter(track, playback, state, look, arrange)
+        }
+        return
+    }
     val page = MaterialTheme.colorScheme.background
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
         RemoteArtwork(track.artworkUrl, track.provider, Modifier.fillMaxSize())
@@ -175,6 +197,35 @@ internal fun SplitNowPlaying(
         }
         Spacer(Modifier.height(4.dp))
         HeroFooter(track, playback, state, look, arrange)
+    }
+    // Under a Windows skin the cover is a window of its own, filling its client area, with the song and its
+    // controls in a second window beside it and the panel in a third.
+    if (skinned()) {
+        BoxWithConstraints(Modifier.fillMaxSize().padding(14.dp).padding(bottom = chromeBottom())) {
+            val title = track.album?.title?.takeIf { it.isNotBlank() } ?: track.title
+            val song: @Composable (Modifier) -> Unit = { modifier ->
+                SongWindow(track, modifier) { Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) { details(26.sp) } }
+            }
+            if (wide) {
+                val right = maxOf(maxWidth / 2, panelWidth + 56.dp).coerceAtMost(maxWidth * .62f)
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    PictureWindow(track, title, Modifier.weight(1f).fillMaxHeight())
+                    Column(Modifier.width(right).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        if (!showPanel) Spacer(Modifier.weight(1f))
+                        song(Modifier.fillMaxWidth())
+                        if (showPanel) panel(Modifier.fillMaxWidth().weight(1f), false) else Spacer(Modifier.weight(1f))
+                    }
+                }
+            } else {
+                val roomForPanel = maxHeight >= ROOM_FOR_PANEL
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    PictureWindow(track, title, Modifier.fillMaxWidth().weight(1f))
+                    song(Modifier.fillMaxWidth())
+                    if (showPanel && roomForPanel) panel(Modifier.fillMaxWidth().weight(1f), false)
+                }
+            }
+        }
+        return
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val across = maxWidth
@@ -247,23 +298,26 @@ internal fun CoverFlowNowPlaying(
     arrange: () -> Unit,
     hasNext: Boolean,
 ) {
-    // The row and the song under it kept together in the middle, however much room is left round them.
-    Column(
-        Modifier.fillMaxSize().padding(top = 20.dp, bottom = 14.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        CoverFlow(queue, state, look, Modifier.weight(1f, fill = false).fillMaxWidth())
-        Spacer(Modifier.height(8.dp))
+    // In a window of its own on the desktop, under a Windows skin.
+    HeroWindow(Modifier.fillMaxSize(), track) { inner ->
+        // The row and the song under it kept together in the middle, however much room is left round them.
         Column(
-            Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 28.dp),
+            inner.padding(top = 20.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            SongHeading(track, state, 24.sp, artistSize = 14.sp, centred = true)
-            Spacer(Modifier.height(10.dp))
-            LayoutSeekBar(playback, state, Modifier.fillMaxWidth())
-            TransportControls(playback, state, hasNext)
-            HeroFooter(track, playback, state, look, arrange)
+            CoverFlow(queue, state, look, Modifier.weight(1f, fill = false).fillMaxWidth())
+            Spacer(Modifier.height(8.dp))
+            Column(
+                Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                SongHeading(track, state, 24.sp, artistSize = 14.sp, centred = true)
+                Spacer(Modifier.height(10.dp))
+                LayoutSeekBar(playback, state, Modifier.fillMaxWidth())
+                TransportControls(playback, state, hasNext)
+                HeroFooter(track, playback, state, look, arrange)
+            }
         }
     }
 }
@@ -277,11 +331,14 @@ private fun CoverFlow(queue: QueueState, state: AppState, look: NowPlayingPrefer
         // Room above and below for the turned covers, whose near edges stand taller than the one in the middle.
         val side = minOf(maxHeight / (1f + FLOW_REFLECTION + FLOW_MARGIN * 2), maxWidth * .34f, 470.dp * look.coverSize.scale)
         val top = side * FLOW_MARGIN
-        val shape = when (look.cover) {
-            CoverStyle.SQUARE -> RectangleShape
-            CoverStyle.CIRCLE -> CircleShape
-            else -> RoundedCornerShape(side * .03f)
-        }
+        // With the skin's corners: square sleeves under 98.
+        val shape = skinCorners(
+            when (look.cover) {
+                CoverStyle.SQUARE -> RectangleShape
+                CoverStyle.CIRCLE -> CircleShape
+                else -> RoundedCornerShape(side * .03f)
+            },
+        )
         val middle = position.roundToInt()
         // As tall as the row and no taller, so whatever is under it sits right under it.
         Box(Modifier.fillMaxWidth().height(side * (1f + FLOW_REFLECTION + FLOW_MARGIN * 2))) {
@@ -408,26 +465,29 @@ internal fun TurntableNowPlaying(
         (playback.status == PlaybackStatus.PLAYING || playback.status == PlaybackStatus.PAUSED)
     val progress = if (loaded) playbackFraction(playback.positionMs.toFloat(), playback.durationMs) else null
     val deck: @Composable (Modifier) -> Unit = { modifier ->
-        // The deck and the song under it kept together in the middle, however much room is left round them.
-        Column(
-            modifier.padding(horizontal = 24.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            BoxWithConstraints(Modifier.weight(1f, fill = false).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                val width = minOf(maxWidth, maxHeight * TURNTABLE_ASPECT, 860.dp * look.coverSize.scale)
-                Turntable(track, playback.isPlaying, progress, Modifier.size(width, width / TURNTABLE_ASPECT))
-            }
-            Spacer(Modifier.height(16.dp))
-            Column(Modifier.widthIn(max = 660.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                SongHeading(track, state, 22.sp, artistSize = 14.sp, centred = true, maxLines = 1)
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TransportControls(playback, state, hasNext)
-                    Spacer(Modifier.width(16.dp))
-                    LayoutSeekBar(playback, state, Modifier.weight(1f))
+        // In a window of its own on the desktop, under a Windows skin.
+        HeroWindow(modifier, track) { inner ->
+            // The deck and the song under it kept together in the middle, however much room is left round them.
+            Column(
+                inner.padding(horizontal = 24.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                BoxWithConstraints(Modifier.weight(1f, fill = false).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    val width = minOf(maxWidth, maxHeight * TURNTABLE_ASPECT, 860.dp * look.coverSize.scale)
+                    Turntable(track, playback.isPlaying, progress, Modifier.size(width, width / TURNTABLE_ASPECT))
                 }
-                HeroFooter(track, playback, state, look, arrange)
+                Spacer(Modifier.height(16.dp))
+                Column(Modifier.widthIn(max = 660.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    SongHeading(track, state, 22.sp, artistSize = 14.sp, centred = true, maxLines = 1)
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TransportControls(playback, state, hasNext)
+                        Spacer(Modifier.width(16.dp))
+                        LayoutSeekBar(playback, state, Modifier.weight(1f))
+                    }
+                    HeroFooter(track, playback, state, look, arrange)
+                }
             }
         }
     }
@@ -463,6 +523,43 @@ internal fun PosterNowPlaying(
     arrange: () -> Unit,
     hasNext: Boolean,
 ) {
+    // Under a Windows skin the words are set on a white page in a window, in the heavy type of the time, and the
+    // controls are on the window's face under the page.
+    if (skinned()) {
+        SongWindow(track, Modifier.fillMaxSize().padding(6.dp), fill = true) {
+            BoxWithConstraints(
+                Modifier.weight(1f).fillMaxWidth().padding(4.dp).listWell().padding(horizontal = 26.dp, vertical = 18.dp),
+                contentAlignment = Alignment.BottomStart,
+            ) {
+                val base = posterType()
+                val titleSize = fittedSize(track.title, base, maxWidth, (maxHeight - 96.dp).coerceAtLeast(56.dp), maxLines = 3)
+                Column {
+                    Text(track.title, style = base.copy(fontSize = titleSize), maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        track.artistLine,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontSize = (titleSize.value * .26f).coerceIn(15f, 36f).sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    track.album?.title?.takeIf { it.isNotBlank() && it != track.title }?.let { album ->
+                        Text(album, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (look.followButton) FollowArtistChip(track, state, Modifier.padding(top = 8.dp))
+                }
+            }
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TransportControls(playback, state, hasNext)
+                    Spacer(Modifier.width(16.dp))
+                    LayoutSeekBar(playback, state, Modifier.weight(1f))
+                }
+                HeroFooter(track, playback, state, look, arrange)
+            }
+        }
+        return
+    }
     val accent = MaterialTheme.colorScheme.primary
     val writing = MaterialTheme.colorScheme.onSurface
     val palette = rememberArtworkPalette(track.artworkUrl, track.provider, fallback = ArtworkPalette(accent, accent))

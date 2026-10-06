@@ -3,6 +3,7 @@ package app.noctorium.ui.skins
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,7 +14,10 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.dp
 import app.noctorium.domain.Track
 import app.noctorium.settings.ThemeSkin
@@ -42,6 +46,58 @@ fun HeroWindow(modifier: Modifier, track: Track, content: @Composable (Modifier)
     SkinWindow(title = { Text("${track.title} - Noctorium") }, modifier = modifier.padding(6.dp)) {
         content(Modifier.fillMaxSize())
     }
+}
+
+/**
+ * A window titled with the song under a Windows skin, holding [content] on its face: as tall as what is in it, or
+ * all of what it is given when [fill]. The layouts that give the cover a window of its own keep the song and its
+ * controls in one of these beside it.
+ */
+@Composable
+fun SongWindow(track: Track, modifier: Modifier, fill: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+    SkinWindow(title = { Text("${track.title} - Noctorium") }, modifier = modifier) {
+        Column(if (fill) Modifier.fillMaxSize() else Modifier.fillMaxWidth(), content = content)
+    }
+}
+
+/**
+ * The cover filling a window's client area, cropped to fill it and set into the window's edge, the way a picture
+ * opened in a viewer of the time filled its window; titled [title]. [footer], where there is one, sits on the
+ * window's face under the picture.
+ */
+@Composable
+fun PictureWindow(track: Track, title: String, modifier: Modifier, footer: (@Composable ColumnScope.() -> Unit)? = null) {
+    val skin = skin()
+    SkinWindow(title = { Text(title) }, modifier = modifier) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(4.dp)
+                .drawWithContent {
+                    drawContent()
+                    if (skin == ThemeSkin.WINDOWS_XP) {
+                        drawRect(Luna.FieldEdge, Offset(pixel / 2, pixel / 2), Size(size.width - pixel, size.height - pixel), style = Stroke(pixel))
+                    } else {
+                        bevel(Bevel.Sunken)
+                    }
+                },
+        ) {
+            RemoteArtwork(track.artworkUrl, track.provider, Modifier.fillMaxSize())
+        }
+        if (footer != null) Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp), content = footer)
+    }
+}
+
+/**
+ * The type Big type sets the song's name in under a Windows skin: Arial Black in plain black under 98, as a poster
+ * made on a 98 machine would have it; Luna's Trebuchet at its boldest, in the blue XP headed things with, under XP.
+ */
+@Composable
+fun posterType(): TextStyle = if (skin() == ThemeSkin.WINDOWS_XP) {
+    TextStyle(fontFamily = SkinFonts.trebuchet, fontWeight = FontWeight.Bold, color = Luna.TaskPanelTitle, lineHeight = 1.02.em, letterSpacing = (-.01).em)
+} else {
+    TextStyle(fontFamily = SkinFonts.black, fontWeight = FontWeight.Black, color = Classic.Text, lineHeight = 1.08.em, letterSpacing = (-.01).em)
 }
 
 /** The panel of the queue and the lyrics in a window titled [title], under a Windows skin. */

@@ -49,11 +49,32 @@ internal object SkinFonts {
     /** Luna's title bars. */
     val trebuchet: FontFamily by lazy { installed("Trebuchet MS", "Tahoma") }
 
+    /**
+     * The heavy face posters and covers of the time were set in: Arial Black, which both desktops carried; Tahoma
+     * at its boldest where it is missing. Windows files Arial Black under Arial now, as its heaviest weight, so it
+     * is looked for there first and by its own name after.
+     */
+    @OptIn(ExperimentalTextApi::class)
+    val black: FontFamily by lazy {
+        when {
+            hasWeight("Arial", 900) -> FontFamily(SystemFont("Arial", FontWeight.Black))
+            isInstalled("Arial Black") -> FontFamily(SystemFont("Arial Black", FontWeight.Black))
+            isInstalled("Tahoma") -> FontFamily(SystemFont("Tahoma", FontWeight.Bold))
+            else -> FontFamily.Default
+        }
+    }
+
+    private fun hasWeight(family: String, weight: Int): Boolean = runCatching {
+        val styles = FontMgr.default.matchFamily(family)
+        (0 until styles.count()).any { styles.getStyle(it).weight == weight }
+    }.getOrDefault(false)
+
+    private fun isInstalled(family: String): Boolean =
+        runCatching { FontMgr.default.matchFamily(family).count() > 0 }.getOrDefault(false)
+
     @OptIn(ExperimentalTextApi::class)
     private fun installed(vararg names: String): FontFamily {
-        val name = names.firstOrNull { family ->
-            runCatching { FontMgr.default.matchFamily(family).count() > 0 }.getOrDefault(false)
-        } ?: return FontFamily.Default
+        val name = names.firstOrNull(::isInstalled) ?: return FontFamily.Default
         return FontFamily(
             SystemFont(name, FontWeight.Normal),
             SystemFont(name, FontWeight.Bold),
