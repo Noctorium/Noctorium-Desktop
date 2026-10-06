@@ -18,7 +18,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.material.icons.filled.ErrorOutline
+import app.noctorium.ui.skins.InfoBar
 import app.noctorium.ui.skins.scrollingPage
+import app.noctorium.ui.skins.skinned
 import app.noctorium.ui.skins.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -222,24 +224,45 @@ internal fun PlaybackToolsBanner(openSettings: () -> Unit) {
     } else {
         MaterialTheme.colorScheme.errorContainer
     }
+    val setting = installing?.let {
+        "Setting up ${it.displayName}, so Noctorium can play music. You can keep using everything else."
+    }
+    val missing = "Noctorium cannot play anything until " +
+        tools.missingRequired.joinToString(" and ") { it.displayName } + " is installed."
+    val progress: @Composable () -> Unit = {
+        tools.progress?.let { fraction ->
+            LinearProgressIndicator({ fraction }, Modifier.fillMaxWidth())
+        }
+        if (installing != null && tools.progress == null) {
+            Box(Modifier.fillMaxWidth()) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+        }
+    }
+
+    // The information bar under a Windows skin, with the progress bar of the time beneath it.
+    if (skinned()) {
+        Column(Modifier.padding(start = 2.dp, end = 2.dp, top = 2.dp)) {
+            if (setting != null) {
+                InfoBar(Icons.Default.Downloading, setting)
+            } else {
+                InfoBar(Icons.Default.ErrorOutline, missing, MaterialTheme.colorScheme.error, action = { Button(openSettings) { Text("Fix this") } })
+            }
+            progress()
+        }
+        return
+    }
 
     Surface(color = colour, modifier = Modifier.fillMaxWidth()) {
         Column {
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (installing != null) {
+                if (setting != null) {
                     CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(11.dp))
-                    Text(
-                        "Setting up ${installing.displayName}, so Noctorium can play music. " +
-                            "You can keep using everything else.",
-                        fontSize = 12.sp,
-                    )
+                    Text(setting, fontSize = 12.sp)
                 } else {
                     Icon(Icons.Default.ErrorOutline, null, tint = MaterialTheme.colorScheme.onErrorContainer)
                     Spacer(Modifier.width(11.dp))
                     Text(
-                        "Noctorium cannot play anything until " +
-                            tools.missingRequired.joinToString(" and ") { it.displayName } + " is installed.",
+                        missing,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         fontSize = 12.sp,
                         modifier = Modifier.weight(1f),
@@ -247,12 +270,7 @@ internal fun PlaybackToolsBanner(openSettings: () -> Unit) {
                     Button(openSettings) { Text("Fix this") }
                 }
             }
-            tools.progress?.let { fraction ->
-                LinearProgressIndicator({ fraction }, Modifier.fillMaxWidth())
-            }
-            if (installing != null && tools.progress == null) {
-                Box(Modifier.fillMaxWidth()) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            }
+            progress()
         }
     }
 }

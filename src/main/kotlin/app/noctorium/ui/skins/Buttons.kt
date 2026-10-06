@@ -92,6 +92,8 @@ internal fun PushButton(
     minHeight: Dp = 23.dp,
     /** Whether a latched button is filled with 98's checkerboard; the Start button never was. */
     checkered: Boolean = true,
+    /** How tall what is on it may be: a line of writing, or [Dp.Unspecified] for a button with a picture on it. */
+    contentHeight: Dp = 18.dp,
     content: @Composable RowScope.() -> Unit,
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
@@ -114,7 +116,7 @@ internal fun PushButton(
             .padding(padding),
         contentAlignment = Alignment.Center,
     ) {
-        ButtonContent(enabled, nudged = skin == ThemeSkin.WINDOWS_98 && down, content = content)
+        ButtonContent(enabled, nudged = skin == ThemeSkin.WINDOWS_98 && down, contentHeight, content = content)
     }
 }
 
@@ -123,11 +125,11 @@ internal fun PushButton(
  * grey, with white a pixel below and to the right, so the words looked pressed into the face -- and XP greyed it.
  */
 @Composable
-private fun ButtonContent(enabled: Boolean, nudged: Boolean, content: @Composable RowScope.() -> Unit) {
+private fun ButtonContent(enabled: Boolean, nudged: Boolean, contentHeight: Dp, content: @Composable RowScope.() -> Unit) {
     val skin = skin()
     val row: @Composable (Modifier) -> Unit = { extra ->
         Row(
-            extra.heightIn(max = 18.dp),
+            extra.heightIn(max = contentHeight),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
             content = content,

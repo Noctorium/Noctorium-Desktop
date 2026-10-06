@@ -143,6 +143,10 @@ import app.noctorium.ui.skins.Text
 import app.noctorium.ui.skins.TextButton
 import app.noctorium.ui.skins.BrowsingPane
 import app.noctorium.ui.skins.HeroWindow
+import app.noctorium.ui.skins.InfoBar
+import app.noctorium.ui.skins.MediaButtons
+import app.noctorium.ui.skins.PictureChoice
+import app.noctorium.ui.skins.SectionTitle
 import app.noctorium.ui.skins.ListRow
 import app.noctorium.ui.skins.listWell
 import app.noctorium.ui.skins.PanelTabs
@@ -682,7 +686,7 @@ private fun TrackRowSection(title: String, subtitle: String?, tracks: List<Track
         BadgePolicy.AUTO -> tracks.map { it.provider }.distinct().size > 1
     }
     Column(Modifier.padding(vertical = 14.dp)) {
-        Text(title, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        SectionTitle(title, 21.sp)
         subtitle?.takeIf { it.isNotBlank() }?.let {
             Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .8f), fontSize = 12.sp)
         }
@@ -712,7 +716,7 @@ private fun PlaylistRowSection(
     val preferences = state.settings.collectAsState().value.preferences
     val cardWidth = preferences.cardSize.widthDp.dp
     Column(Modifier.padding(vertical = 14.dp)) {
-        Text(title, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        SectionTitle(title, 21.sp)
         subtitle?.takeIf { it.isNotBlank() }?.let {
             Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .8f), fontSize = 12.sp)
         }
@@ -1003,6 +1007,11 @@ private fun LibraryList(library: LibraryState, state: AppState, newPlaylist: () 
 
 @Composable
 private fun LibraryNotice(message: String, dismiss: () -> Unit) {
+    // The information bar under a Windows skin.
+    if (skinned()) {
+        InfoBar(Icons.Default.CheckCircle, message, MaterialTheme.colorScheme.primary, dismiss)
+        return
+    }
     Surface(color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .5f), shape = RoundedCornerShape(11.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.CheckCircle, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.primary)
@@ -1630,6 +1639,10 @@ private fun LibraryProblem(message: String, state: AppState) {
 
 @Composable
 private fun LibraryProblemBanner(message: String) {
+    if (skinned()) {
+        InfoBar(Icons.Default.WarningAmber, message, MaterialTheme.colorScheme.error)
+        return
+    }
     Surface(color = MaterialTheme.colorScheme.errorContainer.copy(alpha = .35f), shape = RoundedCornerShape(11.dp)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.WarningAmber, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.error)
@@ -2865,6 +2878,20 @@ private fun NowPlayingHero(
  */
 @Composable
 private fun TransportControls(playback: PlaybackState, state: AppState, hasNext: Boolean) {
+    // A media player's raised buttons under a Windows skin, as 98's CD Player had them.
+    if (skinned()) {
+        MediaButtons(
+            resolving = playback.status == PlaybackStatus.RESOLVING,
+            hasNext = hasNext,
+            previous = state::previous,
+            toggle = state::togglePlayback,
+            next = state::next,
+            playIcon = { PlayPauseIcon(playback.isPlaying, it) },
+            previousIcon = Icons.Default.SkipPrevious,
+            nextIcon = Icons.Default.SkipNext,
+        )
+        return
+    }
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(state::previous, Modifier.size(44.dp)) {
             Icon(Icons.Default.SkipPrevious, "Previous track", Modifier.size(28.dp), tint = ink(.82f))
@@ -2982,6 +3009,13 @@ private fun NowPlayingLayoutPicker(selected: NowPlayingLayout, compact: Boolean 
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         NowPlayingLayout.entries.forEach { layout ->
             val active = layout == selected
+            // A button with the picture on it, pressed in while chosen, under a Windows skin.
+            if (skinned()) {
+                PictureChoice(active, { choose(layout) }, layout.displayName) {
+                    NowPlayingLayoutPicture(layout, active, Modifier.size(pictureWidth, pictureWidth * .62f))
+                }
+                return@forEach
+            }
             val border by animateColorAsState(
                 if (active) MaterialTheme.colorScheme.primary else ink(.1f),
                 motionSpec(MotionTiming.QUICK),
@@ -3887,6 +3921,10 @@ internal fun formatPlaybackTime(milliseconds: Long): String {
 
 @Composable
 private fun PlaybackError(message: String) {
+    if (skinned()) {
+        InfoBar(Icons.Default.ErrorOutline, message, MaterialTheme.colorScheme.error)
+        return
+    }
     Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.ErrorOutline, null, tint = MaterialTheme.colorScheme.onErrorContainer)
@@ -3968,6 +4006,10 @@ private fun SettingsHome(settings: SettingsState, state: AppState, open: (Settin
         }
         settings.message?.let { message ->
             item {
+                if (skinned()) {
+                    InfoBar(Icons.Default.CheckCircle, message, MaterialTheme.colorScheme.primary, state::clearSettingsMessage)
+                    return@item
+                }
                 Surface(color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .55f), shape = RoundedCornerShape(11.dp)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.CheckCircle, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
@@ -4651,7 +4693,7 @@ private fun ThemeSwatch(preset: ThemePreset, colours: ThemeColours, selected: Bo
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(84.dp)) {
         Surface(
             onClick = choose,
-            shape = RoundedCornerShape(10.dp),
+            shape = skinShape(RoundedCornerShape(10.dp)),
             color = Color(colours.background),
             border = BorderStroke(
                 2.dp,

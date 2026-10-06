@@ -47,6 +47,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import app.noctorium.ui.skins.CheckBoxes
+import app.noctorium.ui.skins.skinShape
 import app.noctorium.ui.skins.scrollingPage
 import app.noctorium.ui.skins.skinned
 import app.noctorium.ui.skins.OutlinedTextField
@@ -835,7 +836,7 @@ private fun FontOption(font: FontChoice, selected: Boolean, modifier: Modifier, 
     val family = font.fontFamily() ?: FontFamily.Default
     Surface(
         onClick = choose,
-        shape = RoundedCornerShape(12.dp),
+        shape = skinShape(RoundedCornerShape(12.dp)),
         color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .55f) else ink(.04f),
         border = BorderStroke(
             if (selected) 2.dp else 1.dp,
