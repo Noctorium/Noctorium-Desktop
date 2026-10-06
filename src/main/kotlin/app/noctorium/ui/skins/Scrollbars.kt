@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.offset
 import app.noctorium.settings.ThemeSkin
+import app.noctorium.ui.chromeBottom
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -98,19 +99,23 @@ private fun Modifier.scrollbar(adapter: ScrollbarAdapter, skin: ThemeSkin): Modi
     val scope = rememberCoroutineScope()
     var pressed by remember { mutableStateOf<Part?>(null) }
     val width = skin.scrollbarWidth()
+    // Stopping short of a player bar that floats over the foot of the page, so its lower arrow is not under it.
+    val clear = chromeBottom()
     return this
         .drawWithContent {
             drawContent()
             val bar = width.roundToPx().toFloat()
-            val geometry = geometry(adapter, bar, size.height) ?: return@drawWithContent
+            val height = (size.height - clear.toPx()).coerceAtLeast(0f)
+            val geometry = geometry(adapter, bar, height) ?: return@drawWithContent
             translate(left = size.width - bar) {
-                clipRect(0f, 0f, bar, size.height) {
+                clipRect(0f, 0f, bar, height) {
                     if (skin == ThemeSkin.WINDOWS_XP) drawLunaScrollbar(geometry, pressed) else drawClassicScrollbar(geometry, pressed)
                 }
             }
         }
-        .pointerInput(adapter) {
+        .pointerInput(adapter, clear) {
             val bar = width.roundToPx().toFloat()
+            val height = (size.height - clear.toPx()).coerceAtLeast(0f)
             fun strip(x: Float) = x >= size.width - bar
             awaitEachGesture {
                 // A turn of the wheel over the bar scrolls the list it belongs to, as it did.
@@ -125,8 +130,8 @@ private fun Modifier.scrollbar(adapter: ScrollbarAdapter, skin: ThemeSkin): Modi
                     event = awaitPointerEvent()
                 }
                 val down = event.changes.firstOrNull { it.pressed && !it.isConsumed } ?: return@awaitEachGesture
-                if (!strip(down.position.x)) return@awaitEachGesture
-                val geometry = geometry(adapter, bar, size.height.toFloat()) ?: return@awaitEachGesture
+                if (!strip(down.position.x) || down.position.y >= height) return@awaitEachGesture
+                val geometry = geometry(adapter, bar, height) ?: return@awaitEachGesture
                 down.consume()
                 val y = down.position.y
                 val part = geometry.partAt(y)
@@ -149,12 +154,12 @@ private fun Modifier.scrollbar(adapter: ScrollbarAdapter, skin: ThemeSkin): Modi
                     Part.FORWARD -> repeat { adapter.scrollOffset + line }
                     // Paging stops once the thumb has come to the pointer, as it did.
                     Part.PAGE_BACK -> repeat {
-                        geometry(adapter, bar, size.height.toFloat())
+                        geometry(adapter, bar, height)
                             ?.takeIf { it.thumbTop > y }
                             ?.let { adapter.scrollOffset - adapter.viewportSize }
                     }
                     Part.PAGE_FORWARD -> repeat {
-                        geometry(adapter, bar, size.height.toFloat())
+                        geometry(adapter, bar, height)
                             ?.takeIf { it.thumbTop + it.thumbLength < y }
                             ?.let { adapter.scrollOffset + adapter.viewportSize }
                     }
@@ -166,7 +171,7 @@ private fun Modifier.scrollbar(adapter: ScrollbarAdapter, skin: ThemeSkin): Modi
                     if (!change.pressed) break
                     change.consume()
                     if (part == Part.THUMB) {
-                        val now = geometry(adapter, bar, size.height.toFloat()) ?: break
+                        val now = geometry(adapter, bar, height) ?: break
                         val travel = (now.trackLength - now.thumbLength).coerceAtLeast(1f)
                         val along = ((change.position.y - grab - now.trackTop) / travel).coerceIn(0f, 1f)
                         val target = along * max(0.0, adapter.contentSize - adapter.viewportSize)
