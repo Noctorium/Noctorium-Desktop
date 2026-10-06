@@ -424,7 +424,8 @@ private fun Transport(
                 PlayPauseIcon(playback.isPlaying, Modifier.size(playSize * .56f))
             }
         }
-        IconButton(state::next, Modifier.size(buttonSize)) {
+        // Lit while next leads somewhere, autoplay's lined-up songs included: see QueueState.hasNext.
+        IconButton(state::next, Modifier.size(buttonSize), enabled = queue.hasNext) {
             Icon(Icons.Default.SkipNext, "Next track", Modifier.size(buttonSize * .58f))
         }
         if (PlayerButton.REPEAT in shown) {

@@ -49,6 +49,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
@@ -112,6 +113,7 @@ import app.noctorium.auth.permalinkFromBrowserUrl
 import app.noctorium.auth.adoptCookieFile
 import app.noctorium.auth.writeCookieFile
 import app.noctorium.bandcamp.BandcampMusicProvider
+import app.noctorium.spotify.isSpotifyArtist
 import app.noctorium.playlists.LocalPlaylist
 import app.noctorium.playlists.PlaylistShareLink
 import app.noctorium.settings.*
@@ -657,14 +659,9 @@ private fun PlaylistRowSection(
 
 /**
  * Whether a playlist stands for an artist -- everything they have put out -- rather than for one release or
- * list, which is how Bandcamp and Spotify both open an artist.
- *
- * Spotify's are known by the `artist:` the core puts before their ids, as its SpotifyClient.ARTIST_PREFIX.
- * That name is internal to the core, so the prefix is written out here; should it change there, Spotify's
- * artists would only be drawn square again.
+ * list, which is how Bandcamp and Spotify both open an artist. Each service's own core says which are.
  */
-internal fun Playlist.isArtist(): Boolean =
-    BandcampMusicProvider.isArtist(this) || (provider == ProviderType.SPOTIFY && id.startsWith("artist:"))
+internal fun Playlist.isArtist(): Boolean = BandcampMusicProvider.isArtist(this) || isSpotifyArtist()
 
 /**
  * One playlist, album or artist on a shelf: its cover and its name, opening its page when clicked.
@@ -1166,7 +1163,7 @@ private fun NewPlaylistDialog(
 }
 
 @Composable
-private fun PlaylistNameDialog(
+internal fun PlaylistNameDialog(
     title: String,
     initial: String,
     confirmLabel: String,
@@ -1571,14 +1568,14 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
             ui.searchLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
             ui.searchQuery.isBlank() -> EmptyScreen(
                 "Search ${ui.searchMode.displayName}",
-                searchHint(ui.searchMode, settings.spotify, settings.vk),
+                searchHint(ui.searchMode, settings.spotify, settings.vk, settings.preferences.hybridSearch),
             )
             ui.errorMessage != null -> PlaybackError(ui.errorMessage.orEmpty())
             // Spotify answers a search with nothing at all when nobody is signed in, which would otherwise
             // read as Spotify having nothing by that name.
             ui.searchMode == SearchMode.SPOTIFY && !settings.spotify.connected -> EmptyScreen(
                 "Spotify is not connected",
-                searchHint(ui.searchMode, settings.spotify, settings.vk),
+                searchHint(ui.searchMode, settings.spotify, settings.vk, settings.preferences.hybridSearch),
             )
             else -> SearchResultsList(ui.searchResults, state)
         }
@@ -1592,25 +1589,40 @@ internal fun servicesLine(names: List<String>): String = when (names.size) {
     else -> names.dropLast(1).joinToString() + " and " + names.last()
 }
 
+/** Every service a Hybrid search can ask, in the order the choice of them is shown. The core's own list. */
+internal val HYBRID_SEARCH_SERVICES: List<ProviderType> = DEFAULT_HYBRID_SEARCH.toList()
+
+/** A service as Hybrid search names it: YouTube's videos by what they are, to tell them from YouTube Music. */
+internal fun hybridServiceName(provider: ProviderType): String =
+    if (provider == ProviderType.YOUTUBE_VIDEO) "YouTube videos" else provider.displayName
+
 /**
  * What the search page says before anything is typed: which services a search asks, or what one of them
  * needs first.
  *
- * Mixed search asks Spotify only when its songs play on Spotify -- matched, each would be a slower copy of
- * the YouTube Music result beside it -- and VK only for an account signed in to it. Both are the core's
- * rules; this says them, so the line names exactly the services that will answer.
+ * Mixed search asks the services chosen for it in Settings, and of those, Spotify only when its songs play
+ * on Spotify -- matched, each would be a slower copy of the YouTube Music result beside it -- and VK only for
+ * an account signed in to it. Those are the core's rules; this says them, so the line names exactly the
+ * services that will answer.
  */
-internal fun searchHint(mode: SearchMode, spotify: SpotifyConnectionState, vk: VkConnectionState): String = when {
-    mode == SearchMode.HYBRID -> servicesLine(
-        listOfNotNull(
-            "YouTube Music",
-            "YouTube videos",
-            "SoundCloud",
-            "Bandcamp",
-            "Spotify".takeIf { spotify.playsOnSpotify },
-            "VK Music".takeIf { vk.connected },
-        ),
-    ) + " results appear together."
+internal fun searchHint(
+    mode: SearchMode,
+    spotify: SpotifyConnectionState,
+    vk: VkConnectionState,
+    hybrid: Set<ProviderType> = DEFAULT_HYBRID_SEARCH,
+): String = when {
+    mode == SearchMode.HYBRID -> {
+        val answering = HYBRID_SEARCH_SERVICES.filter { service ->
+            service in hybrid &&
+                (service != ProviderType.SPOTIFY || spotify.playsOnSpotify) &&
+                (service != ProviderType.VK || vk.connected)
+        }
+        if (answering.isEmpty()) {
+            "None of the services chosen for Hybrid search can answer yet. Choose them under Settings › Customization."
+        } else {
+            servicesLine(answering.map(::hybridServiceName)) + " results appear together."
+        }
+    }
     mode == SearchMode.SPOTIFY && !spotify.connected -> "Connect Spotify under Settings › Spotify library to search it."
     mode == SearchMode.VK && !vk.connected -> "Sign in to VK under Settings › VK Music to search it."
     else -> "Only ${mode.displayName} results will appear."
@@ -2062,10 +2074,11 @@ internal fun ProviderBadge(provider: ProviderType, compact: Boolean = false) {
 }
 
 /**
- * Volume, boost and mute in one popover, so the bar carries a single icon instead of four controls.
+ * Volume, boost, mute and speed in one popover, so the bar carries a single icon instead of five controls.
  *
  * The volume and mute reach Spotify's own app when that is what is playing, and Spotify turns its device
- * up and down; the boost is a filter in this computer's player, and rests until a song plays here again.
+ * up and down; the boost and the speed belong to this computer's player, and rest until a song plays here
+ * again.
  */
 @Composable
 internal fun VolumeControl(playback: PlaybackState, state: AppState) {
@@ -2120,11 +2133,20 @@ internal fun VolumeControl(playback: PlaybackState, state: AppState) {
                         modifier = Modifier.height(30.dp),
                     )
                 }
+                // The speed sits with the volume because both are reached for mid-song, and a podcast is the
+                // likeliest reason to want either.
+                HorizontalDivider(Modifier.padding(vertical = 10.dp), color = ink(.08f))
+                SpeedControl(
+                    state.settings.collectAsState().value.preferences.playbackSpeed,
+                    onSpotify,
+                    compact = true,
+                    set = state::setPlaybackSpeed,
+                )
                 if (onSpotify) {
-                    Spacer(Modifier.height(9.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        "Spotify plays this song in its own app, so the boost and the equaliser wait for the next " +
-                            "song played here.",
+                        "Spotify plays this song in its own app, so the speed, the boost and the equaliser wait for " +
+                            "the next song played here.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
                     )
@@ -2188,7 +2210,8 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                         PlayPauseIcon(playback.isPlaying, Modifier.size(24.dp))
                     }
                 }
-                IconButton(state::next, Modifier.size(34.dp)) {
+                // Lit while next leads somewhere, autoplay's lined-up songs included: see QueueState.hasNext.
+                IconButton(state::next, Modifier.size(34.dp), enabled = queue.hasNext) {
                     Icon(Icons.Default.SkipNext, "Next track", Modifier.size(20.dp))
                 }
                 if (PlayerButton.REPEAT in shown) {
@@ -2394,7 +2417,7 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                             }
                         }
                         Spacer(Modifier.width(8.dp))
-                        FilledTonalIconButton(state::next, Modifier.size(40.dp)) {
+                        FilledTonalIconButton(state::next, Modifier.size(40.dp), enabled = queue.hasNext) {
                             Icon(Icons.Default.SkipNext, "Next track")
                         }
                         if (PlayerButton.REPEAT in shown) {
@@ -2508,7 +2531,7 @@ internal fun NowPlayingScreen(queue: QueueState, playback: PlaybackState, state:
             }
             // One arrangement easing into the next, so a change made from the menu is seen happening.
             MotionContent(arrangement, Modifier.fillMaxSize()) { shown ->
-                NowPlayingArranged(shown, current, playback, state, look.panelWidth.widthDp.dp, { arranging = true }, panel)
+                NowPlayingArranged(shown, current, playback, state, look.panelWidth.widthDp.dp, { arranging = true }, panel, queue.hasNext)
             }
         }
         // Anchored to the top right whatever the layout, so the menu stays put while the screen rearranges
@@ -2530,10 +2553,11 @@ private fun NowPlayingArranged(
     panelWidth: Dp,
     arrange: () -> Unit,
     panel: @Composable (Modifier, Boolean) -> Unit,
+    hasNext: Boolean,
 ) {
     val layout = shown.layout
     val hero: @Composable (HeroArrangement, Modifier) -> Unit = { heroArrangement, modifier ->
-        NowPlayingHero(track, playback, state, heroArrangement, arrange, modifier)
+        NowPlayingHero(track, playback, state, heroArrangement, arrange, modifier, hasNext)
     }
     when {
         layout == NowPlayingLayout.BANNER -> Column(
@@ -2592,6 +2616,7 @@ private fun NowPlayingHero(
     arrangement: HeroArrangement,
     arrange: () -> Unit,
     modifier: Modifier = Modifier,
+    hasNext: Boolean,
 ) {
     val preferences = state.settings.collectAsState().value.preferences
     val look = preferences.desktop.nowPlaying
@@ -2612,7 +2637,7 @@ private fun NowPlayingHero(
             follow(Modifier.padding(top = 8.dp))
             Spacer(Modifier.height(18.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TransportControls(playback, state)
+                TransportControls(playback, state, hasNext)
                 Spacer(Modifier.width(20.dp))
                 seekBar(Modifier.weight(1f))
             }
@@ -2649,7 +2674,7 @@ private fun NowPlayingHero(
                 Spacer(Modifier.height(14.dp))
                 seekBar(Modifier.fillMaxWidth())
                 Spacer(Modifier.height(4.dp))
-                TransportControls(playback, state)
+                TransportControls(playback, state, hasNext)
                 Spacer(Modifier.height(8.dp))
                 footer()
             }
@@ -2685,7 +2710,7 @@ private fun NowPlayingHero(
                     Spacer(Modifier.height(28.dp))
                     seekBar(Modifier.fillMaxWidth())
                     Spacer(Modifier.height(6.dp))
-                    TransportControls(playback, state)
+                    TransportControls(playback, state, hasNext)
                     Spacer(Modifier.height(16.dp))
                     footer()
                 }
@@ -2711,7 +2736,7 @@ private fun NowPlayingHero(
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TransportControls(playback, state)
+                    TransportControls(playback, state, hasNext)
                     Spacer(Modifier.width(20.dp))
                     seekBar(Modifier.weight(1f))
                 }
@@ -2722,9 +2747,12 @@ private fun NowPlayingHero(
     }
 }
 
-/** Large borderless transport, weighted so play is unmistakably the primary action. */
+/**
+ * Large borderless transport, weighted so play is unmistakably the primary action. Next is lit while it
+ * leads somewhere -- autoplay's lined-up songs count -- as on the bars; see QueueState.hasNext.
+ */
 @Composable
-private fun TransportControls(playback: PlaybackState, state: AppState) {
+private fun TransportControls(playback: PlaybackState, state: AppState, hasNext: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(state::previous, Modifier.size(44.dp)) {
             Icon(Icons.Default.SkipPrevious, "Previous track", Modifier.size(28.dp), tint = ink(.82f))
@@ -2739,8 +2767,8 @@ private fun TransportControls(playback: PlaybackState, state: AppState) {
                 PlayPauseIcon(playback.isPlaying, Modifier.size(42.dp), tint = MaterialTheme.colorScheme.onSurface)
             }
         }
-        IconButton(state::next, Modifier.size(44.dp)) {
-            Icon(Icons.Default.SkipNext, "Next track", Modifier.size(28.dp), tint = ink(.82f))
+        IconButton(state::next, Modifier.size(44.dp), enabled = hasNext) {
+            Icon(Icons.Default.SkipNext, "Next track", Modifier.size(28.dp), tint = ink(if (hasNext) .82f else .3f))
         }
     }
 }
@@ -3245,6 +3273,8 @@ private fun LyricsNotFound(outcomes: List<LyricsProviderOutcome>, errorMessage: 
 
 @Composable
 private fun UpNextPanel(queue: QueueState, state: AppState) {
+    val settings by state.settings.collectAsState()
+    var savedAs by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
@@ -3268,6 +3298,12 @@ private fun UpNextPanel(queue: QueueState, state: AppState) {
             // Pills rather than icon buttons, so the two destructive-ish actions read clearly.
             QueueActionPill("Shuffle", Icons.Default.Shuffle, queue.shuffleEnabled, state::toggleShuffle)
             QueueActionPill("Clear", Icons.Default.Close, false, state::clearQueue)
+            if (queue.tracks.isNotEmpty()) QueueActionsMenu(queue, state) { savedAs = it }
+        }
+        savedAs?.let { name ->
+            Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                LibraryNotice("Saved the queue as \"$name\". It is in your library.") { savedAs = null }
+            }
         }
         HorizontalDivider(color = ink(.07f))
         LazyColumn(
@@ -3278,6 +3314,12 @@ private fun UpNextPanel(queue: QueueState, state: AppState) {
             itemsIndexed(queue.tracks, key = { index, track -> "expanded:${track.queueKey}:$index" }) { index, track ->
                 QueueRow(track, index, index == queue.currentIndex, state)
             }
+            val preferences = settings.preferences
+            autoplaySection(
+                autoplayShown(queue, preferences.autoplay, preferences.autoplayFrom, settings.spotify),
+                state,
+                compact = true,
+            )
         }
     }
 }
@@ -3397,7 +3439,11 @@ private fun PanelPlaceholder(icon: androidx.compose.ui.graphics.vector.ImageVect
 }
 
 @Composable
-private fun QueueScreen(queue: QueueState, state: AppState) {
+internal fun QueueScreen(queue: QueueState, state: AppState) {
+    val settings by state.settings.collectAsState()
+    // The name the queue was just saved under, said here, where it was saved from, rather than only in the
+    // library where the playlist went.
+    var savedAs by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column {
@@ -3411,7 +3457,12 @@ private fun QueueScreen(queue: QueueState, state: AppState) {
             Spacer(Modifier.weight(1f))
             if (queue.tracks.isNotEmpty()) {
                 TextButton(state::clearQueue) { Icon(Icons.Default.ClearAll, null); Spacer(Modifier.width(6.dp)); Text("Clear") }
+                QueueActionsMenu(queue, state) { savedAs = it }
             }
+        }
+        savedAs?.let { name ->
+            Spacer(Modifier.height(10.dp))
+            LibraryNotice("Saved the queue as \"$name\". It is in your library.") { savedAs = null }
         }
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3454,6 +3505,12 @@ private fun QueueScreen(queue: QueueState, state: AppState) {
                 itemsIndexed(queue.tracks, key = { index, track -> "${track.queueKey}:$index" }) { index, track ->
                     QueueTrackRow(track, index, queue, state)
                 }
+                val preferences = settings.preferences
+                autoplaySection(
+                    autoplayShown(queue, preferences.autoplay, preferences.autoplayFrom, settings.spotify),
+                    state,
+                    compact = false,
+                )
             }
         }
     }
@@ -3703,8 +3760,8 @@ private fun PlaybackError(message: String) {
 }
 
 private enum class SettingsPage {
-    ACCOUNT, PROFILE, CUSTOMIZATION, SOUND, YOUTUBE, SOUNDCLOUD, SPOTIFY, BANDCAMP, VK, SCROBBLING, LYRICS, STARTUP,
-    DISCORD, UPDATES, PLAYBACK_TOOLS, DIAGNOSTICS
+    ACCOUNT, PROFILE, CUSTOMIZATION, SOUND, PLAYBACK_QUEUE, YOUTUBE, SOUNDCLOUD, SPOTIFY, BANDCAMP, VK, SCROBBLING, LYRICS,
+    STARTUP, DISCORD, UPDATES, PLAYBACK_TOOLS, DIAGNOSTICS
 }
 
 /**
@@ -3729,6 +3786,7 @@ internal fun SettingsScreen(state: AppState) {
                     SettingsPage.PROFILE -> ProfileSettingsPanel(settings.preferences, state)
                     SettingsPage.CUSTOMIZATION -> CustomizationPanel(settings.preferences, state)
                     SettingsPage.SOUND -> SoundSettingsPanel(settings.preferences, state)
+                    SettingsPage.PLAYBACK_QUEUE -> PlaybackQueueSettingsPanel(settings.preferences, state)
                     SettingsPage.YOUTUBE -> YouTubeAccountPanel(settings, state)
                     SettingsPage.SOUNDCLOUD -> AccountConnectionPanel(
                         ProviderType.SOUNDCLOUD,
@@ -3819,6 +3877,16 @@ private fun SettingsHome(settings: SettingsState, state: AppState, open: (Settin
                 Icons.Default.Equalizer,
                 { open(SettingsPage.SOUND) },
                 equalizer.enabled,
+            )
+        }
+        item {
+            // Beside Sound, as how the music goes on rather than how it sounds: its speed, what follows the
+            // queue, whether the queue is kept, and how the sleep timer ends it.
+            SettingsCard(
+                "Playback and queue",
+                playbackSummary(settings.preferences),
+                Icons.AutoMirrored.Filled.QueueMusic,
+                { open(SettingsPage.PLAYBACK_QUEUE) },
             )
         }
         item {
@@ -3951,6 +4019,7 @@ private fun pageTitle(page: SettingsPage) = when (page) {
     SettingsPage.PROFILE -> "Your Noctorium profile"
     SettingsPage.CUSTOMIZATION -> "Customization"
     SettingsPage.SOUND -> "Sound"
+    SettingsPage.PLAYBACK_QUEUE -> "Playback and queue"
     SettingsPage.YOUTUBE -> "YouTube Music account"
     SettingsPage.SOUNDCLOUD -> "SoundCloud account"
     SettingsPage.SPOTIFY -> "Spotify library"
@@ -4243,6 +4312,22 @@ internal fun BrowsingSettingsCard(preferences: NoctoriumPreferences, state: AppS
             fontSize = 11.sp,
         )
         Spacer(Modifier.height(16.dp))
+        // What a Hybrid search asks, beside what Home shows, since both are which services fill a page.
+        val asked = preferences.hybridSearch
+        ToggleChips(
+            "Hybrid search asks",
+            HYBRID_SEARCH_SERVICES,
+            on = { it in asked },
+            name = ::hybridServiceName,
+        ) { service, on -> state.setHybridSearchService(service, on) }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "At least one always stays. Spotify answers only while its songs play on Spotify, and VK Music once " +
+                "you are signed in to it.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
+        Spacer(Modifier.height(16.dp))
         val hiddenPages = preferences.desktop.hiddenDestinations
         ToggleChips(
             "In the sidebar",
@@ -4396,7 +4481,9 @@ internal fun <T> ChoiceRow(
 @Composable
 internal fun ToggleRow(title: String, description: String, checked: Boolean, enabled: Boolean = true, change: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
+        // Held off by a switch above it, the words fade with the switch, so the row reads as waiting and
+        // not as a switch that has stuck.
+        Column(Modifier.weight(1f).alpha(if (enabled) 1f else .45f)) {
             Text(title, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         }
