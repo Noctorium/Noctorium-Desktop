@@ -55,6 +55,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import app.noctorium.ui.skins.FilledIconButton
 import app.noctorium.ui.skins.LiftedBar
+import app.noctorium.ui.skins.PictureChoice
 import app.noctorium.ui.skins.SkinDisplay
 import app.noctorium.ui.skins.skinCorners
 import app.noctorium.ui.skins.skinShape
@@ -1023,6 +1024,13 @@ internal fun PlayerBarStylePicker(selected: PlayerBarStyle, choose: (PlayerBarSt
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         PlayerBarStyle.entries.forEach { style ->
             val active = style == selected
+            // A button with the picture on it, pressed in while chosen, under a Windows skin.
+            if (skinned()) {
+                PictureChoice(active, { choose(style) }, style.displayName) {
+                    PlayerBarPicture(style, active, Modifier.size(112.dp, 70.dp))
+                }
+                return@forEach
+            }
             val border by animateColorAsState(
                 if (active) MaterialTheme.colorScheme.primary else ink(.1f),
                 motionSpec(MotionTiming.QUICK),
@@ -1129,8 +1137,7 @@ internal fun PlayerBarPicture(style: PlayerBarStyle, selected: Boolean, modifier
         }
 
         when (style) {
-            // Taskbar is drawn by the Windows skin work.
-            PlayerBarStyle.INLINE, PlayerBarStyle.TASKBAR -> {
+            PlayerBarStyle.INLINE -> {
                 val cy = strip(h * .2f) + h * .1f
                 transport(w * .1f, cy)
                 cover(w * .21f, cy, h * .11f)
@@ -1234,6 +1241,23 @@ internal fun PlayerBarPicture(style: PlayerBarStyle, selected: Boolean, modifier
                 bar(textLeft + textWidth * .28f, displayTop + displayHeight * .3f, textWidth * .44f, alpha = .62f)
                 bar(textLeft + textWidth * .35f, displayTop + displayHeight * .55f, textWidth * .3f, alpha = .3f, thick = stroke * .8f)
                 seek(textLeft + textWidth * .12f, displayTop + displayHeight * .82f, textWidth * .76f)
+            }
+            PlayerBarStyle.TASKBAR -> {
+                val top = strip(h * .17f)
+                val cy = top + h * .085f
+                // The start button at the left end, in the accent and written on.
+                drawRoundRect(accent.copy(alpha = if (selected) .9f else .6f), Offset(w * .02f, cy - h * .05f), Size(w * .14f, h * .1f), CornerRadius(h * .05f))
+                bar(w * .05f, cy, w * .07f, alpha = .85f, colour = Color.White)
+                transport(w * .23f, cy, h * .06f, h * .032f)
+                // The song as the window in front: a button held in, with the cover and the title on it.
+                drawRoundRect(writing.copy(alpha = .12f), Offset(w * .31f, cy - h * .055f), Size(w * .28f, h * .11f), CornerRadius(h * .015f))
+                cover(w * .325f, cy, h * .075f)
+                bar(w * .325f + h * .11f, cy, w * .14f, alpha = .55f)
+                seek(w * .62f, cy, w * .15f)
+                // The tray at the right end: a well with the tools and the clock in it.
+                drawRoundRect(writing.copy(alpha = .08f), Offset(w * .8f, cy - h * .055f), Size(w * .18f, h * .11f), CornerRadius(h * .015f))
+                tools(w * .865f, cy, 2)
+                bar(w * .9f, cy, w * .05f, alpha = .5f)
             }
         }
     }
