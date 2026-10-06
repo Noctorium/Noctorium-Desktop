@@ -181,6 +181,65 @@ class WindowsThemesRenderCheck {
         }
     }
 
+    /**
+     * The Taskbar's clock shown and put away, under 98, XP and Night; the taskbar's own menu, opened by the right
+     * button over the clock; and the row in Settings that puts the clock away. The pictures go to `clock/`.
+     */
+    @Test
+    fun `the taskbar clock comes and goes`() {
+        val root = System.getProperty("noctorium.renderBars")?.let(::File) ?: return
+        val state = desktopAppState()
+        try {
+            prepare(state)
+            state.setPlayerBarStyle(PlayerBarStyle.TASKBAR)
+            listOf(ThemePreset.WINDOWS_98, ThemePreset.WINDOWS_XP, ThemePreset.NOCTORIUM_NIGHT).forEach { theme ->
+                state.setTheme(theme)
+                val tour = WindowTour(state, File(root, "clock/${theme.name.lowercase()}"))
+                try {
+                    tour.open()
+                    tour.fill()
+                    tour.go(Destination.HOME)
+                    val foot = Rect.makeXYWH(0f, 800f - 120f, 1280f, 120f)
+                    state.setTaskbarClock(true)
+                    tour.capture("taskbar-clock-on", crop = foot)
+                    state.setTaskbarClock(false)
+                    tour.capture("taskbar-clock-off", crop = foot)
+                    state.setTaskbarClock(true)
+                    tour.settle()
+                    // Over the clock, at the right-hand end of the bar, which is 30 points tall under a skin and 52 not.
+                    val night = theme == ThemePreset.NOCTORIUM_NIGHT
+                    val clock = Offset(1255f, if (night) 774f else 785f)
+                    tour.rightClick(clock)
+                    tour.capture("taskbar-menu", crop = Rect.makeXYWH(760f, 800f - 280f, 520f, 280f))
+                    tour.press(Key.Escape, '\u001b')
+                    tour.settle()
+                    tour.settingsPage("CUSTOMIZATION")
+                    tour.capture("settings-clock-row")
+                    // Properties, from Home and from another page of Settings: both land on Customization.
+                    val properties = if (night) Offset(1180f, 720f) else Offset(1150f, 772f)
+                    tour.go(Destination.HOME)
+                    tour.settle()
+                    tour.rightClick(clock)
+                    tour.settle()
+                    tour.click(properties)
+                    tour.capture("properties-from-home")
+                    tour.settingsPage("SOUND")
+                    tour.settle()
+                    tour.rightClick(clock)
+                    tour.settle()
+                    tour.click(properties)
+                    tour.capture("properties-from-sound", frames = 12)
+                } finally {
+                    tour.close()
+                }
+            }
+        } finally {
+            state.setTaskbarClock(true)
+            restore(state)
+            state.close()
+        }
+    }
+
     /** Settings that would otherwise make two drawings of the same screen differ: motion, devices, updates. */
     private fun prepare(state: AppState) {
         state.setAnimations(false)

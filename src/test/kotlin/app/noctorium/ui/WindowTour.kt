@@ -6,6 +6,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.unit.Density
 import app.noctorium.core.AppState
@@ -91,6 +93,14 @@ internal class WindowTour(private val state: AppState, private val folder: File)
 
     fun hover(at: Offset) {
         checkNotNull(scene).sendPointerEvent(PointerEventType.Move, at)
+    }
+
+    /** A press and release of the right button, as a mouse sends them. */
+    fun rightClick(at: Offset) {
+        val scene = checkNotNull(scene)
+        scene.sendPointerEvent(PointerEventType.Move, at)
+        scene.sendPointerEvent(PointerEventType.Press, at, buttons = PointerButtons(isSecondaryPressed = true), button = PointerButton.Secondary)
+        scene.sendPointerEvent(PointerEventType.Release, at, buttons = PointerButtons(), button = PointerButton.Secondary)
     }
 
     /** A key as the keyboard would send it, with shift held for [shift]. Only ever into this picture. */
