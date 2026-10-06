@@ -155,6 +155,9 @@ internal fun playerBarButtons(
         }
         PlayerBarStyle.CENTERED, PlayerBarStyle.SLIM, PlayerBarStyle.SLIM_LEFT, PlayerBarStyle.SPOTLIGHT ->
             if (narrow) drawn -= PlayerButton.LYRICS
+        // Drawn as Inline, Slim and Centred for now, so they leave out what those do.
+        PlayerBarStyle.FLOATING, PlayerBarStyle.TASKBAR -> Unit
+        PlayerBarStyle.ISLAND, PlayerBarStyle.DISPLAY -> if (narrow) drawn -= PlayerButton.LYRICS
     }
     // A button showing something under way stays, put away or not: a sleep timer counting down, or the music
     // playing on another device, is not something to lose sight of because its button was hidden.

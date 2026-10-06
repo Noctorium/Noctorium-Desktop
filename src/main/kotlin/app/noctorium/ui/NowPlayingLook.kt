@@ -260,8 +260,9 @@ internal fun NowPlayingLayoutPicture(layout: NowPlayingLayout, selected: Boolean
         }
 
         when (layout) {
-            NowPlayingLayout.SIDE_BY_SIDE, NowPlayingLayout.PANEL_LEFT -> {
-                val left = layout == NowPlayingLayout.SIDE_BY_SIDE
+            // Split and Turntable are pictured as side by side until they have pictures of their own.
+            NowPlayingLayout.SIDE_BY_SIDE, NowPlayingLayout.PANEL_LEFT, NowPlayingLayout.SPLIT, NowPlayingLayout.TURNTABLE -> {
+                val left = layout != NowPlayingLayout.PANEL_LEFT
                 val heroX = if (left) w * .07f else w * .45f
                 title(heroX, h * .1f, w * .3f)
                 bar(heroX, h * .2f, w * .18f)
@@ -280,7 +281,8 @@ internal fun NowPlayingLayoutPicture(layout: NowPlayingLayout, selected: Boolean
                 seek(column, h * .56f, w * .32f)
                 transport(column + h * .04f, h * .7f)
             }
-            NowPlayingLayout.FOCUS -> {
+            // Full cover, Cover flow and Big type are pictured as Focus until they have pictures of their own.
+            NowPlayingLayout.FOCUS, NowPlayingLayout.IMMERSIVE, NowPlayingLayout.COVER_FLOW, NowPlayingLayout.POSTER -> {
                 val side = h * .46f
                 cover((w - side) / 2, h * .08f, side)
                 title((w - w * .3f) / 2, h * .62f, w * .3f)

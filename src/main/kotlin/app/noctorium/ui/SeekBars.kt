@@ -40,6 +40,11 @@ internal fun DrawScope.drawSeekBar(
     when (style) {
         ProgressBarStyle.MATERIAL -> Unit // Drawn by Material's own slider, never here.
 
+        // Not drawn on this branch yet: each stands in as the nearest bar there is.
+        ProgressBarStyle.BARS, ProgressBarStyle.BEADS -> drawSeekBar(ProgressBarStyle.SEGMENTS, fraction, showHead, track, filled, phase, amplitude)
+        ProgressBarStyle.NEON, ProgressBarStyle.RULER -> drawSeekBar(ProgressBarStyle.MINIMAL, fraction, showHead, track, filled, phase, amplitude)
+        ProgressBarStyle.LUNA -> drawSeekBar(ProgressBarStyle.CLASSIC, fraction, showHead, track, filled, phase, amplitude)
+
         ProgressBarStyle.MINIMAL -> {
             val thickness = SeekBar.LINE_DP.dp.toPx()
             drawLine(track, Offset(0f, centreY), Offset(size.width, centreY), thickness, StrokeCap.Round)

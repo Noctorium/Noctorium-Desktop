@@ -2327,6 +2327,10 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
         PlayerBarStyle.SLIM -> return SlimPlayerBar(queue, playback, state)
         PlayerBarStyle.SLIM_LEFT -> return SlimPlayerBar(queue, playback, state, controlsFirst = true)
         PlayerBarStyle.SPOTLIGHT -> return SpotlightPlayerBar(queue, playback, state)
+        // Not drawn on this branch yet: each stands in as the nearest layout there is.
+        PlayerBarStyle.FLOATING, PlayerBarStyle.TASKBAR -> return InlinePlayerBar(queue, playback, state)
+        PlayerBarStyle.ISLAND -> return SlimPlayerBar(queue, playback, state)
+        PlayerBarStyle.DISPLAY -> return CenteredPlayerBar(queue, playback, state)
         // Stacked is the one written out below, and was the only layout before there was a choice.
         PlayerBarStyle.STACKED -> Unit
     }
