@@ -3912,7 +3912,8 @@ internal fun SettingsScreen(state: AppState) {
                 }
             }
         } else {
-            SettingsHome(settings, state) { page = it }
+            // A Control Panel, in a folder's white pane, under a Windows skin; the pages are property sheets.
+            BrowsingPane { SettingsHome(settings, state) { page = it } }
         }
     }
 }
@@ -3920,13 +3921,15 @@ internal fun SettingsScreen(state: AppState) {
 /** The list of settings, each tile a way into its page. */
 @Composable
 private fun SettingsHome(settings: SettingsState, state: AppState, open: (SettingsPage) -> Unit) {
+    val list = rememberLazyListState()
     LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 30.dp),
+        Modifier.fillMaxSize().classicScrollbar(list).padding(horizontal = 30.dp),
+        state = list,
         contentPadding = chromePadding(top = 26.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(11.dp),
+        verticalArrangement = Arrangement.spacedBy(if (skinned()) 2.dp else 11.dp),
     ) {
         item {
-            Text("Settings", fontSize = 34.sp, fontWeight = FontWeight.Bold)
+            ScreenTitle("Settings", 34.sp)
             Text("Accounts, services and how Noctorium behaves.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             Spacer(Modifier.height(12.dp))
         }
@@ -4143,7 +4146,7 @@ private fun SettingsDetailHeader(title: String, back: () -> Unit, content: @Comp
     Column(Modifier.fillMaxSize().padding(horizontal = 30.dp, vertical = 24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to settings") }
-            Spacer(Modifier.width(6.dp)); Text(title, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(6.dp)); ScreenTitle(title, 28.sp)
         }
         Spacer(Modifier.height(18.dp))
         Box(Modifier.fillMaxSize()) { content() }
@@ -4156,13 +4159,9 @@ private fun SettingsDetailHeader(title: String, back: () -> Unit, content: @Comp
  */
 @Composable
 private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppState) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().scrollingPage().padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsPanelCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Tune, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(9.dp))
-                Text("Seek bar", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
+            CardHeading(Icons.Default.Tune, "Seek bar")
             Spacer(Modifier.height(6.dp))
             Text(
                 "Used in the player bar and on the now playing screen. Both can be dragged and clicked to seek.",
@@ -4514,6 +4513,11 @@ internal fun NowPlayingSettingsCard(preferences: NoctoriumPreferences, state: Ap
 
 @Composable
 internal fun CardHeading(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String) {
+    // Set into the group box's top edge under a Windows skin, as a group box's caption was.
+    if (skinned()) {
+        GroupLegend(title)
+        return
+    }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(9.dp))
@@ -4548,6 +4552,11 @@ internal fun <T> ChoiceRow(
     enabled: Boolean,
     choose: (T) -> Unit,
 ) {
+    // Option buttons under a Windows skin, which is what a choice of one was on those desktops.
+    if (skinned()) {
+        OptionButtons(label, options, selected, name, enabled, choose)
+        return
+    }
     Column {
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
@@ -4584,6 +4593,11 @@ internal fun <T> ChoiceRow(
 
 @Composable
 internal fun ToggleRow(title: String, description: String, checked: Boolean, enabled: Boolean = true, change: (Boolean) -> Unit) {
+    // A checkbox with its words beside it under a Windows skin: neither desktop had a switch.
+    if (skinned()) {
+        CheckRow(title, description, checked, enabled, change)
+        return
+    }
     Row(verticalAlignment = Alignment.CenterVertically) {
         // Held off by a switch above it, the words fade with the switch, so the row reads as waiting and
         // not as a switch that has stuck.
@@ -4762,6 +4776,13 @@ private fun ProgressStyleOption(option: ProgressBarStyle, selected: Boolean, cho
             positionMs = 156_000,
             durationMs = 258_000,
         )
+    }
+    // An option button and its words, with the bar in a sample well beneath, under a Windows skin.
+    if (skinned()) {
+        PreviewedOption(option.displayName, option.description, selected, choose) {
+            PlaybackProgressBar(preview, {}, Modifier.fillMaxWidth(), option)
+        }
+        return
     }
     Surface(
         onClick = choose,
@@ -5137,7 +5158,7 @@ private fun YouTubeAccountPanel(settings: SettingsState, state: AppState) {
         if (likes.youTubeReady && likes.youTubeChannels.isEmpty()) state.loadYouTubeChannels()
     }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().scrollingPage().padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsPanelCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.PlayCircle, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
@@ -5262,7 +5283,7 @@ private fun AccountConnectionPanel(
         CookieSource.ofBrowser(selectedBrowser, profile, container)
     }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().scrollingPage().padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsPanelCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -5824,7 +5845,7 @@ internal fun StartupSettingsPanel(preferences: NoctoriumPreferences, state: AppS
     val trayAvailable = DesktopTray.supported
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()),
+        Modifier.fillMaxSize().scrollingPage().padding(bottom = chromeBottom()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SettingsPanelCard {
@@ -5921,7 +5942,7 @@ private fun DiscordSettingsPanel(preferences: NoctoriumPreferences, state: AppSt
     val status by state.discordStatus.collectAsState()
     var applicationId by remember(discord.applicationId) { mutableStateOf(discord.applicationId) }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().scrollingPage().padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsPanelCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.SportsEsports, null, Modifier.size(38.dp), tint = MaterialTheme.colorScheme.primary)
@@ -6242,6 +6263,11 @@ private fun DiagnosticsPanel(settings: SettingsState, state: AppState) {
 
 @Composable
 internal fun SettingsPanelCard(content: @Composable ColumnScope.() -> Unit) {
+    // A group box on the window's face under a Windows skin, its heading set into its edge.
+    if (skinned()) {
+        SettingsGroup(content)
+        return
+    }
     Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(16.dp), modifier = Modifier.widthIn(max = 720.dp)) {
         Column(Modifier.fillMaxWidth().padding(22.dp), content = content)
     }
@@ -6255,6 +6281,11 @@ private fun SettingsCard(
     action: () -> Unit,
     active: Boolean = false,
 ) {
+    // An item in a Control Panel under a Windows skin.
+    if (skinned()) {
+        ControlPanelItem(title, subtitle, icon, action, active)
+        return
+    }
     Surface(onClick = action, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .5f), shape = RoundedCornerShape(15.dp)) {
         Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
@@ -6327,7 +6358,7 @@ private fun NoctoriumAccountPanel(state: AppState) {
     var password by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
 
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = chromeBottom())) {
+    Column(Modifier.scrollingPage().padding(bottom = chromeBottom())) {
         if (account.signedIn) {
             val user = account.user!!
             SettingsPanelCard {

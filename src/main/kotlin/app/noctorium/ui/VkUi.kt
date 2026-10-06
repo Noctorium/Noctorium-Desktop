@@ -110,7 +110,7 @@ internal fun VkSettingsPanel(settings: SettingsState, state: AppState) {
     if (signInOpen) VkSignInWindow(state) { signInOpen = false }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()),
+        Modifier.fillMaxSize().scrollingPage().padding(bottom = chromeBottom()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SettingsPanelCard {

@@ -121,7 +121,7 @@ internal fun BandcampSettingsPanel(settings: SettingsState, state: AppState) {
     LaunchedEffect(bandcamp.checking) { if (!bandcamp.checking && bandcamp.message == null) name = saved }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()),
+        Modifier.fillMaxSize().scrollingPage().padding(bottom = chromeBottom()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SettingsPanelCard {

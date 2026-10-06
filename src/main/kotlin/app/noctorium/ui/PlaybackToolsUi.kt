@@ -61,7 +61,7 @@ internal fun PlaybackToolsPanel() {
     // Where Noctorium can fetch mpv itself: Windows and the Mac, which have builds of it to download.
     val windows = platform.isWindows || platform.isMac
 
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = chromeBottom())) {
+    Column(Modifier.scrollingPage().padding(bottom = chromeBottom())) {
         SettingsPanelCard {
             Text(
                 if (tools.ready) "Noctorium has what it needs" else "Something is missing",

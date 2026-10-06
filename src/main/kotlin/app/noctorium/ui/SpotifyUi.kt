@@ -213,7 +213,7 @@ internal fun SpotifySettingsPanel(settings: SettingsState, state: AppState) {
     }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()),
+        Modifier.fillMaxSize().scrollingPage().padding(bottom = chromeBottom()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SettingsPanelCard {

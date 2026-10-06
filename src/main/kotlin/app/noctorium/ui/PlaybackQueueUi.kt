@@ -237,7 +237,7 @@ internal fun SleepFadeChoice(seconds: Int, choose: (Int) -> Unit) {
 internal fun PlaybackQueueSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
     val onSpotify = playingOnSpotify(state)
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()),
+        Modifier.fillMaxSize().scrollingPage().padding(bottom = chromeBottom()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SettingsPanelCard {

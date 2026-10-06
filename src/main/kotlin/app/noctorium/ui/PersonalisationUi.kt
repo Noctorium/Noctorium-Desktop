@@ -375,7 +375,7 @@ internal fun SoundSettingsPanel(preferences: NoctoriumPreferences, state: AppSta
     Column(
         Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .scrollingPage()
             .padding(bottom = chromeBottom()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -925,6 +925,11 @@ internal fun <T> ToggleChips(
     mark: ((T) -> String?)? = null,
     toggle: (T, Boolean) -> Unit,
 ) {
+    // A run of checkboxes under a Windows skin, which is what several things on and off were.
+    if (skinned()) {
+        CheckBoxes(label, options, on, name, icon, mark, toggle)
+        return
+    }
     Column {
         label?.let {
             Text(it, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
