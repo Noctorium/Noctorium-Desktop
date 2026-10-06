@@ -63,6 +63,7 @@ import app.noctorium.core.LinkState
 import app.noctorium.core.LinkStatus
 import app.noctorium.domain.LinkKind
 import app.noctorium.domain.PlaybackOrigin
+import app.noctorium.domain.ProviderType
 import app.noctorium.domain.Track
 import app.noctorium.domain.arrivedAtOnce
 import app.noctorium.domain.findMusicLink
@@ -319,7 +320,7 @@ private fun LinkTrackCard(track: Track, playing: Boolean, state: AppState) {
                             Icon(Icons.Default.SaveAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Save as file")
                         }
                     } else {
-                        // Bought rather than downloaded, so the song's own page in place of keeping it.
+                        // Not kept here -- bought on Bandcamp, or only played from VK -- so the song's own page instead.
                         OpenPageButton(track, state)
                     }
                 }
@@ -339,8 +340,8 @@ private fun PlaylistActions(tracks: List<Track>, state: AppState) {
         OutlinedButton({ tracks.forEach(state::addToQueue) }) {
             Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Queue all")
         }
-        // A Bandcamp album has nothing on it that may be kept, so it offers neither rather than two buttons
-        // that would only say no.
+        // A Bandcamp album or a VK playlist has nothing on it that may be kept, so it offers neither rather
+        // than two buttons that would only say no.
         if (tracks.any(state::canKeep)) {
             OutlinedButton({ state.downloadAll(tracks) }) {
                 Icon(Icons.Default.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Download all")
@@ -353,25 +354,32 @@ private fun PlaylistActions(tracks: List<Track>, state: AppState) {
 }
 
 /**
- * The song's page on its service, where a song that may not be kept here can be bought.
+ * The song's page on its service, for a song that may not be kept here: where a Bandcamp song is bought,
+ * and where a VK one lives.
  *
- * The page alone, as [pageUrl] gives it: the address Noctorium keeps for a Bandcamp song carries the ids
- * that find its stream, which mean nothing in a browser.
+ * The page alone, as [pageUrl] gives it: the address Noctorium keeps for a Bandcamp or VK song carries what
+ * finds its stream, which means nothing in a browser.
  */
 @Composable
 private fun OpenPageButton(track: Track, state: AppState) {
     OutlinedButton({ state.openExternalUrl(track.pageUrl) }) {
         Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(17.dp)); Spacer(Modifier.width(6.dp))
-        Text("Open on ${track.provider.displayName}")
+        Text(servicePageLabel(track.provider))
     }
 }
 
 /**
- * Whether what a pasted link leads to may be kept, known before anything is fetched: a Bandcamp address
- * is a Bandcamp song or album, and those are bought rather than downloaded. True for no link at all.
+ * The service a pasted link leads to when its songs may not be kept, known before anything is fetched: a
+ * Bandcamp address is a Bandcamp song or album. Null for a link whose songs may be kept, or for no link.
  */
-private fun AppState.mayKeep(text: String): Boolean =
-    findMusicLink(text)?.let { link -> canKeep(link.placeholderTrack()) } ?: true
+private fun AppState.keepingRefused(text: String): ProviderType? =
+    findMusicLink(text)?.takeIf { link -> !canKeep(link.placeholderTrack()) }?.provider
+
+/** Said under the download box about such a link: why not, and what can be done with it instead. */
+private fun notKeptNote(provider: ProviderType): String = notKeptReason(provider) + when (provider) {
+    ProviderType.BANDCAMP -> ". Buying one on its Bandcamp page makes the file yours, and Paste link plays it here meanwhile."
+    else -> ". Paste link plays it here."
+}
 
 @Composable
 private fun LinkTrackRow(track: Track, playing: Boolean, onClick: () -> Unit) {
@@ -407,10 +415,10 @@ internal fun DownloadsScreen(state: AppState) {
     var text by remember { mutableStateOf("") }
     // Said here, before anything is fetched. Asked to download a Bandcamp address, the core declines with a
     // note on the library page, and this screen would have looked as though it had simply ignored the press.
-    val mayKeep = state.mayKeep(text)
+    val refused = state.keepingRefused(text)
 
     fun submit(action: LinkAction) {
-        if (text.isNotBlank() && state.mayKeep(text)) state.openLink(text, action)
+        if (text.isNotBlank() && state.keepingRefused(text) == null) state.openLink(text, action)
     }
 
     LazyColumn(
@@ -447,18 +455,17 @@ internal fun DownloadsScreen(state: AppState) {
             )
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button({ submit(LinkAction.DOWNLOAD) }, enabled = findMusicLink(text) != null && mayKeep) {
+                Button({ submit(LinkAction.DOWNLOAD) }, enabled = findMusicLink(text) != null && refused == null) {
                     Icon(Icons.Default.DownloadForOffline, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Download")
                 }
-                OutlinedButton({ submit(LinkAction.SAVE) }, enabled = findMusicLink(text) != null && mayKeep) {
+                OutlinedButton({ submit(LinkAction.SAVE) }, enabled = findMusicLink(text) != null && refused == null) {
                     Icon(Icons.Default.SaveAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
                     Text(if (state.canSaveAsMp3()) "Save as MP3" else "Save as file")
                 }
             }
-            if (!mayKeep) {
+            refused?.let { provider ->
                 Text(
-                    "$BOUGHT_NOT_DOWNLOADED. Buying one on its Bandcamp page makes the file yours, and Paste link " +
-                        "plays it here meanwhile.",
+                    notKeptNote(provider),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                     modifier = Modifier.padding(top = 8.dp),

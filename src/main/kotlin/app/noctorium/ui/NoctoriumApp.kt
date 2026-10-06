@@ -54,6 +54,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Brush
@@ -71,6 +72,7 @@ import androidx.compose.ui.window.rememberDialogState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.noctorium.core.*
@@ -453,15 +455,8 @@ internal fun HomeScreen(ui: AppUiState, state: AppState) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 32.dp), contentPadding = chromePadding(bottom = 36.dp)) {
         item {
             Spacer(Modifier.height(28.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
-                // The filter stays when the greeting goes: it is how the rest of the page is chosen.
-                if (home.greeting) {
-                    Text(greeting(), fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                } else {
-                    Spacer(Modifier.weight(1f))
-                }
-                FilterChips(ui.providerFilter, state::setFilter)
-            }
+            // The filter stays when the greeting goes: it is how the rest of the page is chosen.
+            HomeHeader(greeting().takeIf { home.greeting }) { FilterChips(ui.providerFilter, state::setFilter) }
             Spacer(Modifier.height(20.dp))
         }
         ui.errorMessage?.let { message ->
@@ -533,6 +528,49 @@ private fun HomePutAway(everything: Boolean, state: AppState) {
     }
 }
 
+/**
+ * The greeting and the filter: on one line, the filter at the far end, where both fit, and the filter under
+ * the greeting where they do not.
+ *
+ * With every service in it the filter is wider than a narrow window has room for beside the greeting, and
+ * made to share the line anyway the greeting stood one letter to a line. Measured rather than guessed at a
+ * window width, since the names, the text size and the greeting itself all change how much room it takes.
+ * Without a greeting the filter keeps the far end on its own.
+ */
+@Composable
+private fun HomeHeader(greeting: String?, filter: @Composable () -> Unit) {
+    Layout(
+        content = {
+            if (greeting != null) Text(greeting, fontSize = 32.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Box { filter() }
+        },
+    ) { measurables, constraints ->
+        val title = if (greeting != null) measurables.first() else null
+        val chips = measurables.last()
+        val width = constraints.maxWidth
+        val gap = 24.dp.roundToPx()
+        val oneLine = title == null ||
+            title.maxIntrinsicWidth(constraints.maxHeight) + gap + chips.maxIntrinsicWidth(constraints.maxHeight) <= width
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val titlePlaced = title?.measure(loose)
+        val chipsPlaced = chips.measure(loose)
+        if (oneLine) {
+            val height = maxOf(titlePlaced?.height ?: 0, chipsPlaced.height)
+            layout(width, height) {
+                // Along the bottom, where the greeting's letters sit, as the row had them.
+                titlePlaced?.place(0, height - titlePlaced.height)
+                chipsPlaced.place(width - chipsPlaced.width, height - chipsPlaced.height)
+            }
+        } else {
+            val between = 14.dp.roundToPx()
+            layout(width, titlePlaced!!.height + between + chipsPlaced.height) {
+                titlePlaced.place(0, 0)
+                chipsPlaced.place(0, titlePlaced.height + between)
+            }
+        }
+    }
+}
+
 /** Greeting keyed to the actual clock rather than a fixed string. */
 private fun greeting(): String = when (java.time.LocalTime.now().hour) {
     in 5..11 -> "Good morning"
@@ -543,7 +581,8 @@ private fun greeting(): String = when (java.time.LocalTime.now().hour) {
 
 @Composable
 private fun FilterChips(selected: ProviderFilter, select: (ProviderFilter) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Sideways, when even a line of its own is narrower than every service's name: see HomeHeader.
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ProviderFilter.entries.forEach { filter ->
             val active = selected == filter
             Surface(
@@ -617,6 +656,17 @@ private fun PlaylistRowSection(
 }
 
 /**
+ * Whether a playlist stands for an artist -- everything they have put out -- rather than for one release or
+ * list, which is how Bandcamp and Spotify both open an artist.
+ *
+ * Spotify's are known by the `artist:` the core puts before their ids, as its SpotifyClient.ARTIST_PREFIX.
+ * That name is internal to the core, so the prefix is written out here; should it change there, Spotify's
+ * artists would only be drawn square again.
+ */
+internal fun Playlist.isArtist(): Boolean =
+    BandcampMusicProvider.isArtist(this) || (provider == ProviderType.SPOTIFY && id.startsWith("artist:"))
+
+/**
  * One playlist, album or artist on a shelf: its cover and its name, opening its page when clicked.
  *
  * An artist is drawn round and says it is one where an album says whose it is. A shelf of search results
@@ -624,7 +674,7 @@ private fun PlaylistRowSection(
  */
 @Composable
 private fun PlaylistCard(playlist: Playlist, width: Dp, state: AppState) {
-    val artist = BandcampMusicProvider.isArtist(playlist)
+    val artist = playlist.isArtist()
     val shape = if (artist) CircleShape else RoundedCornerShape(11.dp)
     Column(
         Modifier
@@ -656,9 +706,10 @@ private fun PlaylistCard(playlist: Playlist, width: Dp, state: AppState) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        // For an artist the owner is where they are from, when Bandcamp says: "Artist · Bristol".
+        // For a Bandcamp artist the owner is where they are from, when Bandcamp says: "Artist · Bristol".
+        // Spotify's artists come with "Artist" there already, which is not said twice.
         val owner = playlist.ownerName?.takeIf { it.isNotBlank() }
-        (if (artist) listOfNotNull("Artist", owner).joinToString(" · ") else owner)?.let {
+        (if (artist) listOfNotNull("Artist", owner?.takeUnless { it.equals("Artist", ignoreCase = true) }).joinToString(" · ") else owner)?.let {
             Text(
                 it,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1298,14 +1349,14 @@ internal fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: Ap
                     }
                 }
             }
-            // Where the download would be: a Bandcamp release or artist is a page on Bandcamp too, and that
-            // page is where its music is bought.
-            playlist.sourceUrl?.takeIf { playlist.provider == ProviderType.BANDCAMP }?.let { page ->
+            // Where the download would be, for the services whose songs are not kept here: a Bandcamp release
+            // or artist is a page on Bandcamp, where its music is bought, and a VK playlist one on vk.ru.
+            playlist.sourceUrl?.takeIf { playlist.provider == ProviderType.BANDCAMP || playlist.provider == ProviderType.VK }?.let { page ->
                 Spacer(Modifier.width(9.dp))
                 OutlinedButton({ state.openExternalUrl(page) }) {
                     Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(17.dp))
                     Spacer(Modifier.width(7.dp))
-                    Text("Open on Bandcamp")
+                    Text(servicePageLabel(playlist.provider))
                 }
             }
         }
@@ -1515,18 +1566,54 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
         Spacer(Modifier.height(12.dp))
         SearchModePicker(ui.searchMode, state::setSearchMode)
         Spacer(Modifier.height(18.dp))
+        val settings by state.settings.collectAsState()
         when {
             ui.searchLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
             ui.searchQuery.isBlank() -> EmptyScreen(
                 "Search ${ui.searchMode.displayName}",
-                if (ui.searchMode == SearchMode.HYBRID)
-                    "YouTube Music, YouTube videos, SoundCloud, and Bandcamp results appear together."
-                else "Only ${ui.searchMode.displayName} results will appear.",
+                searchHint(ui.searchMode, settings.spotify, settings.vk),
             )
             ui.errorMessage != null -> PlaybackError(ui.errorMessage.orEmpty())
+            // Spotify answers a search with nothing at all when nobody is signed in, which would otherwise
+            // read as Spotify having nothing by that name.
+            ui.searchMode == SearchMode.SPOTIFY && !settings.spotify.connected -> EmptyScreen(
+                "Spotify is not connected",
+                searchHint(ui.searchMode, settings.spotify, settings.vk),
+            )
             else -> SearchResultsList(ui.searchResults, state)
         }
     }
+}
+
+/** "A", "A and B", "A, B and C": services named in a sentence. */
+internal fun servicesLine(names: List<String>): String = when (names.size) {
+    0 -> ""
+    1 -> names.single()
+    else -> names.dropLast(1).joinToString() + " and " + names.last()
+}
+
+/**
+ * What the search page says before anything is typed: which services a search asks, or what one of them
+ * needs first.
+ *
+ * Mixed search asks Spotify only when its songs play on Spotify -- matched, each would be a slower copy of
+ * the YouTube Music result beside it -- and VK only for an account signed in to it. Both are the core's
+ * rules; this says them, so the line names exactly the services that will answer.
+ */
+internal fun searchHint(mode: SearchMode, spotify: SpotifyConnectionState, vk: VkConnectionState): String = when {
+    mode == SearchMode.HYBRID -> servicesLine(
+        listOfNotNull(
+            "YouTube Music",
+            "YouTube videos",
+            "SoundCloud",
+            "Bandcamp",
+            "Spotify".takeIf { spotify.playsOnSpotify },
+            "VK Music".takeIf { vk.connected },
+        ),
+    ) + " results appear together."
+    mode == SearchMode.SPOTIFY && !spotify.connected -> "Connect Spotify under Settings › Spotify library to search it."
+    mode == SearchMode.VK && !vk.connected -> "Sign in to VK under Settings › VK Music to search it."
+    else -> "Only ${mode.displayName} results will appear."
 }
 
 /**
@@ -1534,8 +1621,9 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
  *
  * The shelf is Home's, cards and all, because these open rather than play, which is what a card on Home
  * already means; mixed in among the songs, one click would play and the next would go somewhere else. Only
- * Bandcamp answers with albums and artists so far, so with nothing from Bandcamp the page is the list of
- * songs it always was, without a heading over it.
+ * Bandcamp and Spotify answer with albums and artists so far, so with nothing from either the page is the
+ * list of songs it always was, without a heading over it. The line under the shelf names whichever of them
+ * did answer.
  */
 @Composable
 private fun SearchResultsList(results: SearchResults, state: AppState) {
@@ -1546,7 +1634,7 @@ private fun SearchResultsList(results: SearchResults, state: AppState) {
             item(key = "search:shelf") {
                 PlaylistRowSection(
                     "Albums and artists",
-                    "From " + shelf.map { it.provider.displayName }.distinct().joinToString(" and "),
+                    "From " + servicesLine(shelf.map { it.provider.displayName }.distinct()),
                     shelf,
                     state,
                 )
@@ -1602,6 +1690,28 @@ private fun TrackRow(track: Track, sourceQueue: List<Track>, state: AppState) {
 }
 
 /**
+ * What a heart does to a song, in the words of the service it goes to.
+ *
+ * A heart is a like on YouTube and SoundCloud, but on VK it adds the song to My music and on Spotify it saves
+ * it to Liked Songs, and saying so is what tells somebody where to find it afterwards.
+ */
+internal fun likeLabel(provider: ProviderType, liked: Boolean): String = when (provider) {
+    ProviderType.VK -> if (liked) "Remove from My music on VK" else "Add to My music on VK"
+    ProviderType.SPOTIFY -> if (liked) "Remove from Liked Songs on Spotify" else "Save to Liked Songs on Spotify"
+    else -> if (liked) "Remove from your ${provider.displayName} likes" else "Like on ${provider.displayName}"
+}
+
+/**
+ * Why a heart cannot be pressed: usually a sign-in still to make, but Bandcamp has no likes to make, and
+ * telling somebody to sign in to a service with nothing to sign in to would send them looking for it.
+ */
+internal fun likeUnavailable(provider: ProviderType): String = when (provider) {
+    ProviderType.BANDCAMP -> "Bandcamp has no likes; its wishlist is kept on Bandcamp"
+    ProviderType.LOCAL -> "Files on this computer cannot be liked"
+    else -> "Sign in to ${provider.displayName} to like tracks"
+}
+
+/**
  * Writes the like to the provider account, not just to Noctorium, so the heart reflects what the service holds.
  *
  * Which services can be written to is [LikeState.supports]'s decision, not this button's: naming SoundCloud
@@ -1613,19 +1723,18 @@ internal fun LikeButton(track: Track, state: AppState, size: Dp = 36.dp) {
     val liked = likes.isLiked(track)
     val busy = likes.isBusy(track)
     val supported = likes.supports(track)
-    val service = track.provider.displayName
     // The heart pops as it fills, so a like is seen to land and not only to change colour.
     IconButton({ state.toggleLike(track) }, Modifier.size(size).popOn(liked, pop = liked), enabled = supported && !busy) {
         when {
             busy -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
             liked -> Icon(
                 Icons.Default.Favorite,
-                "Remove from your $service likes",
+                likeLabel(track.provider, liked = true),
                 tint = MaterialTheme.colorScheme.primary,
             )
             else -> Icon(
                 Icons.Default.FavoriteBorder,
-                if (supported) "Like on $service" else "Sign in to $service to like tracks",
+                if (supported) likeLabel(track.provider, liked = false) else likeUnavailable(track.provider),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (supported) 1f else .4f),
             )
         }
@@ -1658,9 +1767,8 @@ private fun TrackMenu(track: Track, state: AppState) {
                 onClick = { state.addToQueue(track); expanded = false },
             )
             if (likes.supports(track)) {
-                val service = track.provider.displayName
                 DropdownMenuItem(
-                    text = { Text(if (likedNow) "Remove from $service likes" else "Like on $service") },
+                    text = { Text(likeLabel(track.provider, likedNow)) },
                     leadingIcon = {
                         Icon(if (likedNow) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null)
                     },
@@ -1673,14 +1781,15 @@ private fun TrackMenu(track: Track, state: AppState) {
             val onDisk = state.downloadableTrack(track)
             val job = downloads.jobFor(onDisk)
             when {
-                // A Bandcamp song is neither downloaded nor saved -- the file is the artist's to sell -- so
-                // its page, where it is bought, takes the place of both. The page alone: the address kept
-                // for the song carries the ids that find its stream, which mean nothing in a browser.
+                // A Bandcamp or VK song is neither downloaded nor saved -- the file is the artist's to sell, or
+                // VK's to license -- so its own page takes the place of both: where a Bandcamp song is bought,
+                // and where a VK one lives. The page alone: the address kept for the song carries what finds
+                // its stream, which means nothing in a browser.
                 !state.canKeep(track) -> DropdownMenuItem(
-                    text = { Text("Open on ${track.provider.displayName}") },
+                    text = { Text(servicePageLabel(track.provider)) },
                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) },
-                    trailingIcon = {
-                        Text("to buy", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                    trailingIcon = servicePageHint(track.provider)?.let { hint ->
+                        { Text(hint, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp) }
                     },
                     onClick = { state.openExternalUrl(track.pageUrl); expanded = false },
                 )
@@ -1952,10 +2061,16 @@ internal fun ProviderBadge(provider: ProviderType, compact: Boolean = false) {
     )
 }
 
-/** Volume, boost and mute in one popover, so the bar carries a single icon instead of four controls. */
+/**
+ * Volume, boost and mute in one popover, so the bar carries a single icon instead of four controls.
+ *
+ * The volume and mute reach Spotify's own app when that is what is playing, and Spotify turns its device
+ * up and down; the boost is a filter in this computer's player, and rests until a song plays here again.
+ */
 @Composable
 internal fun VolumeControl(playback: PlaybackState, state: AppState) {
     var open by remember { mutableStateOf(false) }
+    val onSpotify = playsOnSpotify(playback.track, state.settings.collectAsState().value.spotify)
     Box {
         IconButton({ open = true }, Modifier.size(36.dp)) {
             Icon(
@@ -2001,7 +2116,17 @@ internal fun VolumeControl(playback: PlaybackState, state: AppState) {
                         onClick = state::toggleVolumeBoost,
                         label = { Text("Boost", fontSize = 11.sp) },
                         leadingIcon = { Icon(Icons.Default.Bolt, null, Modifier.size(14.dp)) },
+                        enabled = !onSpotify,
                         modifier = Modifier.height(30.dp),
+                    )
+                }
+                if (onSpotify) {
+                    Spacer(Modifier.height(9.dp))
+                    Text(
+                        "Spotify plays this song in its own app, so the boost and the equaliser wait for the next " +
+                            "song played here.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
                     )
                 }
             }
@@ -2111,13 +2236,7 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 13.sp,
                         )
-                        Text(
-                            playback.errorMessage ?: current?.artistLine ?: "Choose a track to start",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp,
-                        )
+                        BarArtistLine(current, playback, state, 11.sp)
                     }
                 }
 
@@ -2151,6 +2270,28 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                 if (PlayerButton.VOLUME in shown) VolumeControl(playback, state)
             }
             if (atTop && !LocalInGlass.current) HorizontalDivider(color = rule)
+        }
+    }
+}
+
+/**
+ * The line under the song's title in the Inline and Stacked bars: its artist, or what went wrong, in red --
+ * and the On Spotify tag after it when Spotify's own app is the one playing.
+ */
+@Composable
+private fun BarArtistLine(current: Track?, playback: PlaybackState, state: AppState, fontSize: TextUnit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            playback.errorMessage ?: current?.artistLine ?: "Choose a track to start",
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = fontSize,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (playsOnSpotify(current, state.settings.collectAsState().value.spotify)) {
+            Spacer(Modifier.width(6.dp))
+            OnSpotifyMark()
         }
     }
 }
@@ -2217,13 +2358,7 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                                 overflow = TextOverflow.Ellipsis,
                                 fontWeight = FontWeight.SemiBold,
                             )
-                            Text(
-                                playback.errorMessage ?: current?.artistLine ?: "Choose a track to start",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp,
-                            )
+                            BarArtistLine(current, playback, state, 12.sp)
                         }
                         if (PlayerButton.LIKE in shown) current?.let { LikeButton(it, state) }
                         current?.let { DownloadButton(it, state) }
@@ -2643,6 +2778,11 @@ private fun HeroFooter(track: Track, playback: PlaybackState, state: AppState, l
                 fontSize = 14.sp,
                 fontWeight = if (activeLine != null) FontWeight.Medium else FontWeight.Normal,
             )
+        }
+        // Beside the badge, which says Spotify either way: this says it is Spotify's own app making the sound.
+        if (playsOnSpotify(track, state.settings.collectAsState().value.spotify)) {
+            OnSpotifyMark()
+            Spacer(Modifier.width(6.dp))
         }
         ProviderBadge(track.provider, compact = true)
         if (look.layout.hasPanel) {
@@ -3563,8 +3703,8 @@ private fun PlaybackError(message: String) {
 }
 
 private enum class SettingsPage {
-    ACCOUNT, PROFILE, CUSTOMIZATION, SOUND, YOUTUBE, SOUNDCLOUD, SPOTIFY, BANDCAMP, SCROBBLING, LYRICS, STARTUP, DISCORD,
-    UPDATES, PLAYBACK_TOOLS, DIAGNOSTICS
+    ACCOUNT, PROFILE, CUSTOMIZATION, SOUND, YOUTUBE, SOUNDCLOUD, SPOTIFY, BANDCAMP, VK, SCROBBLING, LYRICS, STARTUP,
+    DISCORD, UPDATES, PLAYBACK_TOOLS, DIAGNOSTICS
 }
 
 /**
@@ -3599,6 +3739,7 @@ internal fun SettingsScreen(state: AppState) {
                     )
                     SettingsPage.SPOTIFY -> SpotifySettingsPanel(settings, state)
                     SettingsPage.BANDCAMP -> BandcampSettingsPanel(settings, state)
+                    SettingsPage.VK -> VkSettingsPanel(settings, state)
                     SettingsPage.SCROBBLING -> ScrobblingSettingsPanel(settings, state)
                     SettingsPage.LYRICS -> LyricsSettingsPanel(settings.preferences, state)
                     SettingsPage.STARTUP -> StartupSettingsPanel(settings.preferences, state)
@@ -3717,6 +3858,15 @@ private fun SettingsHome(settings: SettingsState, state: AppState, open: (Settin
             )
         }
         item {
+            SettingsCard(
+                "VK Music",
+                vkSummary(settings.vk),
+                Icons.Default.Headphones,
+                { open(SettingsPage.VK) },
+                settings.vk.connected,
+            )
+        }
+        item {
             val connected = listOf(settings.scrobbling.lastFm, settings.scrobbling.listenBrainz)
                 .filter { it.status == ScrobbleConnectionStatus.CONNECTED }
                 .mapNotNull { it.username }
@@ -3805,6 +3955,7 @@ private fun pageTitle(page: SettingsPage) = when (page) {
     SettingsPage.SOUNDCLOUD -> "SoundCloud account"
     SettingsPage.SPOTIFY -> "Spotify library"
     SettingsPage.BANDCAMP -> "Bandcamp"
+    SettingsPage.VK -> "VK Music"
     SettingsPage.SCROBBLING -> "Scrobbling"
     SettingsPage.LYRICS -> "Lyrics providers"
     SettingsPage.STARTUP -> "Startup and tray"
@@ -4182,7 +4333,6 @@ internal fun CardHeading(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 }
 
 /** A labelled row of pills. Generic so every choice in this panel looks and behaves identically. */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun <T> ChoiceRow(
     label: String,
@@ -4190,16 +4340,39 @@ internal fun <T> ChoiceRow(
     selected: T,
     name: (T) -> String,
     choose: (T) -> Unit,
+) = ChoiceRow(label, options, selected, name, enabled = true, choose)
+
+/**
+ * The same, faded and unclickable while [enabled] is false: for a choice that has nothing to act on just
+ * now, such as the equaliser while Spotify's own app plays the song.
+ *
+ * An overload rather than a parameter on the one above, which is called both with its last argument in
+ * place and as a trailing block, and neither would survive a new parameter before it.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun <T> ChoiceRow(
+    label: String,
+    options: List<T>,
+    selected: T,
+    name: (T) -> String,
+    enabled: Boolean,
+    choose: (T) -> Unit,
 ) {
     Column {
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         // Wrapped rather than cut off: five layouts and five seek bars do not fit a narrow window in one line.
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            Modifier.graphicsLayer { alpha = if (enabled) 1f else .45f },
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             options.forEach { option ->
                 val active = option == selected
                 Surface(
                     onClick = { choose(option) },
+                    enabled = enabled,
                     shape = RoundedCornerShape(20.dp),
                     color = if (active) MaterialTheme.colorScheme.primaryContainer else ink(.05f),
                     border = BorderStroke(
@@ -5190,209 +5363,6 @@ private fun AccountStatusRow(connection: AccountConnectionState) {
 internal fun AccountFact(text: String) {
     Row(Modifier.padding(vertical = 4.dp)) {
         Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        Spacer(Modifier.width(8.dp))
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-    }
-}
-
-private fun spotifySummary(spotify: SpotifyConnectionState): String = when {
-    spotify.connecting -> "Waiting for Spotify…"
-    spotify.connected && spotify.accountName.isNotBlank() -> "Reading ${spotify.accountName}'s library"
-    spotify.connected -> "Your Spotify library is connected"
-    else -> "Read your playlists and liked songs"
-}
-
-/**
- * Spotify, set up as a library.
- *
- * The panel says plainly what this is and is not, because it would otherwise be reasonable to expect that
- * connecting Spotify means playing from Spotify. It does not, and it cannot: the Web API serves no audio,
- * and only Spotify's own player is allowed to decode it. What connecting gives is the collection.
- *
- * Connecting is one button, through Noctorium's own Spotify app. A Spotify app of the listener's own is
- * still offered, folded away underneath, for somebody who would rather sign in through that.
- */
-@Composable
-internal fun SpotifySettingsPanel(settings: SettingsState, state: AppState) {
-    val spotify = settings.spotify
-    var clientId by remember(settings.preferences.spotifyClientId) {
-        mutableStateOf(settings.preferences.spotifyClientId)
-    }
-    var ownAppOpen by remember { mutableStateOf(settings.preferences.spotifyClientId.isNotBlank()) }
-    val redirect = remember { state.spotifyRedirectUri() }
-
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = chromeBottom()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        SettingsPanelCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.LibraryMusic,
-                    null,
-                    Modifier.size(40.dp),
-                    tint = Color(0xFF1DB954),
-                )
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(
-                        when {
-                            spotify.connected && spotify.accountName.isNotBlank() -> spotify.accountName
-                            spotify.connected -> "Spotify connected"
-                            else -> "Spotify not connected"
-                        },
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        "Your playlists and liked songs, read into Noctorium",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                    )
-                }
-            }
-            Spacer(Modifier.height(9.dp))
-            AccountFact("Your Spotify playlists and Liked Songs appear in your library, in Spotify's order.")
-            AccountFact("Playback does not come from Spotify. Each song is matched on YouTube Music and played from there.")
-            AccountFact("Nothing is ever written to Spotify — not a like, not a playlist, not a listen.")
-            AccountFact("A song Spotify has that cannot be found elsewhere is reported rather than swapped for another.")
-        }
-
-        SettingsPanelCard {
-            Text("Connect", fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                if (spotify.ownApp) {
-                    "Signs in through your own Spotify app, in your browser. Noctorium is only ever allowed to read."
-                } else {
-                    "Signs in on Spotify's own page, in your browser. Nothing to set up first, and Noctorium is " +
-                        "only ever allowed to read."
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-            )
-            Spacer(Modifier.height(13.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                Button(
-                    state::connectSpotify,
-                    enabled = !spotify.connecting && clientId == settings.preferences.spotifyClientId,
-                ) {
-                    Icon(Icons.Default.Link, null, Modifier.size(17.dp))
-                    Spacer(Modifier.width(7.dp))
-                    Text(if (spotify.connected) "Reconnect Spotify" else "Connect Spotify")
-                }
-                if (spotify.connected) {
-                    OutlinedButton(state::disconnectSpotify) { Text("Disconnect") }
-                }
-            }
-            spotify.message?.let { message ->
-                Spacer(Modifier.height(11.dp))
-                Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = .6f),
-                    shape = RoundedCornerShape(10.dp),
-                ) {
-                    Row(Modifier.fillMaxWidth().padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
-                        SelectionContainer(Modifier.weight(1f)) { Text(message, fontSize = 11.sp) }
-                    }
-                }
-            }
-        }
-
-        SettingsPanelCard {
-            Row(
-                Modifier.fillMaxWidth().clickable { ownAppOpen = !ownAppOpen },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Use your own Spotify app", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (spotify.ownApp) "In use" else "Optional",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
-                    )
-                }
-                Icon(if (ownAppOpen) Icons.Default.ExpandLess else Icons.Default.ExpandMore, if (ownAppOpen) "Fold away" else "Show")
-            }
-            if (ownAppOpen) {
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "For signing in through an app registered to you instead of Noctorium's. It takes a minute " +
-                        "and never expires.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                )
-                Spacer(Modifier.height(13.dp))
-                SetupStep(1, "Open Spotify's developer dashboard and create an app. Any name will do.")
-                SetupStep(2, "Add this exact address to the app's Redirect URIs, and tick the Web API:")
-                Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = .7f),
-                    shape = RoundedCornerShape(9.dp),
-                    modifier = Modifier.padding(start = 26.dp, top = 4.dp, bottom = 8.dp),
-                ) {
-                    Row(
-                        Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        SelectionContainer { Text(redirect, fontSize = 11.sp, fontFamily = FontFamily.Monospace) }
-                        Spacer(Modifier.width(8.dp))
-                        IconButton(state::copySpotifyRedirectUri, Modifier.size(26.dp)) {
-                            Icon(Icons.Default.ContentCopy, "Copy the redirect address", Modifier.size(15.dp))
-                        }
-                    }
-                }
-                SetupStep(3, "Copy the app's Client ID from its settings, paste it below, and connect again.")
-                Spacer(Modifier.height(11.dp))
-                OutlinedButton(state::openSpotifyDashboard) {
-                    Icon(Icons.Default.OpenInNew, null, Modifier.size(17.dp))
-                    Spacer(Modifier.width(7.dp))
-                    Text("Open Spotify's dashboard")
-                }
-                Spacer(Modifier.height(14.dp))
-                OutlinedTextField(
-                    clientId,
-                    { clientId = it.trim().take(64) },
-                    label = { Text("Client ID") },
-                    placeholder = { Text("32 characters from the dashboard") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().tracksTyping(),
-                )
-                Spacer(Modifier.height(7.dp))
-                Text(
-                    "An identifier and not a password, so it is kept in your settings file. The sign-in itself is " +
-                        "stored encrypted for your account on this computer.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
-                )
-                Spacer(Modifier.height(13.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Button(
-                        { state.setSpotifyClientId(clientId) },
-                        enabled = clientId.isNotBlank() && clientId != settings.preferences.spotifyClientId,
-                    ) {
-                        Icon(Icons.Default.Save, null, Modifier.size(17.dp))
-                        Spacer(Modifier.width(7.dp))
-                        Text("Use this app")
-                    }
-                    if (spotify.ownApp) {
-                        OutlinedButton({ clientId = ""; state.setSpotifyClientId("") }) { Text("Go back to Noctorium's") }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** A numbered instruction, for the one part of Noctorium that asks somebody to go and do something else. */
-@Composable
-private fun SetupStep(number: Int, text: String) {
-    Row(Modifier.padding(vertical = 4.dp)) {
-        Text(
-            "$number.",
-            color = MaterialTheme.colorScheme.primary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.width(18.dp),
-        )
         Spacer(Modifier.width(8.dp))
         Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
     }

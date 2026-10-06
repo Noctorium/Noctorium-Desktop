@@ -32,7 +32,7 @@ class AccountUiRenderCheck {
         val folder = System.getProperty("noctorium.renderBars")?.let(::File) ?: return
         folder.mkdirs()
         val channels = listOf(
-            YouTubeChannel("", "Cem", authUser = 0, handle = "@cem", email = "first@example.com", selected = true),
+            YouTubeChannel("", "Sample Listener", authUser = 0, handle = "@samplelistener", email = "first@example.com", selected = true),
             YouTubeChannel("", "Work", authUser = 1, email = "second@example.com"),
             YouTubeChannel("109876543210", "Night Shift Radio", authUser = 1, handle = "@nightshift", email = "second@example.com"),
         )

@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import app.noctorium.core.AppState
 import app.noctorium.domain.pluralTracks
 import androidx.compose.ui.unit.Dp
+import app.noctorium.domain.ProviderType
 import app.noctorium.domain.Track
 import app.noctorium.downloads.DownloadStage
 import app.noctorium.settings.NoctoriumPreferences
@@ -66,13 +67,33 @@ internal fun formatBytes(bytes: Long): String = when {
 }
 
 /**
- * Why a song is not downloaded, said wherever a download would otherwise be offered.
+ * Why a song from [provider] is not downloaded, said wherever a download would otherwise be offered.
  *
- * Only Bandcamp's songs are refused, by [AppState.canKeep]: what Bandcamp streams to everybody is there to be
- * heard on the way to being bought, and the file is the artist's to sell. Its page is where it is bought, so
- * the places that leave out a download offer that page instead.
+ * [AppState.canKeep] decides which songs those are, and each service has its own reason. What Bandcamp
+ * streams to everybody is there to be heard on the way to being bought, and the file is the artist's to
+ * sell; VK licenses its music for playing in its own apps, and not for keeping. Either way the song's own
+ * page is offered where the download would have been.
  */
-internal const val BOUGHT_NOT_DOWNLOADED = "Bandcamp songs are bought, not downloaded"
+internal fun notKeptReason(provider: ProviderType): String = when (provider) {
+    ProviderType.BANDCAMP -> "Bandcamp songs are bought, not downloaded"
+    ProviderType.VK -> "VK songs play here but can't be downloaded"
+    else -> "${provider.displayName} songs can't be downloaded"
+}
+
+/**
+ * What the button to a song's page on its service says, offered in place of keeping a song that may not be
+ * kept. VK is named as its address names it: the page is on vk.ru, not on anything called VK Music.
+ */
+internal fun servicePageLabel(provider: ProviderType): String = when (provider) {
+    ProviderType.VK -> "Open on VK"
+    else -> "Open on ${provider.displayName}"
+}
+
+/** Why that page is worth opening, where there is something to say: a Bandcamp song is bought there. */
+internal fun servicePageHint(provider: ProviderType): String? = when (provider) {
+    ProviderType.BANDCAMP -> "to buy"
+    else -> null
+}
 
 /**
  * How many of [tracks] a playlist's download button would still fetch, or null when none of them may be
@@ -237,11 +258,12 @@ internal fun DownloadButton(track: Track, state: AppState, size: Dp = 36.dp) {
     // Faded rather than gone. A row of search results or a player bar would otherwise shift every button
     // after this one whenever a Bandcamp song came along; pointing at it says why it does nothing.
     if (!state.canKeep(track)) {
-        return HoverHint(BOUGHT_NOT_DOWNLOADED) {
+        val reason = notKeptReason(track.provider)
+        return HoverHint(reason) {
             IconButton({}, Modifier.size(size), enabled = false) {
                 Icon(
                     Icons.Default.Download,
-                    BOUGHT_NOT_DOWNLOADED,
+                    reason,
                     Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .38f),
                 )

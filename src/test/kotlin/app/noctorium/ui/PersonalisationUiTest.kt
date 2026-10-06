@@ -129,11 +129,15 @@ class PersonalisationUiTest {
     fun `placeholders stand in only for rows that could still appear`() {
         val loading = ui.copy(homeLoading = true)
         assertTrue(homeContent(loading, setOf(HomePart.SOUNDCLOUD)).loading)
-        // Bandcamp's rows can still come while it is on, so the placeholders stay until it is put away too.
+        // Bandcamp's rows can still come while it is on, so the placeholders stay until it is put away too --
+        // and Spotify's and VK's, now that they have rows of their own.
         assertTrue(homeContent(loading, setOf(HomePart.SOUNDCLOUD, HomePart.YOUTUBE_MUSIC)).loading)
-        assertFalse(homeContent(loading, setOf(HomePart.SOUNDCLOUD, HomePart.YOUTUBE_MUSIC, HomePart.BANDCAMP)).loading)
+        assertTrue(homeContent(loading, setOf(HomePart.SOUNDCLOUD, HomePart.YOUTUBE_MUSIC, HomePart.BANDCAMP)).loading)
+        assertFalse(homeContent(loading, SERVICE_HOME_PARTS).loading)
         assertFalse(homeContent(loading.copy(providerFilter = ProviderFilter.BANDCAMP), setOf(HomePart.BANDCAMP)).loading)
         assertFalse(homeContent(loading.copy(providerFilter = ProviderFilter.SOUNDCLOUD), setOf(HomePart.SOUNDCLOUD)).loading)
+        assertFalse(homeContent(loading.copy(providerFilter = ProviderFilter.SPOTIFY), setOf(HomePart.SPOTIFY)).loading)
+        assertTrue(homeContent(loading.copy(providerFilter = ProviderFilter.VK), setOf(HomePart.SPOTIFY)).loading)
     }
 
     @Test

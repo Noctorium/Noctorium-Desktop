@@ -30,9 +30,9 @@ class BandcampUiTest {
     @Test
     fun `the collection is named by the fan once Bandcamp has said who that is, and by the address before`() {
         assertNull(bandcampCollectionLine("", ""))
-        assertEquals("Showing the collection of Cem", bandcampCollectionLine("cem", "Cem"))
+        assertEquals("Showing the collection of Sample Fan", bandcampCollectionLine("sample-fan", "Sample Fan"))
         // After a restart only the name in the address is known, until Bandcamp is asked again.
-        assertEquals("Showing the collection at bandcamp.com/cem", bandcampCollectionLine("cem", ""))
+        assertEquals("Showing the collection at bandcamp.com/sample-fan", bandcampCollectionLine("sample-fan", ""))
     }
 
     @Test
@@ -41,12 +41,12 @@ class BandcampUiTest {
             "No sign-in needed — add your name to see your collection",
             bandcampSummary("", BandcampConnectionState()),
         )
-        assertEquals("Showing the collection of Cem", bandcampSummary("cem", BandcampConnectionState(fanName = "Cem")))
+        assertEquals("Showing the collection of Sample Fan", bandcampSummary("sample-fan", BandcampConnectionState(fanName = "Sample Fan")))
         assertEquals("Checking the name with Bandcamp…", bandcampSummary("", BandcampConnectionState(checking = true)))
         // A failed check leaves the name already in force, which is still what the library shows.
         assertEquals(
-            "Showing the collection at bandcamp.com/cem",
-            bandcampSummary("cem", BandcampConnectionState(message = "Bandcamp has no fan called \"cme\".")),
+            "Showing the collection at bandcamp.com/sample-fan",
+            bandcampSummary("sample-fan", BandcampConnectionState(message = "Bandcamp has no fan called \"sample-fen\".")),
         )
     }
 

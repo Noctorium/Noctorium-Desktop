@@ -199,16 +199,26 @@ internal data class HomeContent(
         get() = !greeting && pinned.isEmpty() && recent.isEmpty() && sections.isEmpty() && !loading
 }
 
+/**
+ * The parts of Home that are a service's rows, rather than the listener's own.
+ *
+ * Everything but the three that are the listener's, so that a service the core adds to Home is counted here
+ * without anybody remembering to.
+ */
+internal val SERVICE_HOME_PARTS: Set<HomePart> = HomePart.entries.toSet() - setOf(HomePart.GREETING, HomePart.PINNED, HomePart.RECENT)
+
 internal fun homeContent(ui: AppUiState, hidden: Set<HomePart>): HomeContent {
     val filter = ui.providerFilter
     fun ProviderType.passes() = filter.matches(this)
     // The placeholders stand in for the services' rows, so there are none when every row they could
     // become has been put away.
     val servicesShown = when (filter) {
-        ProviderFilter.ALL -> HomePart.YOUTUBE_MUSIC !in hidden || HomePart.SOUNDCLOUD !in hidden || HomePart.BANDCAMP !in hidden
+        ProviderFilter.ALL -> SERVICE_HOME_PARTS.any { it !in hidden }
         ProviderFilter.YOUTUBE_MUSIC -> HomePart.YOUTUBE_MUSIC !in hidden
         ProviderFilter.SOUNDCLOUD -> HomePart.SOUNDCLOUD !in hidden
         ProviderFilter.BANDCAMP -> HomePart.BANDCAMP !in hidden
+        ProviderFilter.SPOTIFY -> HomePart.SPOTIFY !in hidden
+        ProviderFilter.VK -> HomePart.VK !in hidden
     }
     return HomeContent(
         greeting = HomePart.GREETING !in hidden,
@@ -373,9 +383,12 @@ internal fun SoundSettingsPanel(preferences: NoctoriumPreferences, state: AppSta
  * Moving anything switches it on, the way the core's own setters do for the bands and the presets: nobody
  * drags the bass up and means for nothing to happen. Bands and preamp are only written when they are let
  * go of, because every write is a settings save and a new filter for mpv, and a drag is dozens of writes.
+ *
+ * While [onSpotify] -- the song playing is played by the account's own Spotify app -- nothing here can reach
+ * it, so the controls rest and say why rather than appearing to do nothing.
  */
 @Composable
-internal fun EqualizerCard(equalizer: EqualizerSettings, state: AppState) {
+internal fun EqualizerCard(equalizer: EqualizerSettings, state: AppState, onSpotify: Boolean = playingOnSpotify(state)) {
     SettingsPanelCard {
         CardHeading(Icons.Default.Equalizer, "Equaliser")
         Spacer(Modifier.height(6.dp))
@@ -385,6 +398,20 @@ internal fun EqualizerCard(equalizer: EqualizerSettings, state: AppState) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp,
         )
+        if (onSpotify) {
+            Spacer(Modifier.height(12.dp))
+            Surface(color = SPOTIFY_GREEN.copy(alpha = .1f), shape = RoundedCornerShape(10.dp)) {
+                Row(Modifier.fillMaxWidth().padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OnSpotifyMark()
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "Spotify plays this song in its own app, where the equaliser cannot reach. It shapes the songs " +
+                            "played here again from the next one.",
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
         Spacer(Modifier.height(14.dp))
         ToggleRow(
             "Equaliser",
@@ -394,13 +421,14 @@ internal fun EqualizerCard(equalizer: EqualizerSettings, state: AppState) {
                 "Off: the music plays as it arrives. Choosing a preset or moving a band switches it on."
             },
             equalizer.enabled,
+            enabled = !onSpotify,
         ) { on -> state.updateEqualizer { copy(enabled = on) } }
         Spacer(Modifier.height(16.dp))
-        ChoiceRow("Preset", EqualizerPreset.entries, equalizer.preset, { it.displayName }, state::setEqualizerPreset)
+        ChoiceRow("Preset", EqualizerPreset.entries, equalizer.preset, { it.displayName }, enabled = !onSpotify, state::setEqualizerPreset)
         Spacer(Modifier.height(18.dp))
-        EqualizerCurve(equalizer.gains, equalizer.enabled, state::setEqualizerBand)
+        EqualizerCurve(equalizer.gains, equalizer.enabled && !onSpotify, state::setEqualizerBand, enabled = !onSpotify)
         Spacer(Modifier.height(16.dp))
-        PreampRow(equalizer.preampDb) { db -> state.updateEqualizer { copy(preampDb = db, enabled = true) } }
+        PreampRow(equalizer.preampDb, enabled = !onSpotify) { db -> state.updateEqualizer { copy(preampDb = db, enabled = true) } }
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -413,7 +441,7 @@ internal fun EqualizerCard(equalizer: EqualizerSettings, state: AppState) {
             // a reset clicked by mistake should not cost anybody the curve they spent ten minutes on.
             TextButton(
                 { state.updateEqualizer { copy(preset = EqualizerPreset.FLAT, preampDb = 0f) } },
-                enabled = equalizer.preset != EqualizerPreset.FLAT || equalizer.preampDb != 0f,
+                enabled = !onSpotify && (equalizer.preset != EqualizerPreset.FLAT || equalizer.preampDb != 0f),
             ) {
                 Icon(Icons.Default.RestartAlt, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
@@ -432,7 +460,7 @@ internal fun EqualizerCard(equalizer: EqualizerSettings, state: AppState) {
  * and a cut read at a glance. The value is written once, on letting go.
  */
 @Composable
-internal fun EqualizerCurve(gains: List<Float>, active: Boolean, commit: (Int, Float) -> Unit) {
+internal fun EqualizerCurve(gains: List<Float>, active: Boolean, commit: (Int, Float) -> Unit, enabled: Boolean = true) {
     val bands = Equalizer.BANDS_HZ
     val latestCommit by rememberUpdatedState(commit)
     // The band being dragged and where it has got to; and, after letting go, the value written, held until
@@ -479,7 +507,9 @@ internal fun EqualizerCurve(gains: List<Float>, active: Boolean, commit: (Int, F
                         "${Equalizer.label(bands[i])} hertz ${formatGain(shown[i])} decibels"
                     }
                 }
-                .pointerInput(Unit) {
+                .pointerInput(enabled) {
+                    // Resting: nothing it set would reach what is playing. See EqualizerCard.
+                    if (!enabled) return@pointerInput
                     val inset = 12.dp.toPx()
                     fun gainAt(y: Float): Float {
                         val plot = (size.height - inset * 2).coerceAtLeast(1f)
@@ -586,7 +616,7 @@ internal fun EqualizerCurve(gains: List<Float>, active: Boolean, commit: (Int, F
 
 /** The preamp: decibels added before the bands, written when the slider is let go of. */
 @Composable
-private fun PreampRow(preampDb: Float, commit: (Float) -> Unit) {
+private fun PreampRow(preampDb: Float, enabled: Boolean = true, commit: (Float) -> Unit) {
     var dragging by remember(preampDb) { mutableFloatStateOf(preampDb) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.width(132.dp)) {
@@ -598,6 +628,7 @@ private fun PreampRow(preampDb: Float, commit: (Float) -> Unit) {
             onValueChange = { dragging = snapGain(it) },
             onValueChangeFinished = { if (dragging != preampDb) commit(dragging) },
             valueRange = -Equalizer.MAX_GAIN_DB..Equalizer.MAX_GAIN_DB,
+            enabled = enabled,
             modifier = Modifier.weight(1f),
         )
         Text(

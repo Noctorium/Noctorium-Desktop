@@ -300,30 +300,44 @@ private fun BarCover(track: Track?, size: Dp, corner: Dp, state: AppState) {
     }
 }
 
-/** Title and artist on one line, the artist quieter, or what went wrong in its place, in red. */
+/**
+ * Title and artist on one line, the artist quieter, or what went wrong in its place, in red -- and the
+ * On Spotify tag after them when Spotify's own app is the one playing.
+ */
 @Composable
 private fun SlimLine(current: Track?, playback: PlaybackState, state: AppState, modifier: Modifier) {
-    Text(
-        buildAnnotatedString {
-            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(current?.title ?: "Nothing playing") }
-            val second = playback.errorMessage ?: current?.artistLine?.takeIf(String::isNotBlank)
-            if (second != null) {
-                withStyle(
-                    SpanStyle(
-                        color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                ) { append("  ·  $second") }
-            }
-        },
-        fontSize = 13.sp,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = modifier.clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
-    )
+    val onSpotify = playsOnSpotify(current, state.settings.collectAsState().value.spotify)
+    Row(
+        modifier.clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            buildAnnotatedString {
+                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(current?.title ?: "Nothing playing") }
+                val second = playback.errorMessage ?: current?.artistLine?.takeIf(String::isNotBlank)
+                if (second != null) {
+                    withStyle(
+                        SpanStyle(
+                            color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    ) { append("  ·  $second") }
+                }
+            },
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (onSpotify) {
+            Spacer(Modifier.width(8.dp))
+            OnSpotifyMark()
+        }
+    }
 }
 
 /**
- * Title over artist, or over what went wrong, in red, when something did.
+ * Title over artist, or over what went wrong, in red, when something did -- with the On Spotify tag after the
+ * artist when Spotify's own app is the one playing.
  *
  * A new track's name rises into place as the last one lifts away, so a skip is seen as well as heard.
  */
@@ -336,6 +350,7 @@ private fun BarTitle(
     titleSize: TextUnit = 14.sp,
     detailSize: TextUnit = 12.sp,
 ) {
+    val spotify = state.settings.collectAsState().value.spotify
     MotionContent(
         current,
         modifier.clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
@@ -350,13 +365,20 @@ private fun BarTitle(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = titleSize,
             )
-            Text(
-                playback.errorMessage ?: track?.artistLine ?: "Choose a track to start",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = detailSize,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    playback.errorMessage ?: track?.artistLine ?: "Choose a track to start",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = detailSize,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (playsOnSpotify(track, spotify)) {
+                    Spacer(Modifier.width(6.dp))
+                    OnSpotifyMark()
+                }
+            }
         }
     }
 }
