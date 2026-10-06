@@ -7,6 +7,7 @@ import app.noctorium.core.Destination
 import app.noctorium.desktopAppState
 import app.noctorium.playback.PlaybackToolInstaller
 import app.noctorium.settings.NowPlayingBackdrop
+import app.noctorium.settings.NowPlayingLayout
 import app.noctorium.settings.NowPlayingPreferences
 import app.noctorium.settings.PlayerBarPosition
 import app.noctorium.settings.PlayerBarStyle
@@ -117,6 +118,28 @@ class WindowsThemesRenderCheck {
             tour.open(width = 760, height = 560)
             tour.fill()
             tour.capture("taskbar-narrow")
+            tour.open()
+            tour.fill()
+            // The bars that float over the page, and Display, over Home; then the Island opened by the pointer.
+            listOf(PlayerBarStyle.FLOATING, PlayerBarStyle.ISLAND, PlayerBarStyle.DISPLAY).forEach { style ->
+                state.setPlayerBarStyle(style)
+                tour.go(Destination.HOME)
+                tour.capture("window-${style.name.lowercase()}")
+            }
+            state.setPlayerBarStyle(PlayerBarStyle.ISLAND)
+            tour.hover(Offset(if (xp) 743f else 683f, 762f))
+            tour.capture("window-island-open", frames = 16)
+            tour.hover(Offset(640f, 300f))
+            // Every now playing layout, in its windows on the desktop.
+            state.setPlayerBarStyle(PlayerBarStyle.INLINE)
+            state.setNowPlayingBackdrop(NowPlayingBackdrop.PLAIN)
+            tour.go(Destination.NOW_PLAYING)
+            NowPlayingLayout.entries.forEach { layout ->
+                state.updateNowPlaying { copy(layout = layout) }
+                tour.capture("layout-${layout.name.lowercase()}", frames = 14)
+            }
+            state.updateNowPlaying { NowPlayingPreferences() }
+            state.setNowPlayingBackdrop(NowPlayingBackdrop.WASH)
             state.setPlayerBarStyle(PlayerBarStyle.INLINE)
             // The whole of Customization at once, in a window tall enough to hold it.
             tour.open(width = 1280, height = 3600)
