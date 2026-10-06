@@ -302,6 +302,8 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                         Box(Modifier.weight(1f)) {
                             GlassContent(queue, playback, appState, Color(theme.background), playerAtTop, screens)
                         }
+                    } else if (preferences.playerBarStyle.floats) {
+                        Box(Modifier.weight(1f)) { FloatingContent(queue, playback, appState, playerAtTop, screens) }
                     } else {
                         if (playerAtTop) PlayerBar(queue, playback, appState)
                         Box(Modifier.weight(1f)) { screens() }
@@ -327,7 +329,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
  * itself.
  */
 @Composable
-private fun BoxScope.GlassContent(
+internal fun BoxScope.GlassContent(
     queue: QueueState,
     playback: PlaybackState,
     state: AppState,
@@ -335,6 +337,7 @@ private fun BoxScope.GlassContent(
     playerAtTop: Boolean,
     screens: @Composable () -> Unit,
 ) {
+    val preferences = state.settings.collectAsState().value.preferences
     val backdrop = rememberGlassBackdrop()
     val density = LocalDensity.current
     var cover by remember { mutableIntStateOf(0) }
@@ -358,7 +361,48 @@ private fun BoxScope.GlassContent(
             .onSizeChanged { cover = it.height }
             .padding(Glass.FLOAT_INSET_DP.dp),
     ) {
-        GlassPane(backdrop, cornerRadius = 28.dp) { PlayerBar(queue, playback, state) }
+        when (preferences.playerBarStyle) {
+            // A pill with the page either side cuts its own pane, the size of the pill: in one the width of the
+            // window it would be a bar again.
+            PlayerBarStyle.ISLAND -> CompositionLocalProvider(LocalGlassBackdrop provides backdrop) { PlayerBar(queue, playback, state) }
+            // Floating's whole point is how round it is, so its pane follows the corner setting.
+            PlayerBarStyle.FLOATING -> GlassPane(backdrop, cornerRadius = liftedCorner(preferences.cornerStyle, FLOATING_HEIGHT)) {
+                PlayerBar(queue, playback, state)
+            }
+            else -> GlassPane(backdrop, cornerRadius = 28.dp) { PlayerBar(queue, playback, state) }
+        }
+    }
+}
+
+/**
+ * The content area under a bar that floats -- Floating and the Island -- with solid surfaces: the screens
+ * running the full height, and the bar over them with the page showing round it.
+ *
+ * [GlassContent]'s arrangement without the glass, for the same reasons: the screens are told how much of them
+ * the bar covers, so a list's last rows can still be scrolled clear of it, and at the top they start below it.
+ */
+@Composable
+internal fun BoxScope.FloatingContent(
+    queue: QueueState,
+    playback: PlaybackState,
+    state: AppState,
+    playerAtTop: Boolean,
+    screens: @Composable () -> Unit,
+) {
+    val density = LocalDensity.current
+    var cover by remember { mutableIntStateOf(0) }
+    val covered = with(density) { cover.toDp() }
+    if (playerAtTop) {
+        Box(Modifier.fillMaxSize().padding(top = covered)) { screens() }
+    } else {
+        CompositionLocalProvider(LocalChromeInsets provides ChromeInsets(bottom = covered)) { screens() }
+    }
+    Box(
+        Modifier
+            .align(if (playerAtTop) Alignment.TopCenter else Alignment.BottomCenter)
+            .onSizeChanged { cover = it.height },
+    ) {
+        PlayerBar(queue, playback, state)
     }
 }
 
@@ -1926,7 +1970,7 @@ private fun EditTrackDialog(track: Track, existing: TrackEdit?, state: AppState,
 }
 
 @Composable
-private fun AddToPlaylistDialog(
+internal fun AddToPlaylistDialog(
     track: Track,
     playlists: List<LocalPlaylist>,
     state: AppState,
@@ -2082,8 +2126,17 @@ internal fun ProviderBadge(provider: ProviderType, compact: Boolean = false) {
  * again.
  */
 @Composable
-internal fun VolumeControl(playback: PlaybackState, state: AppState) {
+internal fun VolumeControl(
+    playback: PlaybackState,
+    state: AppState,
+    /** Told when the popover opens and closes, for a bar that must stay open while it is: the Island. */
+    onOpenChange: (Boolean) -> Unit = {},
+) {
     var open by remember { mutableStateOf(false) }
+    val reportOpen by rememberUpdatedState(onOpenChange)
+    LaunchedEffect(open) { reportOpen(open) }
+    // Gone while open still counts as closed, or whatever was waiting for it would wait for ever.
+    DisposableEffect(Unit) { onDispose { reportOpen(false) } }
     val onSpotify = playsOnSpotify(playback.track, state.settings.collectAsState().value.spotify)
     Box {
         IconButton({ open = true }, Modifier.size(36.dp)) {
@@ -2328,7 +2381,9 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
         PlayerBarStyle.SLIM -> return SlimPlayerBar(queue, playback, state)
         PlayerBarStyle.SLIM_LEFT -> return SlimPlayerBar(queue, playback, state, controlsFirst = true)
         PlayerBarStyle.SPOTLIGHT -> return SpotlightPlayerBar(queue, playback, state)
-        PlayerBarStyle.FLOATING, PlayerBarStyle.ISLAND, PlayerBarStyle.DISPLAY -> return InlinePlayerBar(queue, playback, state)
+        PlayerBarStyle.FLOATING -> return FloatingPlayerBar(queue, playback, state)
+        PlayerBarStyle.ISLAND -> return IslandPlayerBar(queue, playback, state)
+        PlayerBarStyle.DISPLAY -> return DisplayPlayerBar(queue, playback, state)
         // Drawn by the Windows skin work.
         PlayerBarStyle.TASKBAR -> return InlinePlayerBar(queue, playback, state)
         // Stacked is the one written out below, and was the only layout before there was a choice.
@@ -2515,7 +2570,9 @@ internal fun NowPlayingScreen(queue: QueueState, playback: PlaybackState, state:
     Box(Modifier.fillMaxSize()) {
         // The backdrop takes its colour from the cover, so the room changes with the record.
         NowPlayingBackground(current, preferences.nowPlayingBackdrop)
-        BoxWithConstraints(Modifier.fillMaxSize()) {
+        // The backdrop runs on under a bar that floats; what is on it stops short, or the controls at its foot
+        // would be under the bar with no way to reach them, since this screen does not scroll.
+        BoxWithConstraints(Modifier.fillMaxSize().padding(bottom = chromeBottom())) {
             val arrangement = NowPlayingArrangement(
                 layout = look.layout,
                 panel = look.layout.hasPanel && !look.panelHidden,
@@ -4153,14 +4210,10 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
                 fontSize = 12.sp,
             )
             Spacer(Modifier.height(15.dp))
-            ChoiceRow(
-                "Player bar layout",
-                PlayerBarStyle.entries,
-                preferences.playerBarStyle,
-                { it.displayName },
-                state::setPlayerBarStyle,
-            )
-            Spacer(Modifier.height(6.dp))
+            Text("Player bar layout", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(9.dp))
+            PlayerBarStylePicker(preferences.playerBarStyle, state::setPlayerBarStyle)
+            Spacer(Modifier.height(7.dp))
             Text(
                 preferences.playerBarStyle.description,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
