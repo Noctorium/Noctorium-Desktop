@@ -196,21 +196,35 @@ fun Checkbox(
         androidx.compose.material3.Checkbox(checked, onCheckedChange, modifier, enabled, colors, interactionSource)
         return
     }
+    // Material's footprint, so the rows laid out round its checkbox still line up with this one.
+    SkinCheckbox(skin, checked, onCheckedChange, modifier.minimumInteractiveComponentSize(), enabled, interactionSource)
+}
+
+/** The skin's checkbox, in as much room as [modifier] gives it. */
+@Composable
+private fun SkinCheckbox(
+    skin: ThemeSkin,
+    checked: Boolean,
+    onCheckedChange: ((Boolean) -> Unit)?,
+    modifier: Modifier,
+    enabled: Boolean,
+    interactionSource: MutableInteractionSource?,
+) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
     val toggle = if (onCheckedChange != null) {
         Modifier.hoverable(source, enabled).toggleable(checked, source, indication = null, enabled = enabled, role = Role.Checkbox, onValueChange = onCheckedChange)
     } else {
         Modifier
     }
-    // Material's footprint, so the rows laid out round its checkbox still line up with this one.
-    Box(modifier.minimumInteractiveComponentSize().then(toggle), contentAlignment = Alignment.Center) {
+    Box(modifier.then(toggle), contentAlignment = Alignment.Center) {
         ToggleMark(Modifier, source) { hovered, pressed -> checkBox(skin, checked, enabled, hovered, pressed) }
     }
 }
 
 /**
  * Material's switch. Neither desktop had one -- on and off was a checkbox -- so under a Windows skin this is a
- * checkbox, standing where the switch stood.
+ * checkbox, standing where the switch stood: in a little room of its own rather than Material's footprint, so the
+ * words beside it sit close, as a checkbox's did.
  */
 @Composable
 fun Switch(
@@ -222,11 +236,12 @@ fun Switch(
     colors: SwitchColors = SwitchDefaults.colors(),
     interactionSource: MutableInteractionSource? = null,
 ) {
-    if (!skin().isWindows) {
+    val skin = skin()
+    if (!skin.isWindows) {
         androidx.compose.material3.Switch(checked, onCheckedChange, modifier, thumbContent, enabled, colors, interactionSource)
         return
     }
-    Checkbox(checked, onCheckedChange, modifier, enabled, interactionSource = interactionSource)
+    SkinCheckbox(skin, checked, onCheckedChange, modifier.size(19.dp), enabled, interactionSource)
 }
 
 /** Material's radio button; the skin's own under a Windows skin. */
