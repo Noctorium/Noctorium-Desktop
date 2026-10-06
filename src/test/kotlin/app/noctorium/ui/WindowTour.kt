@@ -114,11 +114,19 @@ internal class WindowTour(private val state: AppState, private val folder: File)
         flow.value = change(flow.value)
     }
 
+    /**
+     * What the player says it is doing. Said by this device's own engine as well as by the one that routes
+     * between engines, because the router passes on whatever the engine says next -- and an idle engine saying
+     * so over a paused song reads to the queue as the song having ended, and it moves on.
+     */
     fun playback(playback: PlaybackState) {
-        val player = AppState::class.java.getDeclaredField("player").apply { isAccessible = true }.get(state)
-        @Suppress("UNCHECKED_CAST")
-        val flow = player.javaClass.getDeclaredField("mutableState").apply { isAccessible = true }.get(player) as MutableStateFlow<PlaybackState>
-        flow.value = playback
+        val router = AppState::class.java.getDeclaredField("player").apply { isAccessible = true }.get(state)
+        val local = router.javaClass.getDeclaredField("local").apply { isAccessible = true }.get(router)
+        listOf(local, router).forEach { engine ->
+            @Suppress("UNCHECKED_CAST")
+            val flow = engine.javaClass.getDeclaredField("mutableState").apply { isAccessible = true }.get(engine) as MutableStateFlow<PlaybackState>
+            flow.value = playback
+        }
     }
 
     /** Opens a Settings page by name, the way the playback tools banner does: asked for, then gone to. */
@@ -183,7 +191,7 @@ internal class WindowTour(private val state: AppState, private val folder: File)
         fun compare(before: File, after: File, report: File): Int {
             var differing = 0
             val lines = mutableListOf<String>()
-            after.listFiles { file -> file.extension == "png" }.orEmpty().sortedBy { it.name }.forEach { picture ->
+            after.listFiles { file -> file.extension == "png" && !file.name.startsWith("diff-") }.orEmpty().sortedBy { it.name }.forEach { picture ->
                 val earlier = File(before, picture.name)
                 if (!earlier.isFile) {
                     lines += "${picture.name}: new"
@@ -231,7 +239,9 @@ internal object Fixtures {
 
     private val burial = Artist("burial", "Burial", ProviderType.YOUTUBE_MUSIC)
     private val judy = Artist("judy-collins", "Judy Collins", ProviderType.YOUTUBE_MUSIC)
-    private val nightTram = Artist("night-tram", "Night Tram", ProviderType.SPOTIFY)
+    // Not on Spotify, though the albums below are: a Spotify song in the queue is looked up ahead of being played,
+    // and made-up music is never found, which would put a banner saying so over the picture.
+    private val nightTram = Artist("night-tram", "Night Tram", ProviderType.YOUTUBE_MUSIC)
     private val lamplighters = Artist("lamplighters", "The Lamplighters", ProviderType.SOUNDCLOUD)
     private val signalBox = Artist("signal-box", "Signal Box", ProviderType.YOUTUBE_MUSIC)
     private val ferry = Artist("morning-ferry", "Morning Ferry", ProviderType.SOUNDCLOUD)

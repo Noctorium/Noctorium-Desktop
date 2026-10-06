@@ -1,111 +1,110 @@
 package app.noctorium.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.collectAsState
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.ImageComposeScene
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.Density
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
 import app.noctorium.core.AppState
 import app.noctorium.core.Destination
 import app.noctorium.desktopAppState
-import app.noctorium.domain.Artist
-import app.noctorium.domain.ProviderType
-import app.noctorium.domain.Track
-import app.noctorium.playback.PlaybackState
-import app.noctorium.playback.PlaybackStatus
 import app.noctorium.playback.PlaybackToolInstaller
-import app.noctorium.playback.QueueState
-import app.noctorium.settings.CornerStyle
 import app.noctorium.settings.NowPlayingBackdrop
 import app.noctorium.settings.NowPlayingPreferences
 import app.noctorium.settings.PlayerBarPosition
 import app.noctorium.settings.PlayerBarStyle
 import app.noctorium.settings.ProgressBarStyle
 import app.noctorium.settings.ThemePreset
-import app.noctorium.settings.resolvedAccent
-import app.noctorium.settings.themeColours
 import org.jetbrains.skia.Rect
 import java.io.File
 import kotlin.test.Test
-import kotlin.test.assertTrue
 
 /**
- * Draws the Windows 98 and XP themes to pictures, off screen: the player bar with the Classic seek bar,
- * and the whole window. Off unless a folder is named, like [PlayerBarRenderCheck]:
+ * Draws the Windows 98 and XP skins to pictures, off screen: the whole window, screen by screen, with made-up
+ * music in it -- Home, the library, a playlist, a search, the queue, now playing on each backdrop, Settings and
+ * its pages, dialogs and menus, and the player bar in every layout. Off unless a folder is named, like
+ * [PlayerBarRenderCheck]; the pictures go to `windows/` under it:
  *
  *     ./gradlew :test --tests "*WindowsThemesRenderCheck*" -Dnoctorium.renderBars=build/bars
  *
- * The same tour through Night and Day goes to a folder of its own, and is compared picture by picture with
- * an earlier one when that is named too, to show a change to the skins left every other theme where it was:
+ * The same tour through Night and Day goes to `standard/`, and is compared picture by picture with an earlier
+ * one when that is named too, to show a change to the skins left every other theme where it was:
  *
  *     -Dnoctorium.compareWith=some/earlier/bars
+ *
+ * Run it with `--no-configuration-cache`: a cached configuration keeps the folders the last run was given.
  */
 class WindowsThemesRenderCheck {
 
-    private val track = Track(
-        provider = ProviderType.YOUTUBE_MUSIC,
-        id = "PzYrr7K1dvU",
-        title = "Archangel",
-        artists = listOf(Artist("burial", "Burial", ProviderType.YOUTUBE_MUSIC)),
-        durationMs = 240_000,
-        sourceUrl = "https://music.youtube.com/watch?v=PzYrr7K1dvU",
-    )
-
     @Test
     fun `the Windows themes draw`() {
-        val folder = System.getProperty("noctorium.renderBars")?.let(::File) ?: return
-        folder.mkdirs()
-        val queue = QueueState(tracks = listOf(track), currentIndex = 0)
-        val playback = PlaybackState(status = PlaybackStatus.PAUSED, track = track, positionMs = 83_000, durationMs = 240_000)
+        val root = System.getProperty("noctorium.renderBars")?.let(::File) ?: return
         val state = desktopAppState()
         try {
-            state.setProgressBarStyle(ProgressBarStyle.CLASSIC)
-            state.setCornerStyle(CornerStyle.SHARP)
+            prepare(state)
+            // The standard slider of the day was the trackbar, which is what the Material seek bar becomes.
+            state.setProgressBarStyle(ProgressBarStyle.MATERIAL)
             listOf(ThemePreset.WINDOWS_98, ThemePreset.WINDOWS_XP).forEach { theme ->
                 state.setTheme(theme)
-                listOf(PlayerBarStyle.CENTERED, PlayerBarStyle.INLINE).forEach { layout ->
-                    state.setPlayerBarStyle(layout)
-                    val scene = ImageComposeScene(1180, 150, Density(1f)) {
-                        val preferences = state.settings.collectAsState().value.preferences
-                        MaterialTheme(colorScheme = noctoriumColorScheme(preferences.themeColours(), Color(preferences.resolvedAccent(null)))) {
-                            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.BottomCenter) {
-                                PlayerBar(queue, playback, state)
-                            }
-                        }
-                    }
-                    try {
-                        scene.render(0)
-                        val file = File(folder, "windows-${theme.displayName.lowercase()}-${layout.name.lowercase()}.png")
-                        file.writeBytes(scene.render(500_000_000L).encodeToData()!!.bytes)
-                        assertTrue(file.length() > 1_000)
-                    } finally {
-                        scene.close()
-                    }
-                }
-                state.setPlayerBarStyle(PlayerBarStyle.INLINE)
-                val window = ImageComposeScene(1280, 800, Density(1f)) { NoctoriumApp(state) }
-                try {
-                    var image = window.render(0)
-                    repeat(10) { frame ->
-                        Thread.sleep(100)
-                        image = window.render((frame + 1) * 100_000_000L)
-                    }
-                    File(folder, "windows-${theme.displayName.lowercase()}-window.png").writeBytes(image.encodeToData()!!.bytes)
-                } finally {
-                    window.close()
-                }
+                val folder = File(root, "windows/${theme.name.lowercase()}")
+                tour(WindowTour(state, folder), state)
+                handled(WindowTour(state, folder), state, xp = theme == ThemePreset.WINDOWS_XP)
             }
         } finally {
-            state.setTheme(ThemePreset.NOCTORIUM_NIGHT)
-            state.setProgressBarStyle(ProgressBarStyle.MINIMAL)
-            state.setCornerStyle(CornerStyle.SOFT)
-            state.setPlayerBarStyle(PlayerBarStyle.INLINE)
+            restore(state)
             state.close()
+        }
+    }
+
+    /**
+     * The skins in use rather than at rest: a card and a row under the pointer, the menu on a song, the volume
+     * in the tray, a dialog with a box to type in, the Taskbar along the top and in a narrow window, and the old
+     * seek bars on the skin's own bar. Where things are on the screen differs between the two skins, so the
+     * places clicked are each skin's own.
+     */
+    private fun handled(tour: WindowTour, state: AppState, xp: Boolean) {
+        try {
+            tour.open()
+            tour.fill()
+            tour.go(Destination.HOME)
+            tour.hover(if (xp) Offset(320f, 230f) else Offset(207f, 240f))
+            tour.capture("home-pointed")
+            tour.go(Destination.LIBRARY)
+            tour.settle()
+            tour.fill()
+            tour.library { it.copy(openPlaylist = Fixtures.openPlaylist, openPlaylistLoading = false, openPlaylistError = null) }
+            tour.hover(if (xp) Offset(600f, 222f) else Offset(600f, 231f))
+            tour.capture("playlist-pointed")
+            tour.click(if (xp) Offset(1138f, 151f) else Offset(1135f, 160f))
+            tour.capture("menu-track")
+            tour.press(Key.Escape, '\u001b')
+            tour.settle()
+            tour.click(Offset(1247f, 763f))
+            tour.capture("menu-volume")
+            tour.press(Key.Escape, '\u001b')
+            tour.library { it.copy(openPlaylist = null) }
+            tour.settle()
+            tour.fill()
+            tour.click(if (xp) Offset(1074f, 49f) else Offset(1069f, 56f))
+            tour.capture("dialog-new-playlist")
+            tour.press(Key.Escape, '\u001b')
+            tour.go(Destination.HOME)
+            tour.fill()
+            listOf(ProgressBarStyle.CLASSIC, ProgressBarStyle.LUNA, ProgressBarStyle.MINIMAL).forEach { style ->
+                state.setProgressBarStyle(style)
+                tour.capture("bar-inline-${style.name.lowercase()}", crop = Rect.makeXYWH(0f, 800f - 170f, 1280f, 170f))
+            }
+            state.setProgressBarStyle(ProgressBarStyle.MATERIAL)
+            state.setPlayerBarStyle(PlayerBarStyle.TASKBAR)
+            tour.go(Destination.NOW_PLAYING)
+            tour.capture("taskbar-now-playing")
+            state.setPlayerBarPosition(PlayerBarPosition.TOP)
+            tour.go(Destination.HOME)
+            tour.capture("taskbar-top")
+            state.setPlayerBarPosition(PlayerBarPosition.BOTTOM)
+            tour.open(width = 760, height = 560)
+            tour.fill()
+            tour.capture("taskbar-narrow")
+            state.setPlayerBarStyle(PlayerBarStyle.INLINE)
+        } finally {
+            tour.close()
         }
     }
 
@@ -117,6 +116,7 @@ class WindowsThemesRenderCheck {
             prepare(state)
             listOf(ThemePreset.NOCTORIUM_NIGHT, ThemePreset.NOCTORIUM_DAY).forEach { theme ->
                 val folder = File(root, "standard/${theme.name.lowercase()}")
+                folder.listFiles { file -> file.name.startsWith("diff-") }?.forEach(File::delete)
                 state.setTheme(theme)
                 tour(WindowTour(state, folder), state)
                 System.getProperty("noctorium.compareWith")?.let(::File)?.let { earlier ->
@@ -190,6 +190,7 @@ class WindowsThemesRenderCheck {
                 tour.capture("settings-${page.lowercase()}")
             }
             tour.go(Destination.HOME)
+            tour.fill()
             tour.settle()
             tour.press(androidx.compose.ui.input.key.Key.Slash, '?', shift = true)
             tour.capture("dialog-shortcuts")
