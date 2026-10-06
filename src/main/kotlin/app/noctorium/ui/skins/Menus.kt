@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -225,4 +227,22 @@ fun HorizontalDivider(
             etchedLine(0f, 0f, size.width)
         }
     }
+}
+
+/**
+ * The tick beside a menu item that is on: the period's small tick under a Windows skin, in the item's writing so
+ * it turns white with it while the item is lit, and Material's check under the standard skin. The same room is
+ * kept while it is off, so the words of every item in the menu start in line.
+ */
+@Composable
+fun MenuCheck(on: Boolean) {
+    val skin = skin()
+    if (!skin.isWindows) {
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            if (on) androidx.compose.material3.Icon(Icons.Default.Check, null, Modifier.size(20.dp))
+        }
+        return
+    }
+    val ink = LocalContentColor.current
+    Canvas(Modifier.size(16.dp)) { if (on) pixelArtCentred(Art.tick, mapOf('#' to ink)) }
 }

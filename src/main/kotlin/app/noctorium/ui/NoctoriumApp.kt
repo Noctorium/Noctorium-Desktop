@@ -4108,10 +4108,31 @@ private enum class SettingsPage {
  */
 private var pendingSettingsPage: SettingsPage? = null
 
+/** Counts the pages asked for, so that a Settings screen already open goes to one as well. */
+private val settingsPageAsked = mutableIntStateOf(0)
+
+/**
+ * Settings, open at Customization: where the taskbar's own menu sends "Properties", as Windows' taskbar sent its
+ * Properties to the taskbar's settings. Settings may be open already, at another page, and goes there too.
+ */
+internal fun openCustomization(state: AppState) {
+    pendingSettingsPage = SettingsPage.CUSTOMIZATION
+    settingsPageAsked.intValue++
+    state.navigate(Destination.SETTINGS)
+}
+
 @Composable
 internal fun SettingsScreen(state: AppState) {
     val settings by state.settings.collectAsState()
     var page by remember { mutableStateOf(pendingSettingsPage.also { pendingSettingsPage = null }) }
+    // A page asked for while this screen was already open.
+    val asked by settingsPageAsked
+    LaunchedEffect(asked) {
+        pendingSettingsPage?.let {
+            page = it
+            pendingSettingsPage = null
+        }
+    }
     // Going into a page and back out again slides, the way a phone's settings do, rather than cutting.
     MotionContent(page, Modifier.fillMaxSize(), kind = MotionKind.PAGE, forward = { _, to -> to != null }) { shown ->
         if (shown != null) {
@@ -4413,6 +4434,16 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
             )
+            // While the player bar is a taskbar, with a clock in its tray to show or not.
+            if (preferences.playerBarStyle == PlayerBarStyle.TASKBAR) {
+                Spacer(Modifier.height(12.dp))
+                ToggleRow(
+                    "Show the clock",
+                    "The time in the taskbar's tray, as Windows showed it in the corner of the screen.",
+                    preferences.taskbarClock,
+                    change = state::setTaskbarClock,
+                )
+            }
             Spacer(Modifier.height(15.dp))
             ChoiceRow(
                 "Player bar position",

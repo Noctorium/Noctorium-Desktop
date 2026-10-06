@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -54,6 +55,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -63,6 +67,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.noctorium.core.AppState
@@ -83,12 +88,14 @@ import app.noctorium.ui.PlaybackProgressBar
 import app.noctorium.ui.RemoteArtwork
 import app.noctorium.ui.SleepTimerButton
 import app.noctorium.ui.VolumeControl
+import app.noctorium.ui.openCustomization
 import app.noctorium.ui.playerBarButtons
 import app.noctorium.ui.playerButtonsInUse
 import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import kotlin.math.roundToInt
 
 /*
  * The Taskbar player bar: the bar laid out as a desktop's taskbar, in any theme.
@@ -103,6 +110,10 @@ import java.time.format.FormatStyle
  * taskbar in the theme's own colours. It works along the top of the window as well as the foot, and on a narrow
  * window the song's button goes first and then the tray's icons, so Start, the transport, the seek bar and the
  * clock always stay.
+ *
+ * The clock can be put away, as Windows let it be, and the tray closes up round what is left. Right-clicking the
+ * taskbar opens its own menu: "Show the clock", ticked while it is shown, and "Properties", which opens the
+ * settings the taskbar is set up in -- Windows' menu under 98 and XP, Material's under every other theme.
  */
 @Composable
 fun TaskbarPlayerBar(queue: QueueState, playback: PlaybackState, state: AppState) {
@@ -115,11 +126,26 @@ fun TaskbarPlayerBar(queue: QueueState, playback: PlaybackState, state: AppState
     val surface = MaterialTheme.colorScheme.surfaceContainer
     val rule = MaterialTheme.colorScheme.primary.copy(alpha = .22f)
     val height = if (skin.isWindows) 30.dp else 52.dp
+    var menuAt by remember { mutableStateOf<Offset?>(null) }
     val bar: @Composable () -> Unit = {
         BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
                 .height(height)
+                // A press of the right button anywhere along it, the tray and the clock included, opens its menu.
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                                event.changes.firstOrNull()?.let { change ->
+                                    menuAt = change.position
+                                    change.consume()
+                                }
+                            }
+                        }
+                    }
+                }
                 .drawBehind {
                     when (skin) {
                         ThemeSkin.WINDOWS_98 -> {
@@ -164,15 +190,53 @@ fun TaskbarPlayerBar(queue: QueueState, playback: PlaybackState, state: AppState
                     style = preferences.progressBarStyle,
                     timeDisplay = preferences.timeDisplay,
                 )
-                Tray(skin) {
-                    if (!cramped) TrayIcons(skin, queue, playback, state, shown, current)
-                    if (PlayerButton.VOLUME in shown) VolumeControl(playback, state, size = trayButton(skin))
-                    Clock(skin)
+                // The tray holds what is left of the bar's buttons, the volume and the clock, and is not there at all
+                // when none of them are.
+                val icons = !cramped && shown.any { it != PlayerButton.VOLUME }
+                val volume = PlayerButton.VOLUME in shown
+                if (icons || volume || preferences.taskbarClock) {
+                    Tray(skin) {
+                        if (icons) TrayIcons(skin, queue, playback, state, shown, current)
+                        if (volume) VolumeControl(playback, state, size = trayButton(skin))
+                        if (preferences.taskbarClock) Clock(skin)
+                    }
+                }
+            }
+            menuAt?.let { at ->
+                Box(Modifier.offset { IntOffset(at.x.roundToInt(), at.y.roundToInt()) }.size(1.dp)) {
+                    TaskbarMenu(preferences.taskbarClock, state) { menuAt = null }
                 }
             }
         }
     }
     if (skin == ThemeSkin.WINDOWS_XP) OnTaskbar(bar) else bar()
+}
+
+/**
+ * The taskbar's own menu, where the pointer was: the clock on or off, and "Properties" -- Settings, at the page the
+ * taskbar is set up on -- as Windows' taskbar had its Properties at the foot of its menu.
+ */
+@Composable
+private fun TaskbarMenu(clock: Boolean, state: AppState, close: () -> Unit) {
+    DropdownMenu(true, close) {
+        DropdownMenuItem(
+            text = { Text("Show the clock") },
+            onClick = {
+                state.setTaskbarClock(!clock)
+                close()
+            },
+            leadingIcon = { MenuCheck(clock) },
+        )
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = { Text("Properties") },
+            onClick = {
+                close()
+                openCustomization(state)
+            },
+            leadingIcon = { MenuCheck(false) },
+        )
+    }
 }
 
 /** How large a tray icon's button is: the period's sixteen-pixel icons with a little room, or the theme's own. */
