@@ -119,6 +119,52 @@ import app.noctorium.playlists.PlaylistShareLink
 import app.noctorium.settings.*
 import app.noctorium.platform.LaunchAtLogin
 import app.noctorium.platform.StartupMode
+// The skin's controls, in Material's place: each is Material's own under the standard skin.
+import app.noctorium.ui.skins.AlertDialog
+import app.noctorium.ui.skins.AssistChip
+import app.noctorium.ui.skins.Button
+import app.noctorium.ui.skins.DropdownMenu
+import app.noctorium.ui.skins.DropdownMenuItem
+import app.noctorium.ui.skins.FilledIconButton
+import app.noctorium.ui.skins.FilledTonalButton
+import app.noctorium.ui.skins.FilledTonalIconButton
+import app.noctorium.ui.skins.FilterChip
+import app.noctorium.ui.skins.HorizontalDivider
+import app.noctorium.ui.skins.IconButton
+import app.noctorium.ui.skins.LinearProgressIndicator
+import app.noctorium.ui.skins.OutlinedButton
+import app.noctorium.ui.skins.OutlinedTextField
+import app.noctorium.ui.skins.RadioButton
+import app.noctorium.ui.skins.Slider
+import app.noctorium.ui.skins.Switch
+import app.noctorium.ui.skins.Text
+import app.noctorium.ui.skins.TextButton
+import app.noctorium.ui.skins.BrowsingPane
+import app.noctorium.ui.skins.HeroWindow
+import app.noctorium.ui.skins.ListRow
+import app.noctorium.ui.skins.listWell
+import app.noctorium.ui.skins.PanelTabs
+import app.noctorium.ui.skins.PanelWindow
+import app.noctorium.ui.skins.ScreenTitle
+import app.noctorium.ui.skins.classicScrollbar
+import app.noctorium.ui.skins.SkinnedMaterialTheme
+import app.noctorium.ui.skins.CheckRow
+import app.noctorium.ui.skins.ControlPanelItem
+import app.noctorium.ui.skins.GroupLegend
+import app.noctorium.ui.skins.OptionButtons
+import app.noctorium.ui.skins.OptionWithNote
+import app.noctorium.ui.skins.PreviewedOption
+import app.noctorium.ui.skins.SettingsGroup
+import app.noctorium.ui.skins.SkinPlaylistCard
+import app.noctorium.ui.skins.SkinRail
+import app.noctorium.ui.skins.SkinTrackCard
+import app.noctorium.ui.skins.SkinnedPlayerBar
+import app.noctorium.ui.skins.TaskbarPlayerBar
+import app.noctorium.ui.skins.caption
+import app.noctorium.ui.skins.isWindows
+import app.noctorium.ui.skins.scrollingPage
+import app.noctorium.ui.skins.skinShape
+import app.noctorium.ui.skins.skinned
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -151,15 +197,18 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     val accentTarget = previewAccent
         ?: if (preferences.accent == AccentPreset.ARTWORK) artworkPalette.primary else Color(preferences.resolvedAccent(null))
     val accent by animateColorAsState(accentTarget, if (previewAccent != null) snap() else tween(600), label = "accent")
-    val typography = remember(preferences.font) { noctoriumTypography(preferences.font) }
+    // Beyond the colours: 98's bevels and Luna's blue, for the two Windows themes, and nothing for the rest.
+    val skin = preferences.themeSkin
 
     // The title bar is Windows', not ours, so it has to be told the colour separately — and told again
-    // whenever the theme changes, or a switch to a light theme would leave a black strip above it.
-    LaunchedEffect(window, theme) {
+    // whenever the theme changes, or a switch to a light theme would leave a black strip above it. Under a
+    // Windows skin it is that desktop's own title bar colour, with white writing, as the windows inside are.
+    LaunchedEffect(window, theme, skin) {
+        val caption = skin.caption()
         WindowChrome.applyDarkTitleBar(
             window,
-            backgroundArgb = Color(theme.background).toArgb(),
-            foregroundArgb = Color(theme.text).copy(alpha = .88f).toArgb(),
+            backgroundArgb = caption?.first ?: Color(theme.background).toArgb(),
+            foregroundArgb = caption?.second ?: Color(theme.text).copy(alpha = .88f).toArgb(),
         )
     }
 
@@ -247,11 +296,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     }
 
     val density = LocalDensity.current
-    MaterialTheme(
-        colorScheme = noctoriumColorScheme(theme, accent),
-        shapes = noctoriumShapes(preferences.cornerStyle),
-        typography = typography,
-    ) {
+    SkinnedMaterialTheme(skin, theme, accent, preferences.font, preferences.cornerStyle) {
       // Text size, applied to the density rather than to the typography.
       //
       // Almost every size in this application is written at the call site as a literal `.sp`, so scaling
@@ -1115,6 +1160,18 @@ private fun NewPlaylistDialog(
                             PlaylistDestination.YOUTUBE -> youTubeReady
                         }
                         val selected = destination == option
+                        val note = when {
+                            option == PlaylistDestination.SPICE -> "Stays on this computer, any service."
+                            available && option == PlaylistDestination.SOUNDCLOUD ->
+                                "Made on your account, private until you change it."
+                            available -> "Made on your YouTube account."
+                            else -> unavailableNote
+                        }
+                        // Option buttons with what each means beneath them, under a Windows skin.
+                        if (skinned()) {
+                            OptionWithNote(option.label, note, selected, available) { destination = option }
+                            return@forEach
+                        }
                         Surface(
                             onClick = { destination = option },
                             enabled = available,
@@ -1140,13 +1197,6 @@ private fun NewPlaylistDialog(
                                         color = if (available) MaterialTheme.colorScheme.onSurface
                                         else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .5f),
                                     )
-                                    val note = when {
-                                        option == PlaylistDestination.SPICE -> "Stays on this computer, any service."
-                                        available && option == PlaylistDestination.SOUNDCLOUD ->
-                                            "Made on your account, private until you change it."
-                                        available -> "Made on your YouTube account."
-                                        else -> unavailableNote
-                                    }
                                     Text(note, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
                                 }
                             }

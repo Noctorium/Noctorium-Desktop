@@ -24,16 +24,18 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
+import app.noctorium.ui.skins.HorizontalDivider
+import app.noctorium.ui.skins.TooltipBox
+import app.noctorium.ui.skins.skinned
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import app.noctorium.ui.skins.IconButton
+import app.noctorium.ui.skins.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import app.noctorium.ui.skins.OutlinedButton
+import app.noctorium.ui.skins.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import app.noctorium.ui.skins.Text
+import app.noctorium.ui.skins.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -336,20 +338,25 @@ internal fun DownloadButton(track: Track, state: AppState, size: Dp = 36.dp) {
  * does nothing.
  *
  * Drawn on the theme's own raised card rather than as a system tooltip, which would be the one pale thing in
- * a dark window.
+ * a dark window -- except under a Windows skin, where the pale yellow box with its black edge is the window.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun HoverHint(text: String, content: @Composable () -> Unit) {
+    val skinned = skinned()
     TooltipArea(
         tooltip = {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, ink(.1f)),
-                shadowElevation = 4.dp,
-            ) {
-                Text(text, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+            if (skinned) {
+                TooltipBox(text)
+            } else {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, ink(.1f)),
+                    shadowElevation = 4.dp,
+                ) {
+                    Text(text, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                }
             }
         },
         delayMillis = 400,

@@ -11,11 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import app.noctorium.ui.skins.scrollingPage
+import app.noctorium.ui.skins.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import app.noctorium.ui.skins.Text
+import app.noctorium.ui.skins.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,7 +39,7 @@ fun ShortcutsSheet(dismiss: () -> Unit) {
         title = { Text("Keyboard shortcuts", fontWeight = FontWeight.Bold) },
         text = {
             Column(
-                Modifier.widthIn(max = 460.dp).heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+                Modifier.widthIn(max = 460.dp).heightIn(max = 460.dp).scrollingPage(),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 shortcutHelp.forEach { (group, rows) ->

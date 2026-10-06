@@ -14,13 +14,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.HorizontalDivider
+import app.noctorium.ui.skins.Switch
+import app.noctorium.ui.skins.DropdownMenu
+import app.noctorium.ui.skins.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import app.noctorium.ui.skins.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import app.noctorium.ui.skins.Text
+import app.noctorium.ui.skins.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -214,7 +215,7 @@ internal fun ConnectSettingsRows(state: AppState) {
             TextButton({ state.renameThisDevice(name) }) { Text("Save") }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Switch(
+            Switch(
                 settings.preferences.connect.enabled,
                 state::setConnectEnabled,
             )
