@@ -552,11 +552,7 @@ private fun FilterChips(selected: ProviderFilter, select: (ProviderFilter) -> Un
                 border = BorderStroke(1.dp, if (active) MaterialTheme.colorScheme.primary.copy(alpha = .45f) else MaterialTheme.colorScheme.outline.copy(alpha = .55f)),
             ) {
                 Text(
-                    when (filter) {
-                        ProviderFilter.ALL -> "All"
-                        ProviderFilter.YOUTUBE_MUSIC -> "YouTube Music"
-                        ProviderFilter.SOUNDCLOUD -> "SoundCloud"
-                    },
+                    filter.displayName,
                     color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,

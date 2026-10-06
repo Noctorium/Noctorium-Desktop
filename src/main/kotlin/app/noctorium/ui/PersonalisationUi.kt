@@ -200,13 +200,14 @@ internal data class HomeContent(
 
 internal fun homeContent(ui: AppUiState, hidden: Set<HomePart>): HomeContent {
     val filter = ui.providerFilter
-    fun ProviderType.passes() = filter == ProviderFilter.ALL || name == filter.name
+    fun ProviderType.passes() = filter.matches(this)
     // The placeholders stand in for the services' rows, so there are none when every row they could
     // become has been put away.
     val servicesShown = when (filter) {
-        ProviderFilter.ALL -> HomePart.YOUTUBE_MUSIC !in hidden || HomePart.SOUNDCLOUD !in hidden
+        ProviderFilter.ALL -> HomePart.YOUTUBE_MUSIC !in hidden || HomePart.SOUNDCLOUD !in hidden || HomePart.BANDCAMP !in hidden
         ProviderFilter.YOUTUBE_MUSIC -> HomePart.YOUTUBE_MUSIC !in hidden
         ProviderFilter.SOUNDCLOUD -> HomePart.SOUNDCLOUD !in hidden
+        ProviderFilter.BANDCAMP -> HomePart.BANDCAMP !in hidden
     }
     return HomeContent(
         greeting = HomePart.GREETING !in hidden,
