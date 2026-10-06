@@ -296,6 +296,8 @@ internal fun NowPlayingLayoutPicture(layout: NowPlayingLayout, selected: Boolean
                 seek(column, h * .3f, w * .5f)
                 panel(w * .07f, h * .48f, w * .86f, h * .44f)
             }
+            NowPlayingLayout.IMMERSIVE, NowPlayingLayout.SPLIT, NowPlayingLayout.COVER_FLOW, NowPlayingLayout.TURNTABLE,
+            NowPlayingLayout.POSTER -> Unit
             NowPlayingLayout.SING_ALONG -> {
                 val side = h * .38f
                 val x = w * .07f

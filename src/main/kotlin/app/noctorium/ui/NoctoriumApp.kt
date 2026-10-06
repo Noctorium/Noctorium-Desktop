@@ -53,6 +53,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
@@ -2327,6 +2328,9 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
         PlayerBarStyle.SLIM -> return SlimPlayerBar(queue, playback, state)
         PlayerBarStyle.SLIM_LEFT -> return SlimPlayerBar(queue, playback, state, controlsFirst = true)
         PlayerBarStyle.SPOTLIGHT -> return SpotlightPlayerBar(queue, playback, state)
+        PlayerBarStyle.FLOATING, PlayerBarStyle.ISLAND, PlayerBarStyle.DISPLAY -> return InlinePlayerBar(queue, playback, state)
+        // Drawn by the Windows skin work.
+        PlayerBarStyle.TASKBAR -> return InlinePlayerBar(queue, playback, state)
         // Stacked is the one written out below, and was the only layout before there was a choice.
         PlayerBarStyle.STACKED -> Unit
     }
@@ -3556,12 +3560,20 @@ internal fun PlaybackProgressBar(
     modifier: Modifier = Modifier,
     style: ProgressBarStyle = ProgressBarStyle.MINIMAL,
     timeDisplay: TimeDisplay = TimeDisplay.TOTAL,
+    /** Smaller times and no taller than the bar itself needs, for a seek bar set inside something else. */
+    compact: Boolean = false,
+    /**
+     * False for a picture of the bar rather than the bar, as Settings shows each style: drawn whole, handle and
+     * all, but not seekable, so a click on it goes to whatever holds it.
+     */
+    interactive: Boolean = true,
 ) {
     val durationMs = playback.durationMs.coerceAtLeast(0)
     // Whether the track's length is known yet. Standing in 1 ms for the unknown made every ratio below round
     // to a full bar, so a track of unknown length showed as finished the moment it started playing.
     val hasDuration = durationMs > 0
-    val canSeek = playback.track != null && hasDuration && playback.status != PlaybackStatus.RESOLVING
+    val loaded = playback.track != null && hasDuration && playback.status != PlaybackStatus.RESOLVING
+    val canSeek = interactive && loaded
     var dragging by remember { mutableStateOf(false) }
     var draggedPosition by remember { mutableFloatStateOf(0f) }
     val displayedPosition = if (dragging) draggedPosition else playback.positionMs.toFloat()
@@ -3583,7 +3595,11 @@ internal fun PlaybackProgressBar(
             fraction = fraction,
             trailingLabel = trailing,
             canSeek = canSeek,
+            showHead = loaded,
             moving = playback.isPlaying && !dragging,
+            songKey = playback.track?.queueKey,
+            durationMs = durationMs,
+            compact = compact,
             onScrub = { fraction ->
                 dragging = true
                 draggedPosition = (fraction * maximum).coerceIn(0f, maximum)
@@ -3602,8 +3618,8 @@ internal fun PlaybackProgressBar(
         Text(
             formatPlaybackTime(displayedPosition.toLong()),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 11.sp,
-            modifier = Modifier.width(44.dp),
+            fontSize = if (compact) 10.sp else 11.sp,
+            modifier = Modifier.width(if (compact) 38.dp else 44.dp),
         )
         Slider(
             value = if (hasDuration) displayedPosition.coerceIn(0f, maximum) else 0f,
@@ -3623,8 +3639,9 @@ internal fun PlaybackProgressBar(
         Text(
             trailing,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 11.sp,
-            modifier = Modifier.width(48.dp),
+            fontSize = if (compact) 10.sp else 11.sp,
+            textAlign = if (compact) androidx.compose.ui.text.style.TextAlign.End else null,
+            modifier = Modifier.width(if (compact) 38.dp else 48.dp),
         )
     }
 }
@@ -3644,8 +3661,14 @@ private fun DrawnProgressBar(
     fraction: Float,
     trailingLabel: String,
     canSeek: Boolean,
+    /** Whether to draw the handle: the song is loaded and its length known, whether or not this one seeks. */
+    showHead: Boolean,
     /** Whether the music is actually running, which is the only time the wave has any business moving. */
     moving: Boolean,
+    /** The song's queue key, which is what gives the bars their heights. */
+    songKey: String?,
+    durationMs: Long,
+    compact: Boolean,
     onScrub: (Float) -> Unit,
     onScrubFinished: () -> Unit,
     modifier: Modifier = Modifier,
@@ -3653,6 +3676,9 @@ private fun DrawnProgressBar(
     var widthPx by remember { mutableIntStateOf(1) }
     val trackColour = ink(SeekBar.TRACK_ALPHA)
     val filledColour = MaterialTheme.colorScheme.primary
+    val page = MaterialTheme.colorScheme.background
+    val card = MaterialTheme.colorScheme.surfaceContainerHigh
+    val motion = LocalMotion.current
 
     /*
      * The wave's travel, and the two reasons it is animated the way it is.
@@ -3664,34 +3690,79 @@ private fun DrawnProgressBar(
      * would freeze the wave mid-crest, which looks like a rendering fault rather than like a paused
      * song; easing the height out leaves the flat line the other styles draw, which is what a stopped
      * player should look like.
+     *
+     * Only the wave runs it. The travel never stops by itself, and every other style was being redrawn
+     * sixty times a second, playing or paused, to move a wave it never draws.
      */
-    val travel = rememberInfiniteTransition(label = "wave")
-    val phase by travel.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            tween((SeekBar.WAVE_SECONDS_PER_CYCLE * 1000).toInt(), easing = LinearEasing),
-        ),
-        label = "wavePhase",
-    )
+    val phase: State<Float>? = if (style == ProgressBarStyle.WAVE) {
+        rememberInfiniteTransition(label = "wave").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                tween((SeekBar.WAVE_SECONDS_PER_CYCLE * 1000).toInt(), easing = LinearEasing),
+            ),
+            label = "wavePhase",
+        )
+    } else {
+        null
+    }
     val amplitude by animateFloatAsState(
         if (style == ProgressBarStyle.WAVE && moving) 1f else 0f,
         tween(450),
         label = "waveAmplitude",
     )
 
-    Row(modifier.height(30.dp), verticalAlignment = Alignment.CenterVertically) {
+    // The neon's spark breathing, which it does only while the music plays and things are allowed to move.
+    // The breath is faded in and out rather than started and stopped, so pausing lets the spark settle.
+    val breathes = style == ProgressBarStyle.NEON && moving && motion
+    val breathDepth by animateFloatAsState(if (breathes) 1f else 0f, tween(450), label = "neonBreathDepth")
+    val breath: State<Float>? = if (style == ProgressBarStyle.NEON && (breathes || breathDepth > 0f)) {
+        rememberInfiniteTransition(label = "neon").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(NEON_BREATH_MS, easing = LinearEasing)),
+            label = "neonBreath",
+        )
+    } else {
+        null
+    }
+
+    // Where the pointer is over the bar, and whether it is dragging, for the one style whose handle answers
+    // being pointed at: Luna's thumb, lit orange as XP lit it.
+    var pointerX by remember { mutableStateOf<Float?>(null) }
+    var dragging by remember { mutableStateOf(false) }
+
+    Row(
+        modifier.height(
+            when {
+                compact -> 24.dp
+                style == ProgressBarStyle.BARS -> 36.dp
+                else -> 30.dp
+            },
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
             formatPlaybackTime(positionMs.toLong()),
             color = ink(.68f),
-            fontSize = 11.sp,
-            modifier = Modifier.width(42.dp),
+            fontSize = if (compact) 10.sp else 11.sp,
+            modifier = Modifier.width(if (compact) 36.dp else 42.dp),
         )
         Box(
             Modifier
                 .weight(1f)
-                .height(24.dp)
+                .fillMaxHeight()
                 .onSizeChanged { widthPx = it.width.coerceAtLeast(1) }
+                .pointerInput(style) {
+                    if (style != ProgressBarStyle.LUNA) return@pointerInput
+                    // Watches without consuming, so the taps and drags below still arrive.
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            pointerX = if (event.type == PointerEventType.Exit) null else event.changes.firstOrNull()?.position?.x
+                        }
+                    }
+                }
                 .pointerInput(canSeek, widthPx) {
                     if (!canSeek) return@pointerInput
                     detectTapGestures { offset ->
@@ -3702,9 +3773,9 @@ private fun DrawnProgressBar(
                 .pointerInput(canSeek, widthPx) {
                     if (!canSeek) return@pointerInput
                     detectHorizontalDragGestures(
-                        onDragStart = { offset -> onScrub(offset.x / widthPx) },
-                        onDragEnd = { onScrubFinished() },
-                        onDragCancel = { onScrubFinished() },
+                        onDragStart = { offset -> dragging = true; onScrub(offset.x / widthPx) },
+                        onDragEnd = { dragging = false; onScrubFinished() },
+                        onDragCancel = { dragging = false; onScrubFinished() },
                         onHorizontalDrag = { change, _ ->
                             onScrub(change.position.x / widthPx)
                             change.consume()
@@ -3713,19 +3784,35 @@ private fun DrawnProgressBar(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Canvas(Modifier.fillMaxWidth().height(24.dp)) {
-                drawSeekBar(style, fraction, canSeek, trackColour, filledColour, phase, amplitude)
+            Canvas(Modifier.fillMaxSize()) {
+                val head = size.width * fraction.coerceIn(0f, 1f)
+                val reach = SeekBar.LUNA_THUMB_WIDTH_DP.dp.toPx()
+                val hot = canSeek && (dragging || pointerX?.let { kotlin.math.abs(it - head) <= reach } == true)
+                // One breath is a slow rise and fall: a sine, eased to the full spark wherever it is not deep.
+                val spark = 1f - breathDepth * .45f * (.5f - .5f * kotlin.math.cos((breath?.value ?: 0f) * 2f * Math.PI.toFloat()))
+                drawSeekBar(
+                    style, fraction, showHead, trackColour, filledColour, phase?.value ?: 0f, amplitude,
+                    songKey = songKey,
+                    durationMs = durationMs,
+                    spark = spark,
+                    hot = hot,
+                    page = page,
+                    card = card,
+                )
             }
         }
         Text(
             trailingLabel,
             color = ink(.68f),
-            fontSize = 11.sp,
+            fontSize = if (compact) 10.sp else 11.sp,
             textAlign = androidx.compose.ui.text.style.TextAlign.End,
-            modifier = Modifier.width(42.dp),
+            modifier = Modifier.width(if (compact) 36.dp else 42.dp),
         )
     }
 }
+
+/** One breath of the neon's spark, in and out, in milliseconds: slow, since it is a song's place and not an alarm. */
+private const val NEON_BREATH_MS = 2_600
 
 /** Stands in for a length that is not known yet, so an unknown track does not claim to be zero seconds long. */
 internal const val UNKNOWN_PLAYBACK_TIME = "--:--"
@@ -4647,13 +4734,14 @@ private fun AccentSwatch(option: AccentPreset, themeAccent: Color, customAccent:
 }
 
 @Composable
-private fun ProgressStyleOption(option: ProgressBarStyle, selected: Boolean, choose: () -> Unit) {
+internal fun ProgressStyleOption(option: ProgressBarStyle, selected: Boolean, choose: () -> Unit) {
     // A live bar at a plausible position, so each option shows exactly what it will be. Playing rather
     // than paused, because one of the styles is only itself while the music is running: a paused Wave
-    // is a flat line, and previewing it as one would be advertising the wrong thing.
+    // is a flat line, and previewing it as one would be advertising the wrong thing. With a song, made up,
+    // so the bars have a shape and every handle is drawn; not seekable, so a click picks the style.
     val preview = remember {
         PlaybackState(
-            track = null,
+            track = SEEK_BAR_PREVIEW_SONG,
             status = PlaybackStatus.PLAYING,
             positionMs = 156_000,
             durationMs = 258_000,
@@ -4680,12 +4768,22 @@ private fun ProgressStyleOption(option: ProgressBarStyle, selected: Boolean, cho
             Spacer(Modifier.height(10.dp))
             Surface(color = MaterialTheme.colorScheme.background.copy(alpha = .55f), shape = RoundedCornerShape(10.dp)) {
                 Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
-                    PlaybackProgressBar(preview, {}, Modifier.fillMaxWidth(), option)
+                    PlaybackProgressBar(preview, {}, Modifier.fillMaxWidth(), option, interactive = false)
                 }
             }
         }
     }
 }
+
+/** The song every seek bar in Settings is shown playing. Its key is what gives the bars their row. */
+private val SEEK_BAR_PREVIEW_SONG = Track(
+    provider = ProviderType.LOCAL,
+    id = "seek-bar-preview",
+    title = "Late night songs",
+    artists = emptyList(),
+    durationMs = 258_000,
+    sourceUrl = "",
+)
 
 @Composable
 private fun ProfileSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {

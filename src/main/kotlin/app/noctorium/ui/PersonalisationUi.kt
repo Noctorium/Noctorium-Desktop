@@ -149,6 +149,9 @@ internal fun playerBarButtons(
     val drawn = PlayerButton.entries.toMutableSet()
     when (style) {
         PlayerBarStyle.INLINE -> Unit
+        PlayerBarStyle.FLOATING, PlayerBarStyle.ISLAND, PlayerBarStyle.DISPLAY -> Unit
+        // Drawn by the Windows skin work.
+        PlayerBarStyle.TASKBAR -> Unit
         PlayerBarStyle.STACKED -> {
             drawn -= PlayerButton.LYRICS
             if (narrow) drawn -= PlayerButton.VOLUME
