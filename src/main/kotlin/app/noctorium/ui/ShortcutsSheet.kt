@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import app.noctorium.ui.skins.scrollingPage
+import app.noctorium.ui.skins.skinned
 import app.noctorium.ui.skins.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import app.noctorium.ui.skins.Surface
@@ -39,7 +40,8 @@ fun ShortcutsSheet(dismiss: () -> Unit) {
         title = { Text("Keyboard shortcuts", fontWeight = FontWeight.Bold) },
         text = {
             Column(
-                Modifier.widthIn(max = 460.dp).heightIn(max = 460.dp).scrollingPage(),
+                // Across the whole of the dialog under a Windows skin, so its scroll bar runs down the dialog's edge.
+                (if (skinned()) Modifier.fillMaxWidth() else Modifier.widthIn(max = 460.dp)).heightIn(max = 460.dp).scrollingPage(),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 shortcutHelp.forEach { (group, rows) ->
