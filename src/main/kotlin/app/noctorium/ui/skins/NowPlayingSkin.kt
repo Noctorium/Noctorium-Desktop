@@ -38,7 +38,8 @@ fun HeroWindow(modifier: Modifier, track: Track, content: @Composable (Modifier)
         content(modifier)
         return
     }
-    SkinWindow(title = { Text("Now Playing - ${track.title}") }, modifier = modifier.padding(6.dp)) {
+    // Named the way Windows named a window: what is open in it, then the program it is open in.
+    SkinWindow(title = { Text("${track.title} - Noctorium") }, modifier = modifier.padding(6.dp)) {
         content(Modifier.fillMaxSize())
     }
 }
