@@ -21,6 +21,7 @@ import androidx.compose.material3.RadioButtonColors
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.SwitchColors
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -201,7 +202,8 @@ fun Checkbox(
     } else {
         Modifier
     }
-    Box(modifier.then(toggle), contentAlignment = Alignment.Center) {
+    // Material's footprint, so the rows laid out round its checkbox still line up with this one.
+    Box(modifier.minimumInteractiveComponentSize().then(toggle), contentAlignment = Alignment.Center) {
         ToggleMark(Modifier, source) { hovered, pressed -> checkBox(skin, checked, enabled, hovered, pressed) }
     }
 }
@@ -248,7 +250,7 @@ fun RadioButton(
     } else {
         Modifier
     }
-    Box(modifier.then(select), contentAlignment = Alignment.Center) {
+    Box(modifier.minimumInteractiveComponentSize().then(select), contentAlignment = Alignment.Center) {
         ToggleMark(Modifier, source) { hovered, pressed -> radioCircle(skin, selected, enabled, hovered, pressed) }
     }
 }
