@@ -267,6 +267,8 @@ tasks.test {
     System.getProperty("noctorium.live")?.let { systemProperty("noctorium.live", it) }
     // Where PlayerBarRenderCheck draws the player bar layouts, when it is asked to.
     System.getProperty("noctorium.renderBars")?.let { systemProperty("noctorium.renderBars", it) }
+    // And an earlier set of those pictures to compare them with, pixel for pixel.
+    System.getProperty("noctorium.compareWith")?.let { systemProperty("noctorium.compareWith", it) }
     // A live run wants the real programs, and the test folder above has none of its own. They are named
     // through the same variables a listener can set, so the lookup being tested is the real one.
     val installed = System.getenv("LOCALAPPDATA")?.let { file("$it/Noctorium/bin") }
