@@ -4634,7 +4634,7 @@ internal fun PlayerButtonsSetting(preferences: NoctoriumPreferences, state: AppS
         Spacer(Modifier.height(6.dp))
         Text(
             "Lit ones are on the bar, in every layout. Play, pause and the two skips always stay, and so do " +
-                "download and add to playlist. Connect only appears once there is a device to play on, and a hidden sleep timer or Connect still shows while it is in use.",
+                "download and add to playlist while the window has room for them. Connect only appears once there is a device to play on, and a hidden sleep timer or Connect still shows while it is in use.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 11.sp,
         )
