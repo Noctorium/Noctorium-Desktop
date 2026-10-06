@@ -29,7 +29,6 @@ class PersonalisationUiTest {
     fun `with nothing hidden every layout draws what it always drew`() {
         val all = PlayerButton.entries.toSet()
         assertEquals(all, playerBarButtons(PlayerBarStyle.INLINE, narrow = false, emptySet()))
-        assertEquals(all, playerBarButtons(PlayerBarStyle.INLINE, narrow = true, emptySet()))
         // Stacked never had a lyrics button, and its compact form leaves the volume behind the window edge.
         assertEquals(all - PlayerButton.LYRICS, playerBarButtons(PlayerBarStyle.STACKED, narrow = false, emptySet()))
         assertEquals(all - PlayerButton.LYRICS - PlayerButton.VOLUME, playerBarButtons(PlayerBarStyle.STACKED, narrow = true, emptySet()))
@@ -40,9 +39,9 @@ class PersonalisationUiTest {
     }
 
     @Test
-    fun `Floating and Display give things up in turn as they narrow`() {
+    fun `Inline, Floating and Display give things up in turn as they narrow`() {
         val all = PlayerButton.entries.toSet()
-        listOf(PlayerBarStyle.FLOATING, PlayerBarStyle.DISPLAY).forEach { style ->
+        listOf(PlayerBarStyle.INLINE, PlayerBarStyle.FLOATING, PlayerBarStyle.DISPLAY).forEach { style ->
             assertEquals(all, playerBarButtons(style, narrow = false, emptySet()), "$style, wide")
             assertEquals(all - PlayerButton.LYRICS, playerBarButtons(style, narrow = true, emptySet()), "$style, narrow")
             assertEquals(

@@ -155,14 +155,13 @@ internal fun playerBarButtons(
 ): Set<PlayerButton> {
     val drawn = PlayerButton.entries.toMutableSet()
     when (style) {
-        PlayerBarStyle.INLINE -> Unit
         PlayerBarStyle.STACKED -> {
             drawn -= PlayerButton.LYRICS
             if (narrow) drawn -= PlayerButton.VOLUME
         }
         PlayerBarStyle.CENTERED, PlayerBarStyle.SLIM, PlayerBarStyle.SLIM_LEFT, PlayerBarStyle.SPOTLIGHT ->
             if (narrow) drawn -= PlayerButton.LYRICS
-        PlayerBarStyle.FLOATING, PlayerBarStyle.DISPLAY -> {
+        PlayerBarStyle.INLINE, PlayerBarStyle.FLOATING, PlayerBarStyle.DISPLAY -> {
             if (narrow || tight) drawn -= PlayerButton.LYRICS
             if (tight) drawn -= setOf(PlayerButton.SHUFFLE, PlayerButton.REPEAT, PlayerButton.SLEEP_TIMER) - inUse
         }

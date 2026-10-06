@@ -2333,7 +2333,7 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
     val current = queue.current
     var addToPlaylist by remember { mutableStateOf(false) }
     val library by state.library.collectAsState()
-    val shown = playerBarButtons(PlayerBarStyle.INLINE, narrow = false, preferences.desktop.hiddenPlayerButtons, playerButtonsInUse(state))
+    val inUse = playerButtonsInUse(state)
 
     if (addToPlaylist && current != null) {
         AddToPlaylistDialog(current, library.localPlaylists, state) { addToPlaylist = false }
@@ -2346,118 +2346,129 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
     Surface(color = if (LocalInGlass.current) Color.Transparent else MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxWidth().height(74.dp)) {
         Column {
             if (!atTop && !LocalInGlass.current) HorizontalDivider(color = rule)
-            Row(
-                Modifier.fillMaxWidth().weight(1f).padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (PlayerButton.SHUFFLE in shown) {
-                    IconButton(state::toggleShuffle, Modifier.size(34.dp)) {
-                        Icon(
-                            Icons.Default.Shuffle,
-                            "Shuffle",
-                            Modifier.size(18.dp),
-                            tint = if (queue.shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                IconButton(state::previous, Modifier.size(34.dp)) {
-                    Icon(Icons.Default.SkipPrevious, "Previous track", Modifier.size(20.dp))
-                }
-                // The one filled control in the bar, so the eye lands on it first.
-                FilledIconButton(
-                    state::togglePlayback,
-                    Modifier.size(42.dp),
-                    // Pressable while it spins: that press gives up on the track, which is the only way
-                    // out of a resolve that is not going to finish.
-                    enabled = current != null,
-                ) {
-                    if (playback.status == PlaybackStatus.RESOLVING) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    } else {
-                        PlayPauseIcon(playback.isPlaying, Modifier.size(24.dp))
-                    }
-                }
-                // Lit while next leads somewhere, autoplay's lined-up songs included: see QueueState.hasNext.
-                IconButton(state::next, Modifier.size(34.dp), enabled = queue.hasNext) {
-                    Icon(Icons.Default.SkipNext, "Next track", Modifier.size(20.dp))
-                }
-                if (PlayerButton.REPEAT in shown) {
-                    IconButton(state::cycleRepeat, Modifier.size(34.dp)) {
-                        Icon(
-                            if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
-                            "Repeat",
-                            Modifier.size(18.dp),
-                            tint = if (queue.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                current?.let { track ->
-                    if (PlayerButton.LIKE in shown) LikeButton(track, state, size = 34.dp)
-                    DownloadButton(track, state, size = 34.dp)
-                    IconButton({ addToPlaylist = true }, Modifier.size(34.dp)) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.PlaylistAdd,
-                            "Add to playlist",
-                            Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                Spacer(Modifier.width(14.dp))
+            // A narrower window costs the bar its extras in turn, as the floating bar's does -- lyrics and the two track
+            // tools, then shuffle, repeat and the sleep timer -- rather than squeezing the seek bar to nothing and pushing
+            // the volume off the end.
+            BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+                val narrow = maxWidth < 900.dp
+                val tight = maxWidth < 680.dp
+                val shown = playerBarButtons(PlayerBarStyle.INLINE, narrow, preferences.desktop.hiddenPlayerButtons, inUse, tight)
                 Row(
-                    Modifier.width(230.dp).clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
+                    Modifier.fillMaxSize().padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (current != null) {
-                        RemoteArtwork(current.artworkUrl, current.provider, Modifier.size(40.dp).clip(skinShape(RoundedCornerShape(7.dp))))
-                    } else {
-                        Box(
-                            Modifier.size(40.dp).clip(skinShape(RoundedCornerShape(7.dp))).background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Default.MusicNote, null, Modifier.size(18.dp)) }
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            current?.title ?: "Nothing playing",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp,
-                        )
-                        BarArtistLine(current, playback, state, 11.sp)
-                    }
-                }
-
-                Spacer(Modifier.width(16.dp))
-                PlaybackProgressBar(
-                    playback = playback,
-                    onSeek = state::seekTo,
-                    modifier = Modifier.weight(1f),
-                    style = preferences.progressBarStyle,
-                    timeDisplay = preferences.timeDisplay,
-                )
-                Spacer(Modifier.width(12.dp))
-
-                // Outside the badge, not inside it. BadgedBox has one content slot: a second child in
-                // there is laid on top of the first, so this button was drawn over the queue button and
-                // every click on it went to the queue instead.
-                if (PlayerButton.DEVICES in shown) ConnectButton(state)
-                if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
-                if (PlayerButton.QUEUE in shown) {
-                    BadgedBox(badge = { if (queue.tracks.isNotEmpty()) Badge { Text(queue.tracks.size.toString()) } }) {
-                        IconButton({ state.navigate(Destination.QUEUE) }, Modifier.size(34.dp)) {
-                            Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", Modifier.size(19.dp))
+                    if (PlayerButton.SHUFFLE in shown) {
+                        IconButton(state::toggleShuffle, Modifier.size(34.dp)) {
+                            Icon(
+                                Icons.Default.Shuffle,
+                                "Shuffle",
+                                Modifier.size(18.dp),
+                                tint = if (queue.shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
-                }
-                if (PlayerButton.LYRICS in shown) {
-                    IconButton({ state.navigate(Destination.NOW_PLAYING) }, Modifier.size(34.dp)) {
-                        Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    IconButton(state::previous, Modifier.size(34.dp)) {
+                        Icon(Icons.Default.SkipPrevious, "Previous track", Modifier.size(20.dp))
                     }
+                    // The one filled control in the bar, so the eye lands on it first.
+                    FilledIconButton(
+                        state::togglePlayback,
+                        Modifier.size(42.dp),
+                        // Pressable while it spins: that press gives up on the track, which is the only way
+                        // out of a resolve that is not going to finish.
+                        enabled = current != null,
+                    ) {
+                        if (playback.status == PlaybackStatus.RESOLVING) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            PlayPauseIcon(playback.isPlaying, Modifier.size(24.dp))
+                        }
+                    }
+                    // Lit while next leads somewhere, autoplay's lined-up songs included: see QueueState.hasNext.
+                    IconButton(state::next, Modifier.size(34.dp), enabled = queue.hasNext) {
+                        Icon(Icons.Default.SkipNext, "Next track", Modifier.size(20.dp))
+                    }
+                    if (PlayerButton.REPEAT in shown) {
+                        IconButton(state::cycleRepeat, Modifier.size(34.dp)) {
+                            Icon(
+                                if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                                "Repeat",
+                                Modifier.size(18.dp),
+                                tint = if (queue.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    current?.let { track ->
+                        if (PlayerButton.LIKE in shown) LikeButton(track, state, size = 34.dp)
+                        // The two that also live in the track's menu, given up first when the bar narrows.
+                        if (!narrow) {
+                            DownloadButton(track, state, size = 34.dp)
+                            IconButton({ addToPlaylist = true }, Modifier.size(34.dp)) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.PlaylistAdd,
+                                    "Add to playlist",
+                                    Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.width(14.dp))
+                    Row(
+                        Modifier.width(if (tight) 128.dp else if (narrow) 176.dp else 230.dp).clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (current != null) {
+                            RemoteArtwork(current.artworkUrl, current.provider, Modifier.size(40.dp).clip(skinShape(RoundedCornerShape(7.dp))))
+                        } else {
+                            Box(
+                                Modifier.size(40.dp).clip(skinShape(RoundedCornerShape(7.dp))).background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Default.MusicNote, null, Modifier.size(18.dp)) }
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                current?.title ?: "Nothing playing",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                            )
+                            BarArtistLine(current, playback, state, 11.sp)
+                        }
+                    }
+
+                    Spacer(Modifier.width(16.dp))
+                    PlaybackProgressBar(
+                        playback = playback,
+                        onSeek = state::seekTo,
+                        modifier = Modifier.weight(1f),
+                        style = preferences.progressBarStyle,
+                        timeDisplay = preferences.timeDisplay,
+                    )
+                    Spacer(Modifier.width(12.dp))
+
+                    // Outside the badge, not inside it. BadgedBox has one content slot: a second child in
+                    // there is laid on top of the first, so this button was drawn over the queue button and
+                    // every click on it went to the queue instead.
+                    if (PlayerButton.DEVICES in shown) ConnectButton(state)
+                    if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
+                    if (PlayerButton.QUEUE in shown) {
+                        BadgedBox(badge = { if (queue.tracks.isNotEmpty()) Badge { Text(queue.tracks.size.toString()) } }) {
+                            IconButton({ state.navigate(Destination.QUEUE) }, Modifier.size(34.dp)) {
+                                Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", Modifier.size(19.dp))
+                            }
+                        }
+                    }
+                    if (PlayerButton.LYRICS in shown) {
+                        IconButton({ state.navigate(Destination.NOW_PLAYING) }, Modifier.size(34.dp)) {
+                            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (PlayerButton.VOLUME in shown) VolumeControl(playback, state)
                 }
-                if (PlayerButton.VOLUME in shown) VolumeControl(playback, state)
             }
             if (atTop && !LocalInGlass.current) HorizontalDivider(color = rule)
         }

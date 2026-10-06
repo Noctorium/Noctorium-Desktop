@@ -116,7 +116,7 @@ class PlayerBarRenderCheck {
         val widths = listOf(1084, 760, 564)
         try {
             state.setProgressBarStyle(ProgressBarStyle.MINIMAL)
-            listOf(PlayerBarStyle.FLOATING, PlayerBarStyle.ISLAND, PlayerBarStyle.DISPLAY).forEach { style ->
+            listOf(PlayerBarStyle.INLINE, PlayerBarStyle.FLOATING, PlayerBarStyle.ISLAND, PlayerBarStyle.DISPLAY).forEach { style ->
                 state.setPlayerBarStyle(style)
                 val name = style.name.lowercase()
                 listOf(ThemePreset.NOCTORIUM_NIGHT, ThemePreset.NOCTORIUM_DAY).forEach { theme ->
