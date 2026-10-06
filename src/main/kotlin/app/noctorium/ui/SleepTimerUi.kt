@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.noctorium.core.AppState
@@ -46,7 +47,7 @@ import app.noctorium.playback.sleepTimerLabel
  * about a timer and doubles as the way back into the menu to change it.
  */
 @Composable
-internal fun SleepTimerButton(state: AppState) {
+internal fun SleepTimerButton(state: AppState, size: Dp = 34.dp) {
     val timer by state.sleepTimer.collectAsState()
     val remaining by state.sleepTimerRemainingMs.collectAsState()
     val preferences = state.settings.collectAsState().value.preferences
@@ -57,7 +58,7 @@ internal fun SleepTimerButton(state: AppState) {
 
     Box {
         if (label == null) {
-            IconButton({ open = true }, Modifier.size(34.dp)) {
+            IconButton({ open = true }, Modifier.size(size)) {
                 Icon(Icons.Default.Bedtime, "Sleep timer", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {

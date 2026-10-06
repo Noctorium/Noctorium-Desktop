@@ -47,7 +47,7 @@ import app.noctorium.core.AppState
  * whole thing is keyed on a secret only devices signed in to the same Noctorium can produce.
  */
 @Composable
-internal fun ConnectButton(state: AppState) {
+internal fun ConnectButton(state: AppState, modifier: Modifier = Modifier) {
     val connect by state.connect.collectAsState()
     val playback by state.playback.collectAsState()
     var open by remember { mutableStateOf(false) }
@@ -56,7 +56,7 @@ internal fun ConnectButton(state: AppState) {
     if (!connect.available && connect.devices.isEmpty() && connect.target == null) return
 
     Row {
-        IconButton({ open = true }) {
+        IconButton({ open = true }, modifier) {
             Icon(
                 Icons.Default.Devices,
                 if (connect.target != null) "Playing on ${connect.target?.name}" else "Noctorium Connect",

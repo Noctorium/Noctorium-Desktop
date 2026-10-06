@@ -2081,11 +2081,11 @@ internal fun ProviderBadge(provider: ProviderType, compact: Boolean = false) {
  * again.
  */
 @Composable
-internal fun VolumeControl(playback: PlaybackState, state: AppState) {
+internal fun VolumeControl(playback: PlaybackState, state: AppState, size: Dp = 36.dp) {
     var open by remember { mutableStateOf(false) }
     val onSpotify = playsOnSpotify(playback.track, state.settings.collectAsState().value.spotify)
     Box {
-        IconButton({ open = true }, Modifier.size(36.dp)) {
+        IconButton({ open = true }, Modifier.size(size)) {
             Icon(
                 if (playback.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                 "Volume",
