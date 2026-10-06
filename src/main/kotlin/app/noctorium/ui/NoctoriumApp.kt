@@ -46,6 +46,8 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import app.noctorium.ui.skins.Surface
+import app.noctorium.ui.skins.skinCorners
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -2166,7 +2168,7 @@ internal fun ProviderBadge(provider: ProviderType, compact: Boolean = false) {
         color = Color.White,
         fontSize = 9.sp,
         fontWeight = FontWeight.Bold,
-        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(background.copy(alpha = .9f)).padding(horizontal = if (compact) 6.dp else 7.dp, vertical = 4.dp),
+        modifier = Modifier.clip(skinCorners(RoundedCornerShape(6.dp))).background(background.copy(alpha = .9f)).padding(horizontal = if (compact) 6.dp else 7.dp, vertical = 4.dp),
     )
 }
 

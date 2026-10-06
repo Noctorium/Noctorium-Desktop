@@ -51,7 +51,7 @@ import app.noctorium.ui.skins.scrollingPage
 import app.noctorium.ui.skins.skinned
 import app.noctorium.ui.skins.OutlinedTextField
 import app.noctorium.ui.skins.Slider
-import androidx.compose.material3.Surface
+import app.noctorium.ui.skins.Surface
 import app.noctorium.ui.skins.Text
 import app.noctorium.ui.skins.TextButton
 import androidx.compose.runtime.Composable

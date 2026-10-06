@@ -44,7 +44,7 @@ import app.noctorium.ui.skins.IconButton
 import androidx.compose.material3.MaterialTheme
 import app.noctorium.ui.skins.RadioButton
 import app.noctorium.ui.skins.Slider
-import androidx.compose.material3.Surface
+import app.noctorium.ui.skins.Surface
 import app.noctorium.ui.skins.Text
 import app.noctorium.ui.skins.TextButton
 import androidx.compose.runtime.Composable

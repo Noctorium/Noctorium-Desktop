@@ -32,7 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import app.noctorium.ui.skins.OutlinedButton
 import app.noctorium.ui.skins.OutlinedTextField
-import androidx.compose.material3.Surface
+import app.noctorium.ui.skins.Surface
 import app.noctorium.ui.skins.Text
 import app.noctorium.ui.skins.TextButton
 import androidx.compose.runtime.Composable
