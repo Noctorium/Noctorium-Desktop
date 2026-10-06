@@ -158,8 +158,10 @@ internal fun playerBarButtons(
         }
         PlayerBarStyle.CENTERED, PlayerBarStyle.SLIM, PlayerBarStyle.SLIM_LEFT, PlayerBarStyle.SPOTLIGHT ->
             if (narrow) drawn -= PlayerButton.LYRICS
+        // The taskbar carries the rest as tray icons, and gives up the two that only lead elsewhere when narrow.
+        PlayerBarStyle.TASKBAR -> if (narrow) drawn -= setOf(PlayerButton.LYRICS, PlayerButton.QUEUE)
         // Drawn as Inline, Slim and Centred for now, so they leave out what those do.
-        PlayerBarStyle.FLOATING, PlayerBarStyle.TASKBAR -> Unit
+        PlayerBarStyle.FLOATING -> Unit
         PlayerBarStyle.ISLAND, PlayerBarStyle.DISPLAY -> if (narrow) drawn -= PlayerButton.LYRICS
     }
     // A button showing something under way stays, put away or not: a sleep timer counting down, or the music
