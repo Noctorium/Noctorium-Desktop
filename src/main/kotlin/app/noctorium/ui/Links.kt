@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
@@ -65,6 +66,8 @@ import app.noctorium.domain.PlaybackOrigin
 import app.noctorium.domain.Track
 import app.noctorium.domain.arrivedAtOnce
 import app.noctorium.domain.findMusicLink
+import app.noctorium.domain.pageUrl
+import app.noctorium.domain.placeholderTrack
 import app.noctorium.domain.pluralTracks
 import app.noctorium.downloads.DownloadStage
 import app.noctorium.playback.PlaybackState
@@ -121,7 +124,8 @@ internal fun LinkScreen(state: AppState) {
         item {
             Text("Paste a link", fontSize = 32.sp, fontWeight = FontWeight.Bold)
             Text(
-                "A song or a playlist from YouTube Music, YouTube or SoundCloud. It plays as soon as it is pasted.",
+                "A song, an album or a playlist from YouTube Music, YouTube, SoundCloud or Bandcamp. It plays as " +
+                    "soon as it is pasted.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
             )
@@ -309,9 +313,14 @@ private fun LinkTrackCard(track: Track, playing: Boolean, state: AppState) {
                     OutlinedButton({ state.addToQueue(track) }) {
                         Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Queue")
                     }
-                    DownloadLabelButton(track, state)
-                    OutlinedButton({ state.exportTrack(track) }) {
-                        Icon(Icons.Default.SaveAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Save as file")
+                    if (state.canKeep(track)) {
+                        DownloadLabelButton(track, state)
+                        OutlinedButton({ state.exportTrack(track) }) {
+                            Icon(Icons.Default.SaveAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Save as file")
+                        }
+                    } else {
+                        // Bought rather than downloaded, so the song's own page in place of keeping it.
+                        OpenPageButton(track, state)
                     }
                 }
             }
@@ -330,14 +339,39 @@ private fun PlaylistActions(tracks: List<Track>, state: AppState) {
         OutlinedButton({ tracks.forEach(state::addToQueue) }) {
             Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Queue all")
         }
-        OutlinedButton({ state.downloadAll(tracks) }) {
-            Icon(Icons.Default.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Download all")
-        }
-        OutlinedButton({ state.exportAll(tracks) }) {
-            Icon(Icons.Default.SaveAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Save all")
+        // A Bandcamp album has nothing on it that may be kept, so it offers neither rather than two buttons
+        // that would only say no.
+        if (tracks.any(state::canKeep)) {
+            OutlinedButton({ state.downloadAll(tracks) }) {
+                Icon(Icons.Default.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Download all")
+            }
+            OutlinedButton({ state.exportAll(tracks) }) {
+                Icon(Icons.Default.SaveAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Save all")
+            }
         }
     }
 }
+
+/**
+ * The song's page on its service, where a song that may not be kept here can be bought.
+ *
+ * The page alone, as [pageUrl] gives it: the address Noctorium keeps for a Bandcamp song carries the ids
+ * that find its stream, which mean nothing in a browser.
+ */
+@Composable
+private fun OpenPageButton(track: Track, state: AppState) {
+    OutlinedButton({ state.openExternalUrl(track.pageUrl) }) {
+        Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(17.dp)); Spacer(Modifier.width(6.dp))
+        Text("Open on ${track.provider.displayName}")
+    }
+}
+
+/**
+ * Whether what a pasted link leads to may be kept, known before anything is fetched: a Bandcamp address
+ * is a Bandcamp song or album, and those are bought rather than downloaded. True for no link at all.
+ */
+private fun AppState.mayKeep(text: String): Boolean =
+    findMusicLink(text)?.let { link -> canKeep(link.placeholderTrack()) } ?: true
 
 @Composable
 private fun LinkTrackRow(track: Track, playing: Boolean, onClick: () -> Unit) {
@@ -371,9 +405,12 @@ internal fun DownloadsScreen(state: AppState) {
     val link by state.linkState.collectAsState()
     val settings by state.settings.collectAsState()
     var text by remember { mutableStateOf("") }
+    // Said here, before anything is fetched. Asked to download a Bandcamp address, the core declines with a
+    // note on the library page, and this screen would have looked as though it had simply ignored the press.
+    val mayKeep = state.mayKeep(text)
 
     fun submit(action: LinkAction) {
-        if (text.isNotBlank()) state.openLink(text, action)
+        if (text.isNotBlank() && state.mayKeep(text)) state.openLink(text, action)
     }
 
     LazyColumn(
@@ -410,13 +447,22 @@ internal fun DownloadsScreen(state: AppState) {
             )
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button({ submit(LinkAction.DOWNLOAD) }, enabled = findMusicLink(text) != null) {
+                Button({ submit(LinkAction.DOWNLOAD) }, enabled = findMusicLink(text) != null && mayKeep) {
                     Icon(Icons.Default.DownloadForOffline, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Download")
                 }
-                OutlinedButton({ submit(LinkAction.SAVE) }, enabled = findMusicLink(text) != null) {
+                OutlinedButton({ submit(LinkAction.SAVE) }, enabled = findMusicLink(text) != null && mayKeep) {
                     Icon(Icons.Default.SaveAlt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
                     Text(if (state.canSaveAsMp3()) "Save as MP3" else "Save as file")
                 }
+            }
+            if (!mayKeep) {
+                Text(
+                    "$BOUGHT_NOT_DOWNLOADED. Buying one on its Bandcamp page makes the file yours, and Paste link " +
+                        "plays it here meanwhile.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
             // The link box's own news, when it was this box that asked.
             if (link.action == LinkAction.DOWNLOAD || link.action == LinkAction.SAVE) {

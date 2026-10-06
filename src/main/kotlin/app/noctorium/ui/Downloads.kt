@@ -1,6 +1,8 @@
 package app.noctorium.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,6 +64,26 @@ internal fun formatBytes(bytes: Long): String = when {
     bytes < 1024L * 1024 * 1024 -> "${(bytes / (1024.0 * 1024)).roundToInt()} MB"
     else -> String.format(Locale.US, "%.1f GB", bytes / (1024.0 * 1024 * 1024))
 }
+
+/**
+ * Why a song is not downloaded, said wherever a download would otherwise be offered.
+ *
+ * Only Bandcamp's songs are refused, by [AppState.canKeep]: what Bandcamp streams to everybody is there to be
+ * heard on the way to being bought, and the file is the artist's to sell. Its page is where it is bought, so
+ * the places that leave out a download offer that page instead.
+ */
+internal const val BOUGHT_NOT_DOWNLOADED = "Bandcamp songs are bought, not downloaded"
+
+/**
+ * How many of [tracks] a playlist's download button would still fetch, or null when none of them may be
+ * kept at all and there should be no button.
+ *
+ * Counted over the songs that may be kept, so a playlist with a Bandcamp song in it does not promise to
+ * download that one too, and an album opened from Bandcamp offers no download rather than one that would
+ * only say no.
+ */
+internal fun downloadsLeft(tracks: List<Track>, canKeep: (Track) -> Boolean, isDownloaded: (Track) -> Boolean): Int? =
+    tracks.filter(canKeep).takeIf { it.isNotEmpty() }?.count { !isDownloaded(it) }
 
 /** How many tracks are kept, what they occupy, and what is still arriving. */
 internal fun describeDownloads(downloads: DownloadsState): String = buildString {
@@ -212,6 +234,20 @@ internal fun OfflineDownloadsCard(downloads: DownloadsState, state: AppState) {
  */
 @Composable
 internal fun DownloadButton(track: Track, state: AppState, size: Dp = 36.dp) {
+    // Faded rather than gone. A row of search results or a player bar would otherwise shift every button
+    // after this one whenever a Bandcamp song came along; pointing at it says why it does nothing.
+    if (!state.canKeep(track)) {
+        return HoverHint(BOUGHT_NOT_DOWNLOADED) {
+            IconButton({}, Modifier.size(size), enabled = false) {
+                Icon(
+                    Icons.Default.Download,
+                    BOUGHT_NOT_DOWNLOADED,
+                    Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .38f),
+                )
+            }
+        }
+    }
     val downloads by state.downloadState.collectAsState()
     // What is on the disk is the recording, which for a Spotify track is not the track itself. Asking about
     // the Spotify entry would report every one of them as not downloaded, however many times it was kept.
@@ -271,6 +307,32 @@ internal fun DownloadButton(track: Track, state: AppState, size: Dp = 36.dp) {
             )
         }
     }
+}
+
+/**
+ * A few words that appear when [content] is pointed at, for a control that cannot say for itself why it
+ * does nothing.
+ *
+ * Drawn on the theme's own raised card rather than as a system tooltip, which would be the one pale thing in
+ * a dark window.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun HoverHint(text: String, content: @Composable () -> Unit) {
+    TooltipArea(
+        tooltip = {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, ink(.1f)),
+                shadowElevation = 4.dp,
+            ) {
+                Text(text, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+            }
+        },
+        delayMillis = 400,
+        content = content,
+    )
 }
 
 /**

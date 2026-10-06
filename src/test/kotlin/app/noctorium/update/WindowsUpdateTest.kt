@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
  */
 class WindowsUpdateTest {
 
-    private val msi = """C:\Users\Cem Özoral\AppData\Local\Temp\noctorium-update\Noctorium-1.0.0-windows-x64.msi"""
+    private val msi = """C:\Users\Zoë Ångström\AppData\Local\Temp\noctorium-update\Noctorium-1.0.0-windows-x64.msi"""
     private val launcher = """C:\Program Files\Noctorium\Noctorium.exe"""
     private val script = WindowsUpdate.script(msi, launcher, outlive = listOf(4242, 17))
 
@@ -67,6 +67,6 @@ class WindowsUpdateTest {
     fun `the encoded command is the script in UTF-16LE, accents and all`() {
         val decoded = String(Base64.getDecoder().decode(WindowsUpdate.encoded(script)), Charsets.UTF_16LE)
         assertEquals(script, decoded)
-        assertTrue("Cem Özoral" in decoded)
+        assertTrue("Zoë Ångström" in decoded)
     }
 }

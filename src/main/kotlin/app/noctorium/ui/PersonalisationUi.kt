@@ -83,6 +83,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -872,20 +873,26 @@ internal fun LyricsLookCard(look: LyricsLook, state: AppState) {
  *
  * Drawn like [ChoiceRow]'s pills, so the two read as one family: lit is on, faint is put away. Each pill
  * carries a tick or its own picture, which is what tells this row apart from a choice of one.
+ *
+ * [mark] is for a choice whose order matters, such as the genres Home draws a row for: a pill that is on
+ * carries its place in that order instead of the tick, so the order can be read off the pills themselves.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun <T> ToggleChips(
-    label: String,
+    label: String?,
     options: List<T>,
     on: (T) -> Boolean,
     name: (T) -> String,
     icon: ((T) -> ImageVector)? = null,
+    mark: ((T) -> String?)? = null,
     toggle: (T, Boolean) -> Unit,
 ) {
     Column {
-        Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
+        label?.let {
+            Text(it, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { option ->
                 val active = on(option)
@@ -900,18 +907,39 @@ internal fun <T> ToggleChips(
                         Modifier.padding(start = 11.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // Without a picture of its own, a pill says what clicking it would do: a tick
-                        // for on, a plus for something that can be brought back.
-                        Icon(
-                            when {
-                                icon != null -> icon(option)
-                                active -> Icons.Default.Check
-                                else -> Icons.Default.Add
-                            },
-                            null,
-                            Modifier.size(15.dp),
-                            tint = tint,
-                        )
+                        val marked = if (active) mark?.invoke(option) else null
+                        if (marked != null) {
+                            Box(
+                                Modifier.size(16.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                // A line exactly as tall as the figure: the body text's own line is taller
+                                // than this whole circle, and set in it the figure sat at the bottom edge.
+                                Text(
+                                    marked,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    fontSize = 10.sp,
+                                    lineHeight = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    style = LocalTextStyle.current.copy(
+                                        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+                                    ),
+                                )
+                            }
+                        } else {
+                            // Without a picture of its own, a pill says what clicking it would do: a tick
+                            // for on, a plus for something that can be brought back.
+                            Icon(
+                                when {
+                                    icon != null -> icon(option)
+                                    active -> Icons.Default.Check
+                                    else -> Icons.Default.Add
+                                },
+                                null,
+                                Modifier.size(15.dp),
+                                tint = tint,
+                            )
+                        }
                         Spacer(Modifier.width(6.dp))
                         Text(
                             name(option),

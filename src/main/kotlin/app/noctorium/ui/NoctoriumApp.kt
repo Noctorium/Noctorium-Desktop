@@ -109,6 +109,7 @@ import app.noctorium.auth.isSoundCloudSignedIn
 import app.noctorium.auth.permalinkFromBrowserUrl
 import app.noctorium.auth.adoptCookieFile
 import app.noctorium.auth.writeCookieFile
+import app.noctorium.bandcamp.BandcampMusicProvider
 import app.noctorium.playlists.LocalPlaylist
 import app.noctorium.playlists.PlaylistShareLink
 import app.noctorium.settings.*
@@ -610,45 +611,61 @@ private fun PlaylistRowSection(
         }
         Spacer(Modifier.height(14.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            items(playlists, key = { it.playlistKey }) { playlist ->
-                Column(
+            items(playlists, key = { it.playlistKey }) { playlist -> PlaylistCard(playlist, cardWidth, state) }
+        }
+    }
+}
+
+/**
+ * One playlist, album or artist on a shelf: its cover and its name, opening its page when clicked.
+ *
+ * An artist is drawn round and says it is one where an album says whose it is. A shelf of search results
+ * mixes the two, and a square photograph of somebody reads as an album cover.
+ */
+@Composable
+private fun PlaylistCard(playlist: Playlist, width: Dp, state: AppState) {
+    val artist = BandcampMusicProvider.isArtist(playlist)
+    val shape = if (artist) CircleShape else RoundedCornerShape(11.dp)
+    Column(
+        Modifier
+            .width(width)
+            .clickable {
+                state.openPlaylist(playlist)
+                state.navigate(Destination.LIBRARY)
+            },
+    ) {
+        Box(Modifier.size(width).clip(shape)) {
+            if (playlist.artworkUrl != null) {
+                RemoteArtwork(playlist.artworkUrl, playlist.provider, Modifier.fillMaxSize())
+            } else {
+                Box(
                     Modifier
-                        .width(cardWidth)
-                        .clickable {
-                            state.openPlaylist(playlist)
-                            state.navigate(Destination.LIBRARY)
-                        },
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = .6f)),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Box(Modifier.size(cardWidth).clip(RoundedCornerShape(11.dp))) {
-                        if (playlist.artworkUrl != null) {
-                            RemoteArtwork(playlist.artworkUrl, playlist.provider, Modifier.fillMaxSize())
-                        } else {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = .6f)),
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        playlist.title,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    playlist.ownerName?.takeIf { it.isNotBlank() }?.let {
-                        Text(
-                            it,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                    if (artist) Icon(Icons.Default.Person, null, Modifier.size(width / 3), tint = ink(.45f))
                 }
             }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            playlist.title,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        // For an artist the owner is where they are from, when Bandcamp says: "Artist · Bristol".
+        val owner = playlist.ownerName?.takeIf { it.isNotBlank() }
+        (if (artist) listOfNotNull("Artist", owner).joinToString(" · ") else owner)?.let {
+            Text(
+                it,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -925,19 +942,25 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, state:
                 Button({ state.playLocalPlaylist(playlist) }) {
                     Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(7.dp)); Text("Play all")
                 }
-                Spacer(Modifier.width(9.dp))
                 val downloads by state.downloadState.collectAsState()
-                val missing = playlist.tracks.count { !downloads.isDownloaded(it) }
-                OutlinedButton({ state.downloadAll(playlist.tracks) }, enabled = missing > 0) {
-                    Icon(Icons.Default.Download, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(7.dp))
-                    // Naming how many are left makes clear that a second press is not needed, and that a
-                    // playlist already kept is finished rather than the button being broken.
-                    Text(if (missing == 0) "All downloaded" else "Download $missing")
+                // Counted over what may be kept: a Bandcamp song in the list is not one more to download.
+                downloadsLeft(playlist.tracks, state::canKeep) { downloads.isDownloaded(it) }?.let { missing ->
+                    Spacer(Modifier.width(9.dp))
+                    OutlinedButton({ state.downloadAll(playlist.tracks) }, enabled = missing > 0) {
+                        Icon(Icons.Default.Download, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(7.dp))
+                        // Naming how many are left makes clear that a second press is not needed, and that a
+                        // playlist already kept is finished rather than the button being broken.
+                        Text(if (missing == 0) "All downloaded" else "Download $missing")
+                    }
                 }
             }
         }
         Spacer(Modifier.height(12.dp))
+        // Only the songs each service can hold go up to it: a Bandcamp or Spotify song's id means nothing to
+        // YouTube, and the core's own filter keeps out SoundCloud alone. See acceptsTrack.
+        val forSoundCloud = playlist.tracks.filter { ProviderType.SOUNDCLOUD.acceptsTrack(it) }
+        val forYouTube = playlist.tracks.filter { ProviderType.YOUTUBE_MUSIC.acceptsTrack(it) }
         Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
             OutlinedButton({ state.copyPlaylistShareLink(playlist) }) {
                 Icon(Icons.Default.Share, null, Modifier.size(17.dp)); Spacer(Modifier.width(7.dp)); Text("Copy share link")
@@ -947,15 +970,15 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, state:
             }
             OutlinedButton({ renameOpen = true }) { Text("Rename") }
             OutlinedButton({ confirmDelete = true }) { Text("Delete") }
-            if (playlist.tracks.any { it.provider == ProviderType.SOUNDCLOUD }) {
-                OutlinedButton({ state.publishPlaylistToSoundCloud(playlist) }) {
+            if (forSoundCloud.isNotEmpty()) {
+                OutlinedButton({ state.publishPlaylistToSoundCloud(playlist.copy(tracks = forSoundCloud)) }) {
                     Icon(Icons.Default.CloudUpload, null, Modifier.size(17.dp))
                     Spacer(Modifier.width(7.dp))
                     Text("Save to SoundCloud")
                 }
             }
-            if (playlist.tracks.any { it.provider != ProviderType.SOUNDCLOUD }) {
-                OutlinedButton({ state.publishPlaylistToYouTube(playlist) }) {
+            if (forYouTube.isNotEmpty()) {
+                OutlinedButton({ state.publishPlaylistToYouTube(playlist.copy(tracks = forYouTube)) }) {
                     Icon(Icons.Default.CloudUpload, null, Modifier.size(17.dp))
                     Spacer(Modifier.width(7.dp))
                     Text("Save to YouTube Music")
@@ -1229,7 +1252,7 @@ private fun PlaylistRow(playlist: Playlist, open: () -> Unit) {
 }
 
 @Composable
-private fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: AppState) {
+internal fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: AppState) {
     Column(Modifier.fillMaxSize().padding(horizontal = 30.dp)) {
         Spacer(Modifier.height(22.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1262,15 +1285,27 @@ private fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: App
                 Button({ state.playPlaylist(playlist) }) {
                     Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(7.dp)); Text("Play all")
                 }
-                Spacer(Modifier.width(9.dp))
                 val downloads by state.downloadState.collectAsState()
-                val missing = playlist.tracks.count { !downloads.isDownloaded(it) }
-                OutlinedButton({ state.downloadAll(playlist.tracks) }, enabled = missing > 0) {
-                    Icon(Icons.Default.Download, null, Modifier.size(18.dp))
+                // None for a Bandcamp album or artist, whose songs are bought rather than downloaded.
+                downloadsLeft(playlist.tracks, state::canKeep) { downloads.isDownloaded(it) }?.let { missing ->
+                    Spacer(Modifier.width(9.dp))
+                    OutlinedButton({ state.downloadAll(playlist.tracks) }, enabled = missing > 0) {
+                        Icon(Icons.Default.Download, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(7.dp))
+                        // Naming how many are left makes clear that a second press is not needed, and that a
+                        // playlist already kept is finished rather than the button being broken.
+                        Text(if (missing == 0) "All downloaded" else "Download $missing")
+                    }
+                }
+            }
+            // Where the download would be: a Bandcamp release or artist is a page on Bandcamp too, and that
+            // page is where its music is bought.
+            playlist.sourceUrl?.takeIf { playlist.provider == ProviderType.BANDCAMP }?.let { page ->
+                Spacer(Modifier.width(9.dp))
+                OutlinedButton({ state.openExternalUrl(page) }) {
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(17.dp))
                     Spacer(Modifier.width(7.dp))
-                    // Naming how many are left makes clear that a second press is not needed, and that a
-                    // playlist already kept is finished rather than the button being broken.
-                    Text(if (missing == 0) "All downloaded" else "Download $missing")
+                    Text("Open on Bandcamp")
                 }
             }
         }
@@ -1350,11 +1385,20 @@ private fun VisibilityBadge(isPublic: Boolean?, compact: Boolean = false) {
     }
 }
 
-/** Rename, delete and privacy for a playlist that lives on a service account rather than only in Noctorium. */
+/**
+ * Rename, delete and privacy for a playlist that lives on a service account rather than only in Noctorium.
+ *
+ * Named service by service rather than SoundCloud-or-else-YouTube: a Bandcamp collection or a Spotify list
+ * that ever got this far would otherwise have been renamed on YouTube.
+ */
 @Composable
 private fun ServicePlaylistActions(playlist: Playlist, state: AppState) {
-    val onSoundCloud = playlist.provider == ProviderType.SOUNDCLOUD
-    SoundCloudPlaylistActions(playlist, state, onSoundCloud)
+    when (playlist.provider) {
+        ProviderType.SOUNDCLOUD -> SoundCloudPlaylistActions(playlist, state, onSoundCloud = true)
+        ProviderType.YOUTUBE_MUSIC, ProviderType.YOUTUBE_VIDEO -> SoundCloudPlaylistActions(playlist, state, onSoundCloud = false)
+        // Read-only here: nothing of theirs is renamed, deleted or made public from Noctorium.
+        ProviderType.SPOTIFY, ProviderType.BANDCAMP, ProviderType.VK, ProviderType.LOCAL -> Unit
+    }
 }
 
 @Composable
@@ -1450,7 +1494,7 @@ private fun LibraryProblemBanner(message: String) {
 }
 
 @Composable
-private fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0) {
+internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0) {
     val box = remember { FocusRequester() }
     // Zero is the screen simply being opened, which should not steal the caret from somebody who came
     // here with the mouse. Every value after that is the shortcut asking for it.
@@ -1476,15 +1520,45 @@ private fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0)
             ui.searchQuery.isBlank() -> EmptyScreen(
                 "Search ${ui.searchMode.displayName}",
                 if (ui.searchMode == SearchMode.HYBRID)
-                    "YouTube Music, YouTube videos, and SoundCloud results appear together."
+                    "YouTube Music, YouTube videos, SoundCloud, and Bandcamp results appear together."
                 else "Only ${ui.searchMode.displayName} results will appear.",
             )
             ui.errorMessage != null -> PlaybackError(ui.errorMessage.orEmpty())
-            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = chromePadding()) {
-                items(ui.searchResults.tracks, key = { it.queueKey }) { track ->
-                    TrackRow(track, ui.searchResults.tracks, state)
+            else -> SearchResultsList(ui.searchResults, state)
+        }
+    }
+}
+
+/**
+ * What a search found: albums and artists on a shelf of their own, then the songs.
+ *
+ * The shelf is Home's, cards and all, because these open rather than play, which is what a card on Home
+ * already means; mixed in among the songs, one click would play and the next would go somewhere else. Only
+ * Bandcamp answers with albums and artists so far, so with nothing from Bandcamp the page is the list of
+ * songs it always was, without a heading over it.
+ */
+@Composable
+private fun SearchResultsList(results: SearchResults, state: AppState) {
+    // The cards are keyed, and a service that listed the same album twice would otherwise end the screen.
+    val shelf = remember(results.playlists) { results.playlists.distinctBy { it.playlistKey } }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = chromePadding()) {
+        if (shelf.isNotEmpty()) {
+            item(key = "search:shelf") {
+                PlaylistRowSection(
+                    "Albums and artists",
+                    "From " + shelf.map { it.provider.displayName }.distinct().joinToString(" and "),
+                    shelf,
+                    state,
+                )
+            }
+            if (results.tracks.isNotEmpty()) {
+                item(key = "search:songs") {
+                    Text("Songs", fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp, bottom = 7.dp))
                 }
             }
+        }
+        items(results.tracks, key = { it.queueKey }) { track ->
+            TrackRow(track, results.tracks, state)
         }
     }
 }
@@ -1599,6 +1673,17 @@ private fun TrackMenu(track: Track, state: AppState) {
             val onDisk = state.downloadableTrack(track)
             val job = downloads.jobFor(onDisk)
             when {
+                // A Bandcamp song is neither downloaded nor saved -- the file is the artist's to sell -- so
+                // its page, where it is bought, takes the place of both. The page alone: the address kept
+                // for the song carries the ids that find its stream, which mean nothing in a browser.
+                !state.canKeep(track) -> DropdownMenuItem(
+                    text = { Text("Open on ${track.provider.displayName}") },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) },
+                    trailingIcon = {
+                        Text("to buy", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                    },
+                    onClick = { state.openExternalUrl(track.pageUrl); expanded = false },
+                )
                 // In progress, and tapping it stops it. A download nobody can call off is worse than none.
                 job != null && job.stage != DownloadStage.FAILED -> DropdownMenuItem(
                     text = { Text("Downloading… ${(job.progress * 100).roundToInt()}%") },
@@ -1622,20 +1707,22 @@ private fun TrackMenu(track: Track, state: AppState) {
                     onClick = { state.downloadTrack(track); expanded = false },
                 )
             }
-            DropdownMenuItem(
-                text = { Text(if (state.canSaveAsMp3()) "Save as MP3…" else "Save a copy…") },
-                leadingIcon = { Icon(Icons.Default.SaveAlt, null) },
-                // Named for where it lands, because the difference between this and the item above it is
-                // exactly that one is Noctorium's copy and this one is the listener's.
-                trailingIcon = {
-                    Text(
-                        state.exportFolder()?.fileName?.toString() ?: "no folder",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
-                    )
-                },
-                onClick = { state.exportTrack(track); expanded = false },
-            )
+            if (state.canKeep(track)) {
+                DropdownMenuItem(
+                    text = { Text(if (state.canSaveAsMp3()) "Save as MP3…" else "Save a copy…") },
+                    leadingIcon = { Icon(Icons.Default.SaveAlt, null) },
+                    // Named for where it lands, because the difference between this and the item above it is
+                    // exactly that one is Noctorium's copy and this one is the listener's.
+                    trailingIcon = {
+                        Text(
+                            state.exportFolder()?.fileName?.toString() ?: "no folder",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                        )
+                    },
+                    onClick = { state.exportTrack(track); expanded = false },
+                )
+            }
             HorizontalDivider()
             DropdownMenuItem(
                 text = { Text(if (pinned) "Unpin from Home" else "Pin to Home") },
@@ -1738,9 +1825,10 @@ private fun AddToPlaylistDialog(
             title = "New playlist for ${track.title}",
             confirmLabel = "Create and add",
             // A SoundCloud playlist can only hold SoundCloud tracks, so the option is offered only when the
-            // track being added could actually go in one.
-            soundCloudReady = likes.soundCloudReady && track.provider == ProviderType.SOUNDCLOUD,
-            youTubeReady = likes.youTubeReady && track.provider != ProviderType.SOUNDCLOUD,
+            // track being added could actually go in one -- and the same for YouTube, which used to be offered
+            // anything that was not SoundCloud's, a Bandcamp song included.
+            soundCloudReady = likes.soundCloudReady && ProviderType.SOUNDCLOUD.acceptsTrack(track),
+            youTubeReady = likes.youTubeReady && ProviderType.YOUTUBE_MUSIC.acceptsTrack(track),
             // Here the other service is greyed out because the track cannot go there, whatever the state
             // of that account, so the note says that rather than blaming the sign-in.
             unavailableNote = "Not where a ${track.provider.displayName} track can go.",
@@ -1775,11 +1863,8 @@ private fun AddToPlaylistDialog(
                         Surface(
                             onClick = {
                                 dismiss()
-                                if (playlist.provider == ProviderType.SOUNDCLOUD) {
-                                    state.addTrackToSoundCloudPlaylist(playlist.id, track)
-                                } else {
-                                    state.addTrackToYouTubePlaylist(playlist.id, track)
-                                }
+                                // The core names each service, and turns down the ones that cannot be written to.
+                                state.addTrackToPlaylist(playlist, track)
                             },
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .4f),
                             shape = RoundedCornerShape(10.dp),
@@ -3478,8 +3563,8 @@ private fun PlaybackError(message: String) {
 }
 
 private enum class SettingsPage {
-    ACCOUNT, PROFILE, CUSTOMIZATION, SOUND, YOUTUBE, SOUNDCLOUD, SPOTIFY, SCROBBLING, LYRICS, STARTUP, DISCORD, UPDATES,
-    PLAYBACK_TOOLS, DIAGNOSTICS
+    ACCOUNT, PROFILE, CUSTOMIZATION, SOUND, YOUTUBE, SOUNDCLOUD, SPOTIFY, BANDCAMP, SCROBBLING, LYRICS, STARTUP, DISCORD,
+    UPDATES, PLAYBACK_TOOLS, DIAGNOSTICS
 }
 
 /**
@@ -3492,7 +3577,7 @@ private enum class SettingsPage {
 private var pendingSettingsPage: SettingsPage? = null
 
 @Composable
-private fun SettingsScreen(state: AppState) {
+internal fun SettingsScreen(state: AppState) {
     val settings by state.settings.collectAsState()
     var page by remember { mutableStateOf(pendingSettingsPage.also { pendingSettingsPage = null }) }
     // Going into a page and back out again slides, the way a phone's settings do, rather than cutting.
@@ -3513,6 +3598,7 @@ private fun SettingsScreen(state: AppState) {
                         settings.preferences.soundCloudUsername,
                     )
                     SettingsPage.SPOTIFY -> SpotifySettingsPanel(settings, state)
+                    SettingsPage.BANDCAMP -> BandcampSettingsPanel(settings, state)
                     SettingsPage.SCROBBLING -> ScrobblingSettingsPanel(settings, state)
                     SettingsPage.LYRICS -> LyricsSettingsPanel(settings.preferences, state)
                     SettingsPage.STARTUP -> StartupSettingsPanel(settings.preferences, state)
@@ -3622,6 +3708,15 @@ private fun SettingsHome(settings: SettingsState, state: AppState, open: (Settin
             )
         }
         item {
+            SettingsCard(
+                "Bandcamp",
+                bandcampSummary(settings.preferences.bandcampUsername, settings.bandcamp),
+                Icons.Default.Album,
+                { open(SettingsPage.BANDCAMP) },
+                settings.preferences.bandcampUsername.isNotBlank(),
+            )
+        }
+        item {
             val connected = listOf(settings.scrobbling.lastFm, settings.scrobbling.listenBrainz)
                 .filter { it.status == ScrobbleConnectionStatus.CONNECTED }
                 .mapNotNull { it.username }
@@ -3709,6 +3804,7 @@ private fun pageTitle(page: SettingsPage) = when (page) {
     SettingsPage.YOUTUBE -> "YouTube Music account"
     SettingsPage.SOUNDCLOUD -> "SoundCloud account"
     SettingsPage.SPOTIFY -> "Spotify library"
+    SettingsPage.BANDCAMP -> "Bandcamp"
     SettingsPage.SCROBBLING -> "Scrobbling"
     SettingsPage.LYRICS -> "Lyrics providers"
     SettingsPage.STARTUP -> "Startup and tray"
@@ -6040,7 +6136,7 @@ private fun LoadingSection() {
  * the same: no other service can hold them. A Noctorium playlist takes all of them happily, which is where a
  * mixed collection belongs.
  */
-private fun ProviderType.acceptsTrack(track: Track): Boolean = when {
+internal fun ProviderType.acceptsTrack(track: Track): Boolean = when {
     track.provider == ProviderType.SPOTIFY || track.provider == ProviderType.BANDCAMP || track.provider == ProviderType.VK -> false
     this == ProviderType.SOUNDCLOUD -> track.provider == ProviderType.SOUNDCLOUD
     this == ProviderType.YOUTUBE_MUSIC || this == ProviderType.YOUTUBE_VIDEO ->
