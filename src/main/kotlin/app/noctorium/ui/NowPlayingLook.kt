@@ -37,6 +37,9 @@ import app.noctorium.domain.Track
 import app.noctorium.settings.CoverStyle
 import app.noctorium.settings.NowPlayingBackdrop
 import app.noctorium.settings.NowPlayingLayout
+import app.noctorium.ui.skins.SkinCover
+import app.noctorium.ui.skins.SkinDesktop
+import app.noctorium.ui.skins.skinned
 
 /*
  * The parts of the now playing screen that are only drawing: the cover in each of its styles, what is
@@ -62,6 +65,11 @@ private val VINYL = Color(0xFF111114)
 internal fun NowPlayingCover(track: Track, playing: Boolean, style: CoverStyle, size: Dp, modifier: Modifier = Modifier) {
     if (style == CoverStyle.RECORD) {
         RecordCover(track, playing, size, modifier)
+        return
+    }
+    // In a frame and casting no shadow under a Windows skin, square or round as chosen.
+    if (style != CoverStyle.CIRCLE && skinned()) {
+        SkinCover(track, size, modifier)
         return
     }
     val corner by animateDpAsState(
@@ -172,7 +180,8 @@ private fun DrawScope.drawSheen() {
 internal fun NowPlayingBackground(track: Track, backdrop: NowPlayingBackdrop) {
     val background = MaterialTheme.colorScheme.background
     when (backdrop) {
-        NowPlayingBackdrop.PLAIN -> Unit
+        // Under a Windows skin, the desktop the windows stand on.
+        NowPlayingBackdrop.PLAIN -> if (skinned()) SkinDesktop()
         NowPlayingBackdrop.WASH -> {
             val palette = rememberArtworkPalette(
                 track.artworkUrl,

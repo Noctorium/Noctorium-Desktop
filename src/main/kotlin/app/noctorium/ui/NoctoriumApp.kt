@@ -2619,7 +2619,7 @@ internal fun NowPlayingScreen(queue: QueueState, playback: PlaybackState, state:
                 wide = maxWidth >= 840.dp,
             )
             val panel: @Composable (Modifier, Boolean) -> Unit = { modifier, largeLyrics ->
-                GlassPanel(modifier) {
+                GlassPanel(modifier, selectedTab.displayName) {
                     NowPlayingPanel(
                         queue = queue,
                         selectedTab = selectedTab,
@@ -2658,7 +2658,8 @@ private fun NowPlayingArranged(
 ) {
     val layout = shown.layout
     val hero: @Composable (HeroArrangement, Modifier) -> Unit = { heroArrangement, modifier ->
-        NowPlayingHero(track, playback, state, heroArrangement, arrange, modifier, hasNext)
+        // In a window of its own on the desktop, under a Windows skin.
+        HeroWindow(modifier, track) { inner -> NowPlayingHero(track, playback, state, heroArrangement, arrange, inner, hasNext) }
     }
     when {
         layout == NowPlayingLayout.BANNER -> Column(
@@ -2697,9 +2698,16 @@ private fun NowPlayingArranged(
     }
 }
 
-/** Translucent rounded container that lets the ambient backdrop show through. */
+/**
+ * Translucent rounded container that lets the ambient backdrop show through; under a Windows skin a window on
+ * the desktop, titled [title].
+ */
 @Composable
-private fun GlassPanel(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+private fun GlassPanel(modifier: Modifier = Modifier, title: String = "Noctorium", content: @Composable BoxScope.() -> Unit) {
+    if (skinned()) {
+        PanelWindow(modifier, title, content)
+        return
+    }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(22.dp),
@@ -3006,6 +3014,21 @@ private fun NowPlayingPanel(
     modifier: Modifier = Modifier,
     largeLyrics: Boolean = false,
 ) {
+    // A property sheet's tabs over their page, under a Windows skin.
+    if (skinned()) {
+        PanelTabs(NowPlayingTab.entries, selectedTab, { it.displayName }, selectTab, modifier) {
+            when (selectedTab) {
+                NowPlayingTab.UP_NEXT -> UpNextPanel(queue, state)
+                NowPlayingTab.LYRICS -> queue.current?.let { LyricsPanel(it, state, large = largeLyrics) }
+                NowPlayingTab.RELATED -> PanelPlaceholder(
+                    icon = Icons.Default.AutoAwesome,
+                    title = "Related music",
+                    message = "More music based on the current track will appear here.",
+                )
+            }
+        }
+        return
+    }
     // Transparent so the ambient backdrop reads through the glass panel behind this.
     Surface(modifier, color = Color.Transparent) {
         Column(Modifier.fillMaxSize().padding(top = 14.dp)) {
@@ -3407,8 +3430,10 @@ private fun UpNextPanel(queue: QueueState, state: AppState) {
             }
         }
         HorizontalDivider(color = ink(.07f))
+        val list = rememberLazyListState()
         LazyColumn(
-            Modifier.fillMaxSize().padding(horizontal = 10.dp),
+            Modifier.fillMaxSize().listWell().classicScrollbar(list).padding(horizontal = 10.dp),
+            state = list,
             verticalArrangement = Arrangement.spacedBy(4.dp),
             contentPadding = chromePadding(bottom = 18.dp),
         ) {
@@ -3433,6 +3458,11 @@ private fun QueueActionPill(
     active: Boolean,
     action: () -> Unit,
 ) {
+    // A button that stays pressed in while it is on, under a Windows skin.
+    if (skinned()) {
+        FilterChip(active, action, label = { Text(label) }, leadingIcon = { Icon(icon, null, Modifier.size(14.dp)) })
+        return
+    }
     Surface(
         onClick = action,
         shape = RoundedCornerShape(20.dp),
