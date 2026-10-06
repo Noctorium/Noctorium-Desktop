@@ -141,12 +141,17 @@ import kotlin.math.roundToInt
  * What each layout leaves out by itself is decided here too, so that one place says what a bar shows:
  * Stacked has never had a lyrics button and gives up the volume when it is narrow, and the newer layouts
  * give up the lyrics button when narrow. [narrow] is whichever width the layout itself calls narrow.
+ *
+ * [tight] is narrower again, where Floating and Display give up shuffle, repeat and an idle sleep timer as well,
+ * so the song keeps its room. The Island has the transport and the song and opens to the volume, and nothing
+ * more but a timer running or music playing elsewhere, which every bar shows.
  */
 internal fun playerBarButtons(
     style: PlayerBarStyle,
     narrow: Boolean,
     hidden: Set<PlayerButton>,
     inUse: Set<PlayerButton> = emptySet(),
+    tight: Boolean = false,
 ): Set<PlayerButton> {
     val drawn = PlayerButton.entries.toMutableSet()
     when (style) {
@@ -157,11 +162,13 @@ internal fun playerBarButtons(
         }
         PlayerBarStyle.CENTERED, PlayerBarStyle.SLIM, PlayerBarStyle.SLIM_LEFT, PlayerBarStyle.SPOTLIGHT ->
             if (narrow) drawn -= PlayerButton.LYRICS
+        PlayerBarStyle.FLOATING, PlayerBarStyle.DISPLAY -> {
+            if (narrow || tight) drawn -= PlayerButton.LYRICS
+            if (tight) drawn -= setOf(PlayerButton.SHUFFLE, PlayerButton.REPEAT, PlayerButton.SLEEP_TIMER) - inUse
+        }
+        PlayerBarStyle.ISLAND -> drawn.retainAll(setOf(PlayerButton.VOLUME) + (inUse intersect setOf(PlayerButton.SLEEP_TIMER, PlayerButton.DEVICES)))
         // The taskbar carries the rest as tray icons, and gives up the two that only lead elsewhere when narrow.
         PlayerBarStyle.TASKBAR -> if (narrow) drawn -= setOf(PlayerButton.LYRICS, PlayerButton.QUEUE)
-        // Drawn as Inline, Slim and Centred for now, so they leave out what those do.
-        PlayerBarStyle.FLOATING -> Unit
-        PlayerBarStyle.ISLAND, PlayerBarStyle.DISPLAY -> if (narrow) drawn -= PlayerButton.LYRICS
     }
     // A button showing something under way stays, put away or not: a sleep timer counting down, or the music
     // playing on another device, is not something to lose sight of because its button was hidden.

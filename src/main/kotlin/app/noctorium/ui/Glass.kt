@@ -72,6 +72,13 @@ val LocalChromeInsets = compositionLocalOf { ChromeInsets() }
 /** Whether what is drawing sits inside a pane of glass, and should leave its own background off. */
 val LocalInGlass = staticCompositionLocalOf { false }
 
+/**
+ * The backdrop under glass, for a player bar that cuts its own pane rather than sitting in the window's: the
+ * Island, which is a small pill with the page on either side of it, where a pane the width of the window
+ * would be a bar again. Null when the surfaces are solid.
+ */
+val LocalGlassBackdrop = staticCompositionLocalOf<GlassBackdrop?> { null }
+
 /** A lazy list's own padding, plus whatever the floating glass covers at each end. */
 @Composable
 fun chromePadding(top: Dp = 0.dp, bottom: Dp = 0.dp): PaddingValues {

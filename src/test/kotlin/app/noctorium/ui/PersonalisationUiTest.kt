@@ -40,6 +40,45 @@ class PersonalisationUiTest {
     }
 
     @Test
+    fun `Floating and Display give things up in turn as they narrow`() {
+        val all = PlayerButton.entries.toSet()
+        listOf(PlayerBarStyle.FLOATING, PlayerBarStyle.DISPLAY).forEach { style ->
+            assertEquals(all, playerBarButtons(style, narrow = false, emptySet()), "$style, wide")
+            assertEquals(all - PlayerButton.LYRICS, playerBarButtons(style, narrow = true, emptySet()), "$style, narrow")
+            assertEquals(
+                setOf(PlayerButton.LIKE, PlayerButton.QUEUE, PlayerButton.VOLUME, PlayerButton.DEVICES),
+                playerBarButtons(style, narrow = true, emptySet(), tight = true),
+                "$style, tight",
+            )
+            // A timer that is running stays, however tight.
+            assertTrue(PlayerButton.SLEEP_TIMER in playerBarButtons(style, narrow = true, emptySet(), setOf(PlayerButton.SLEEP_TIMER), tight = true))
+        }
+    }
+
+    @Test
+    fun `the Island opens to the volume, and shows what is under way`() {
+        assertEquals(setOf(PlayerButton.VOLUME), playerBarButtons(PlayerBarStyle.ISLAND, narrow = false, emptySet()))
+        assertEquals(setOf(PlayerButton.VOLUME), playerBarButtons(PlayerBarStyle.ISLAND, narrow = true, emptySet()))
+        assertTrue(playerBarButtons(PlayerBarStyle.ISLAND, narrow = false, setOf(PlayerButton.VOLUME)).isEmpty())
+        assertEquals(
+            setOf(PlayerButton.VOLUME, PlayerButton.SLEEP_TIMER),
+            playerBarButtons(PlayerBarStyle.ISLAND, narrow = false, emptySet(), setOf(PlayerButton.SLEEP_TIMER)),
+        )
+    }
+
+    @Test
+    fun `only Floating and the Island float over the page`() {
+        assertEquals(setOf(PlayerBarStyle.FLOATING, PlayerBarStyle.ISLAND), PlayerBarStyle.entries.filter { it.floats }.toSet())
+    }
+
+    @Test
+    fun `a lifted bar is as round as the corner setting, and never past a pill`() {
+        assertEquals(0f, liftedCorner(app.noctorium.settings.CornerStyle.SHARP, FLOATING_HEIGHT).value)
+        assertEquals(28f, liftedCorner(app.noctorium.settings.CornerStyle.SOFT, FLOATING_HEIGHT).value)
+        assertEquals(FLOATING_HEIGHT.value / 2, liftedCorner(app.noctorium.settings.CornerStyle.ROUND, FLOATING_HEIGHT).value)
+    }
+
+    @Test
     fun `a hidden button is drawn by no layout at any width`() {
         PlayerButton.entries.forEach { button ->
             PlayerBarStyle.entries.forEach { style ->
