@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -53,7 +54,11 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import app.noctorium.ui.skins.FilledIconButton
+import app.noctorium.ui.skins.LiftedBar
+import app.noctorium.ui.skins.SkinDisplay
+import app.noctorium.ui.skins.skinCorners
 import app.noctorium.ui.skins.skinShape
+import app.noctorium.ui.skins.skinned
 import app.noctorium.ui.skins.HorizontalDivider
 import androidx.compose.material3.Icon
 import app.noctorium.ui.skins.IconButton
@@ -530,7 +535,7 @@ internal fun IslandPlayerBar(queue: QueueState, playback: PlaybackState, state: 
             if (backdrop != null) {
                 GlassPane(backdrop, Modifier.fillMaxWidth(), cornerRadius = liftedCorner(preferences.cornerStyle, ISLAND_HEIGHT)) { content() }
             } else {
-                LiftedSurface(shape, Modifier.fillMaxWidth()) { content() }
+                LiftedSurface(shape, Modifier.fillMaxWidth(), island = true) { content() }
             }
         }
     }
@@ -603,16 +608,7 @@ private fun SongDisplay(current: Track?, playback: PlaybackState, state: AppStat
     val spotify = state.settings.collectAsState().value.spotify
     val shape = MaterialTheme.shapes.small
     val shade = ink(.07f)
-    Row(
-        modifier
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .drawWithContent {
-                drawContent()
-                drawRect(Brush.verticalGradient(listOf(shade, Color.Transparent), endY = 7.dp.toPx()))
-            }
-            .border(1.dp, ink(.09f), shape),
-    ) {
+    val inside: @Composable RowScope.() -> Unit = {
         Box(
             Modifier
                 .fillMaxHeight()
@@ -685,17 +681,40 @@ private fun SongDisplay(current: Track?, playback: PlaybackState, state: AppStat
             }
         }
     }
+    // Set into the bar as the displays of the time were, under a Windows skin.
+    if (skinned()) {
+        SkinDisplay(modifier, inside)
+        return
+    }
+    Row(
+        modifier
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .drawWithContent {
+                drawContent()
+                drawRect(Brush.verticalGradient(listOf(shade, Color.Transparent), endY = 7.dp.toPx()))
+            }
+            .border(1.dp, ink(.09f), shape),
+        content = inside,
+    )
 }
 
 /**
  * What a lifted bar is made of when the surfaces are solid: the card's colour on a dark page and the panel's on a
  * pale one, so it stands off either; a hairline edge, for a black page where no shadow shows; and a soft shadow.
  * Inside the window's glass, nothing but what it holds: the pane is already all of that.
+ *
+ * Under a Windows skin, a toolbar or a small window standing off the page, as [LiftedBar] draws them; [island]
+ * says which.
  */
 @Composable
-private fun LiftedSurface(shape: Shape, modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
+private fun LiftedSurface(shape: Shape, modifier: Modifier, island: Boolean = false, content: @Composable BoxScope.() -> Unit) {
     if (LocalInGlass.current) {
         Box(modifier, content = content)
+        return
+    }
+    if (skinned()) {
+        LiftedBar(island, modifier, content)
         return
     }
     val light = MaterialTheme.colorScheme.background.luminance() > .5f
@@ -715,7 +734,7 @@ private fun ProgressLine(playback: PlaybackState, modifier: Modifier) {
     val filled = MaterialTheme.colorScheme.primary
     val track = ink(.14f)
     val fraction = playbackFraction(playback.positionMs.toFloat(), playback.durationMs)
-    Canvas(modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(50))) {
+    Canvas(modifier.fillMaxWidth().height(2.dp).clip(skinCorners(RoundedCornerShape(50)))) {
         drawRect(track)
         drawRect(filled, size = Size(size.width * fraction, size.height))
     }
