@@ -193,6 +193,6 @@ internal fun WindowColours(content: @Composable () -> Unit) {
     val window = LocalWindowColours.current ?: MaterialTheme.colorScheme
     val ink = if (skin() == ThemeSkin.WINDOWS_XP) Luna.Text else Classic.Text
     MaterialTheme(colorScheme = window, shapes = MaterialTheme.shapes, typography = MaterialTheme.typography) {
-        CompositionLocalProvider(LocalContentColor provides ink, LocalGround provides Ground.FACE, content = content)
+        CompositionLocalProvider(LocalContentColor provides ink, LocalGround provides Ground.FACE, LocalPane provides null, content = content)
     }
 }

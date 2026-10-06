@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -267,7 +268,7 @@ private val GROUP_TOP = 18.dp
  * a group box's caption sat. It takes no room of its own: what follows it starts where the box's contents do.
  */
 @Composable
-internal fun GroupLegend(text: String, background: Color = MaterialTheme.colorScheme.background) {
+internal fun GroupLegend(text: String, background: Color = LocalPane.current ?: MaterialTheme.colorScheme.background) {
     val skin = skin()
     val colour = if (skin == ThemeSkin.WINDOWS_XP) Luna.GroupTitle else Classic.Text
     Text(
@@ -298,28 +299,38 @@ internal fun GroupLegend(text: String, background: Color = MaterialTheme.colorSc
 internal fun ViewPane(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     val skin = skin()
     if (skin == ThemeSkin.WINDOWS_XP) {
+        CompositionLocalProvider(LocalPane provides Luna.Window) {
+            Box(
+                modifier
+                    .fillMaxSize()
+                    .background(Luna.Window)
+                    .drawBehind { drawRect(Luna.FieldEdge.copy(alpha = .55f), Offset.Zero, Size(pixel, size.height)) },
+                content = content,
+            )
+        }
+        return
+    }
+    CompositionLocalProvider(LocalPane provides Classic.Window) {
         Box(
             modifier
                 .fillMaxSize()
-                .background(Luna.Window)
-                .drawBehind { drawRect(Luna.FieldEdge.copy(alpha = .55f), Offset.Zero, Size(pixel, size.height)) },
+                .padding(start = 2.dp, top = 2.dp, end = 2.dp, bottom = 2.dp)
+                .drawWithContent {
+                    drawRect(Classic.Window)
+                    drawContent()
+                    bevel(Bevel.Sunken)
+                }
+                .padding(2.dp),
             content = content,
         )
-        return
     }
-    Box(
-        modifier
-            .fillMaxSize()
-            .padding(start = 2.dp, top = 2.dp, end = 2.dp, bottom = 2.dp)
-            .drawWithContent {
-                drawRect(Classic.Window)
-                drawContent()
-                bevel(Bevel.Sunken)
-            }
-            .padding(2.dp),
-        content = content,
-    )
 }
+
+/**
+ * The colour behind whatever is drawn below, where that is not the window's face: the white of a
+ * [ViewPane], which a group box's title breaks the box's edge with.
+ */
+internal val LocalPane = staticCompositionLocalOf<Color?> { null }
 
 /**
  * A strip of tabs over a page, the chosen one standing taller and joined to the page beneath it.

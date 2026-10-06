@@ -1,5 +1,6 @@
 package app.noctorium.ui.skins
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
@@ -8,6 +9,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -151,6 +153,29 @@ fun ListRow(
             .drawBehind { if (lit) drawRect(skin.selection) },
     ) {
         Highlighted(lit) { content() }
+    }
+}
+
+/**
+ * A card on a page, of things that belong together: under the standard skin the rounded [Surface] it always
+ * was, in [color] with [shape] and [border] and [padding] inside, exactly as it was; under a Windows skin a group
+ * box, which is what a window of the time gathered such things in, with its own room inside.
+ */
+@Composable
+fun PageCard(
+    modifier: Modifier = Modifier,
+    color: Color,
+    shape: Shape,
+    border: BorderStroke? = null,
+    padding: Dp = 16.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    if (skin().isWindows) {
+        GroupBox(modifier, content = content)
+        return
+    }
+    Surface(color = color, shape = shape, border = border, modifier = modifier) {
+        Column(Modifier.padding(padding), content = content)
     }
 }
 

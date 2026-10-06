@@ -24,7 +24,9 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
+import app.noctorium.ui.skins.GroupLegend
 import app.noctorium.ui.skins.HorizontalDivider
+import app.noctorium.ui.skins.PageCard
 import app.noctorium.ui.skins.TooltipBox
 import app.noctorium.ui.skins.skinned
 import androidx.compose.material3.Icon
@@ -138,110 +140,109 @@ internal fun describeDownloads(downloads: DownloadsState): String = buildString 
 internal fun OfflineDownloadsCard(downloads: DownloadsState, state: AppState) {
     var expanded by remember { mutableStateOf(false) }
 
-    Surface(
+    // A group box under a Windows skin.
+    PageCard(
+        Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f)),
-        modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.DownloadForOffline,
-                    null,
-                    Modifier.size(22.dp),
-                    tint = MaterialTheme.colorScheme.primary,
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.DownloadForOffline,
+                null,
+                Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Available offline", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text(
+                    describeDownloads(downloads),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
                 )
-                Spacer(Modifier.width(11.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Available offline", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text(
-                        describeDownloads(downloads),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                    )
+            }
+            if (downloads.entries.isNotEmpty()) {
+                OutlinedButton({ state.playDownloads() }) {
+                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Play")
                 }
-                if (downloads.entries.isNotEmpty()) {
-                    OutlinedButton({ state.playDownloads() }) {
-                        Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Play")
+                Spacer(Modifier.width(8.dp))
+                TextButton({ expanded = !expanded }) { Text(if (expanded) "Hide" else "Show") }
+            }
+        }
+
+        // Anything still arriving is shown whether or not the list is open. A download in progress is
+        // the thing most likely to be wondered about, and hiding it invites pressing download twice.
+        downloads.active.forEach { job ->
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(job.track.title, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(5.dp))
+                    if (job.stage == DownloadStage.FAILED) {
+                        Text(
+                            job.detail ?: "Could not download this one.",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            progress = { job.progress },
+                            modifier = Modifier.fillMaxWidth().height(4.dp),
+                        )
                     }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton({ expanded = !expanded }) { Text(if (expanded) "Hide" else "Show") }
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    when (job.stage) {
+                        DownloadStage.QUEUED -> "Waiting"
+                        DownloadStage.DOWNLOADING -> "${(job.progress * 100).roundToInt()}%"
+                        DownloadStage.FAILED -> "Failed"
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                )
+                IconButton({ state.cancelDownload(job.track.queueKey) }, Modifier.size(30.dp)) {
+                    Icon(Icons.Default.Close, "Stop this download", Modifier.size(16.dp))
                 }
             }
+        }
 
-            // Anything still arriving is shown whether or not the list is open. A download in progress is
-            // the thing most likely to be wondered about, and hiding it invites pressing download twice.
-            downloads.active.forEach { job ->
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(job.track.title, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Spacer(Modifier.height(5.dp))
-                        if (job.stage == DownloadStage.FAILED) {
+        if (expanded && downloads.entries.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider(color = ink(.07f))
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                downloads.entries.forEach { entry ->
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clickable { state.playDownloads(entry.toTrack()) }
+                            .padding(vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(entry.title, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
-                                job.detail ?: "Could not download this one.",
-                                color = MaterialTheme.colorScheme.error,
+                                "${entry.artistName} · ${entry.provider.displayName} · ${formatBytes(entry.bytes)}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 11.sp,
-                                maxLines = 2,
+                                maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                        } else {
-                            LinearProgressIndicator(
-                                progress = { job.progress },
-                                modifier = Modifier.fillMaxWidth().height(4.dp),
-                            )
                         }
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        when (job.stage) {
-                            DownloadStage.QUEUED -> "Waiting"
-                            DownloadStage.DOWNLOADING -> "${(job.progress * 100).roundToInt()}%"
-                            DownloadStage.FAILED -> "Failed"
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
-                    )
-                    IconButton({ state.cancelDownload(job.track.queueKey) }, Modifier.size(30.dp)) {
-                        Icon(Icons.Default.Close, "Stop this download", Modifier.size(16.dp))
+                        IconButton({ state.deleteDownload(entry.queueKey) }, Modifier.size(32.dp)) {
+                            Icon(Icons.Default.DeleteOutline, "Remove this download", Modifier.size(17.dp))
+                        }
                     }
                 }
             }
-
-            if (expanded && downloads.entries.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                HorizontalDivider(color = ink(.07f))
-                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    downloads.entries.forEach { entry ->
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .clickable { state.playDownloads(entry.toTrack()) }
-                                .padding(vertical = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(entry.title, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(
-                                    "${entry.artistName} · ${entry.provider.displayName} · ${formatBytes(entry.bytes)}",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            IconButton({ state.deleteDownload(entry.queueKey) }, Modifier.size(32.dp)) {
-                                Icon(Icons.Default.DeleteOutline, "Remove this download", Modifier.size(17.dp))
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-                TextButton(state::deleteAllDownloads) {
-                    Text("Remove all downloads", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                }
+            Spacer(Modifier.height(4.dp))
+            TextButton(state::deleteAllDownloads) {
+                Text("Remove all downloads", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         }
     }
@@ -370,14 +371,20 @@ internal fun HoverHint(text: String, content: @Composable () -> Unit) {
  * The format is not a choice offered here, because it is not one: MP3 is produced whenever this machine can
  * produce it, and it almost always can, since mpv has to be installed for anything to play at all and its
  * builds carry an MP3 encoder. Saying so plainly is more use than a menu whose second option nobody wants.
+ *
+ * [boxed] when it is a card of its own, whose title a Windows skin sets into the edge of its group box.
  */
 @Composable
-internal fun SaveMusicSetting(preferences: NoctoriumPreferences, state: AppState) {
+internal fun SaveMusicSetting(preferences: NoctoriumPreferences, state: AppState, boxed: Boolean = false) {
     var folder by remember(preferences.exportFolder) { mutableStateOf(preferences.exportFolder) }
     val resolved = state.exportFolder()
     val mp3 = state.canSaveAsMp3()
 
-    Text("Saving music", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    if (boxed && skinned()) {
+        GroupLegend("Saving music")
+    } else {
+        Text("Saving music", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
     Spacer(Modifier.height(9.dp))
     OutlinedTextField(
         folder,

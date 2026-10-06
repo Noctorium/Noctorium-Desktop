@@ -32,9 +32,13 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SaveAlt
 import app.noctorium.ui.skins.Button
+import app.noctorium.ui.skins.InfoBar
+import app.noctorium.ui.skins.ListRow
+import app.noctorium.ui.skins.PageCard
 import app.noctorium.ui.skins.ScreenTitle
 import app.noctorium.ui.skins.classicScrollbar
 import app.noctorium.ui.skins.skinShape
+import app.noctorium.ui.skins.skinned
 import androidx.compose.material3.CircularProgressIndicator
 import app.noctorium.ui.skins.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -160,6 +164,15 @@ internal fun LinkScreen(state: AppState) {
         // Not offered when it is the link already in hand: "play it" for what is playing is noise.
         clipboard?.takeIf { findMusicLink(it).let { copied -> copied != findMusicLink(text) && copied != link.link } }?.let { copied ->
             item {
+                // The information bar under a Windows skin, with its button at the end.
+                if (skinned()) {
+                    InfoBar(
+                        Icons.Default.ContentPaste,
+                        "There is a link on your clipboard: " + (findMusicLink(copied)?.url ?: copied),
+                        action = { Button({ submit(copied) }) { Text("Play it") } },
+                    )
+                    return@item
+                }
                 Surface(
                     onClick = { submit(copied) },
                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .5f),
@@ -227,7 +240,8 @@ internal fun LinkField(
             modifier = Modifier.weight(1f).tracksTyping(),
         )
         Spacer(Modifier.width(10.dp))
-        FilledTonalButton(onPaste, Modifier.height(54.dp)) {
+        // As tall as the box beside it, which under a Windows skin is a line of writing high.
+        FilledTonalButton(onPaste, if (skinned()) Modifier else Modifier.height(54.dp)) {
             Icon(Icons.Default.ContentPaste, null, Modifier.size(18.dp))
             Spacer(Modifier.width(7.dp))
             Text("Paste")
@@ -284,13 +298,15 @@ private fun androidx.compose.foundation.lazy.LazyListScope.linkOutcome(link: Lin
 
 @Composable
 private fun LinkTrackCard(track: Track, playing: Boolean, state: AppState) {
-    Surface(
+    // A group box under a Windows skin, which has room of its own inside.
+    PageCard(
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f)),
+        padding = 0.dp,
     ) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(96.dp).clip(RoundedCornerShape(12.dp)))
+        Row(Modifier.fillMaxWidth().padding(if (skinned()) 0.dp else 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(96.dp).clip(skinShape(RoundedCornerShape(12.dp))))
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -389,10 +405,12 @@ private fun notKeptNote(provider: ProviderType): String = notKeptReason(provider
 
 @Composable
 private fun LinkTrackRow(track: Track, playing: Boolean, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        color = if (playing) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .58f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .28f),
+    // A line of the list under a Windows skin, highlighted while it plays.
+    ListRow(
+        onClick,
         shape = RoundedCornerShape(12.dp),
+        color = if (playing) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .58f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .28f),
+        selected = playing,
     ) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             RemoteArtwork(track.artworkUrl, track.provider, Modifier.size(44.dp).clip(skinShape(RoundedCornerShape(9.dp))))
@@ -509,10 +527,10 @@ internal fun DownloadsScreen(state: AppState) {
         } else {
             itemsIndexed(downloads.entries, key = { _, entry -> "kept:" + entry.queueKey }) { _, entry ->
                 val track = entry.toTrack()
-                Surface(
-                    onClick = { state.playDownloads(track) },
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .28f),
+                ListRow(
+                    { state.playDownloads(track) },
                     shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .28f),
                 ) {
                     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         RemoteArtwork(entry.artworkUrl, entry.provider, Modifier.size(44.dp).clip(skinShape(RoundedCornerShape(9.dp))))
@@ -545,12 +563,8 @@ internal fun DownloadsScreen(state: AppState) {
         }
         item {
             Spacer(Modifier.height(8.dp))
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(Modifier.padding(16.dp)) { SaveMusicSetting(settings.preferences, state) }
+            PageCard(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(14.dp)) {
+                SaveMusicSetting(settings.preferences, state, boxed = true)
             }
         }
     }
