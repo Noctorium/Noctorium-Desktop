@@ -138,6 +138,14 @@ class WindowsThemesRenderCheck {
                 state.updateNowPlaying { copy(layout = layout) }
                 tour.capture("layout-${layout.name.lowercase()}", frames = 14)
             }
+            // The new ones in a narrow window too, where each rearranges itself.
+            tour.open(width = 760, height = 640)
+            tour.fill()
+            tour.go(Destination.NOW_PLAYING)
+            listOf(NowPlayingLayout.IMMERSIVE, NowPlayingLayout.SPLIT, NowPlayingLayout.COVER_FLOW, NowPlayingLayout.TURNTABLE, NowPlayingLayout.POSTER).forEach { layout ->
+                state.updateNowPlaying { copy(layout = layout) }
+                tour.capture("layout-${layout.name.lowercase()}-narrow", frames = 14)
+            }
             state.updateNowPlaying { NowPlayingPreferences() }
             state.setNowPlayingBackdrop(NowPlayingBackdrop.WASH)
             state.setPlayerBarStyle(PlayerBarStyle.INLINE)
