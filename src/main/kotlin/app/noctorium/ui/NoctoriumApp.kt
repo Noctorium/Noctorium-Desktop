@@ -3546,6 +3546,9 @@ private fun UpNextPanel(queue: QueueState, state: AppState) {
             }
             // Pills rather than icon buttons, so the two destructive-ish actions read clearly.
             QueueActionPill("Shuffle", Icons.Default.Shuffle, queue.shuffleEnabled, state::toggleShuffle)
+            // Autoplay's switch where its songs are: lit while it lines songs up after the queue.
+            val autoplay = settings.preferences.autoplay
+            QueueActionPill("Autoplay", Icons.Default.AllInclusive, autoplay) { state.setAutoplay(!autoplay) }
             QueueActionPill("Clear", Icons.Default.Close, false, state::clearQueue)
             if (queue.tracks.isNotEmpty()) QueueActionsMenu(queue, state) { savedAs = it }
         }
@@ -3752,6 +3755,19 @@ internal fun QueueScreen(queue: QueueState, state: AppState) {
                     containerColor = if (queue.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
                     labelColor = if (queue.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     leadingIconContentColor = if (queue.repeatMode != RepeatMode.OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
+            )
+            // Autoplay's switch beside the queue's other two: on, songs like the last one follow the queue; off,
+            // the music stops where the queue does. The same switch as Settings › Playback and queue.
+            val autoplay = settings.preferences.autoplay
+            AssistChip(
+                onClick = { state.setAutoplay(!autoplay) },
+                label = { Text(if (autoplay) "Autoplay on" else "Autoplay off") },
+                leadingIcon = { Icon(Icons.Default.AllInclusive, null, Modifier.size(18.dp)) },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = if (autoplay) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                    labelColor = if (autoplay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    leadingIconContentColor = if (autoplay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
             )
         }
