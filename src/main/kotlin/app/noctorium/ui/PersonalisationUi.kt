@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Lyrics
@@ -157,15 +158,15 @@ internal fun playerBarButtons(
     when (style) {
         PlayerBarStyle.STACKED -> {
             drawn -= PlayerButton.LYRICS
-            if (narrow) drawn -= PlayerButton.VOLUME
+            if (narrow) drawn -= setOf(PlayerButton.VOLUME, PlayerButton.SPEED)
         }
         PlayerBarStyle.CENTERED, PlayerBarStyle.SLIM, PlayerBarStyle.SLIM_LEFT, PlayerBarStyle.SPOTLIGHT ->
             if (narrow) drawn -= PlayerButton.LYRICS
         PlayerBarStyle.INLINE, PlayerBarStyle.FLOATING, PlayerBarStyle.DISPLAY -> {
             if (narrow || tight) drawn -= PlayerButton.LYRICS
-            if (tight) drawn -= setOf(PlayerButton.SHUFFLE, PlayerButton.REPEAT, PlayerButton.SLEEP_TIMER) - inUse
+            if (tight) drawn -= setOf(PlayerButton.SHUFFLE, PlayerButton.REPEAT, PlayerButton.SLEEP_TIMER, PlayerButton.SPEED) - inUse
         }
-        PlayerBarStyle.ISLAND -> drawn.retainAll(setOf(PlayerButton.VOLUME) + (inUse intersect setOf(PlayerButton.SLEEP_TIMER, PlayerButton.DEVICES)))
+        PlayerBarStyle.ISLAND -> drawn.retainAll(setOf(PlayerButton.SPEED, PlayerButton.VOLUME) + (inUse intersect setOf(PlayerButton.SLEEP_TIMER, PlayerButton.DEVICES)))
         // The taskbar carries the rest as tray icons, and gives up the two that only lead elsewhere when narrow.
         PlayerBarStyle.TASKBAR -> if (narrow) drawn -= setOf(PlayerButton.LYRICS, PlayerButton.QUEUE)
     }
@@ -179,9 +180,12 @@ internal fun playerBarButtons(
 internal fun playerButtonsInUse(state: AppState): Set<PlayerButton> {
     val timer by state.sleepTimer.collectAsState()
     val connect by state.connect.collectAsState()
+    val speed = state.settings.collectAsState().value.preferences.playbackSpeed
     return buildSet {
         if (timer != null) add(PlayerButton.SLEEP_TIMER)
         if (connect.target != null) add(PlayerButton.DEVICES)
+        // A song playing faster or slower than recorded is something under way too.
+        if (speed != 1f) add(PlayerButton.SPEED)
     }
 }
 
@@ -194,6 +198,7 @@ internal fun PlayerButton.icon(): ImageVector = when (this) {
     PlayerButton.QUEUE -> Icons.AutoMirrored.Filled.QueueMusic
     PlayerButton.SLEEP_TIMER -> Icons.Default.Bedtime
     PlayerButton.VOLUME -> Icons.AutoMirrored.Filled.VolumeUp
+    PlayerButton.SPEED -> Icons.Default.Speed
     PlayerButton.DEVICES -> Icons.Default.Devices
 }
 

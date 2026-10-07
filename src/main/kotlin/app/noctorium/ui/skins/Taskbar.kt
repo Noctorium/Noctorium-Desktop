@@ -87,6 +87,7 @@ import app.noctorium.ui.PlayPauseIcon
 import app.noctorium.ui.PlaybackProgressBar
 import app.noctorium.ui.RemoteArtwork
 import app.noctorium.ui.SleepTimerButton
+import app.noctorium.ui.SpeedButton
 import app.noctorium.ui.VolumeControl
 import app.noctorium.ui.openCustomization
 import app.noctorium.ui.playerBarButtons
@@ -495,6 +496,7 @@ private fun TrayIcons(skin: ThemeSkin, queue: QueueState, playback: PlaybackStat
             Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(icon), tint = quiet)
         }
     }
+    if (PlayerButton.SPEED in shown) SpeedButton(playback, state, size = button)
     if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state, size = button)
     if (PlayerButton.DEVICES in shown) ConnectButton(state, Modifier.size(button))
 }

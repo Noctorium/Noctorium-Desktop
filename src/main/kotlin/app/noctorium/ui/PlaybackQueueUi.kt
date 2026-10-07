@@ -164,7 +164,7 @@ internal fun autoplayShown(
  *
  * Written when the slider is let go of, not at every step of a drag, which would be a settings save and a
  * new speed for the player a dozen times over. It rests while Spotify's own app plays the song, since Spotify
- * plays at its own speed; [compact] is the volume popover's narrower version.
+ * plays at its own speed; [compact] is the speed button's narrower version.
  */
 @Composable
 internal fun SpeedControl(speed: Float, onSpotify: Boolean, compact: Boolean, set: (Float) -> Unit) {
@@ -228,8 +228,8 @@ internal fun SleepFadeChoice(seconds: Int, choose: (Int) -> Unit) {
  * Playback and queue: the speed, autoplay, keeping the queue, and the sleep timer's fade.
  *
  * Its own page because none of it is how Noctorium looks, and all of it is how listening goes on. The speed
- * is also in the volume popover and the fade beside the sleep timer, where they are wanted mid-song; this is
- * where they are found by somebody looking for them.
+ * also has its button on the player bar and the fade sits beside the sleep timer, where they are wanted
+ * mid-song; this is where they are found by somebody looking for them.
  */
 @Composable
 internal fun PlaybackQueueSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {

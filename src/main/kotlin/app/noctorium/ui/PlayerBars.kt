@@ -494,6 +494,10 @@ internal fun IslandPlayerBar(queue: QueueState, playback: PlaybackState, state: 
                                     style = preferences.progressBarStyle,
                                     timeDisplay = preferences.timeDisplay,
                                 )
+                                if (PlayerButton.SPEED in shown) {
+                                    Spacer(Modifier.width(4.dp))
+                                    SpeedButton(playback, state) { menuOpen = it }
+                                }
                                 if (PlayerButton.VOLUME in shown) {
                                     Spacer(Modifier.width(4.dp))
                                     VolumeControl(playback, state) { menuOpen = it }
@@ -926,7 +930,7 @@ private fun Transport(
 }
 
 /**
- * Connect, the sleep timer, the queue, lyrics and volume, in the order Inline has them -- those of them in
+ * Connect, the sleep timer, the queue, lyrics, the speed and volume, in the order Inline has them -- those of them in
  * [shown], which is the layout's own choice at its width less whatever the listener put away.
  */
 @Composable
@@ -939,6 +943,7 @@ private fun BarTools(queue: QueueState, playback: PlaybackState, state: AppState
             Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+    if (PlayerButton.SPEED in shown) SpeedButton(playback, state, size = 34.dp)
     if (PlayerButton.VOLUME in shown) VolumeControl(playback, state)
 }
 

@@ -29,9 +29,9 @@ class PersonalisationUiTest {
     fun `with nothing hidden every layout draws what it always drew`() {
         val all = PlayerButton.entries.toSet()
         assertEquals(all, playerBarButtons(PlayerBarStyle.INLINE, narrow = false, emptySet()))
-        // Stacked never had a lyrics button, and its compact form leaves the volume behind the window edge.
+        // Stacked never had a lyrics button, and its compact form leaves the volume and the speed behind the window edge.
         assertEquals(all - PlayerButton.LYRICS, playerBarButtons(PlayerBarStyle.STACKED, narrow = false, emptySet()))
-        assertEquals(all - PlayerButton.LYRICS - PlayerButton.VOLUME, playerBarButtons(PlayerBarStyle.STACKED, narrow = true, emptySet()))
+        assertEquals(all - PlayerButton.LYRICS - PlayerButton.VOLUME - PlayerButton.SPEED, playerBarButtons(PlayerBarStyle.STACKED, narrow = true, emptySet()))
         listOf(PlayerBarStyle.CENTERED, PlayerBarStyle.SLIM, PlayerBarStyle.SLIM_LEFT, PlayerBarStyle.SPOTLIGHT).forEach { style ->
             assertEquals(all, playerBarButtons(style, narrow = false, emptySet()), "$style, wide")
             assertEquals(all - PlayerButton.LYRICS, playerBarButtons(style, narrow = true, emptySet()), "$style, narrow")
@@ -55,12 +55,13 @@ class PersonalisationUiTest {
     }
 
     @Test
-    fun `the Island opens to the volume, and shows what is under way`() {
-        assertEquals(setOf(PlayerButton.VOLUME), playerBarButtons(PlayerBarStyle.ISLAND, narrow = false, emptySet()))
-        assertEquals(setOf(PlayerButton.VOLUME), playerBarButtons(PlayerBarStyle.ISLAND, narrow = true, emptySet()))
-        assertTrue(playerBarButtons(PlayerBarStyle.ISLAND, narrow = false, setOf(PlayerButton.VOLUME)).isEmpty())
+    fun `the Island opens to the speed and the volume, and shows what is under way`() {
+        val opened = setOf(PlayerButton.SPEED, PlayerButton.VOLUME)
+        assertEquals(opened, playerBarButtons(PlayerBarStyle.ISLAND, narrow = false, emptySet()))
+        assertEquals(opened, playerBarButtons(PlayerBarStyle.ISLAND, narrow = true, emptySet()))
+        assertTrue(playerBarButtons(PlayerBarStyle.ISLAND, narrow = false, opened).isEmpty())
         assertEquals(
-            setOf(PlayerButton.VOLUME, PlayerButton.SLEEP_TIMER),
+            opened + PlayerButton.SLEEP_TIMER,
             playerBarButtons(PlayerBarStyle.ISLAND, narrow = false, emptySet(), setOf(PlayerButton.SLEEP_TIMER)),
         )
     }
@@ -93,7 +94,7 @@ class PersonalisationUiTest {
     fun `hiding some buttons leaves the others where they were`() {
         val hidden = setOf(PlayerButton.SHUFFLE, PlayerButton.SLEEP_TIMER, PlayerButton.DEVICES)
         assertEquals(
-            setOf(PlayerButton.REPEAT, PlayerButton.LIKE, PlayerButton.LYRICS, PlayerButton.QUEUE, PlayerButton.VOLUME),
+            setOf(PlayerButton.REPEAT, PlayerButton.LIKE, PlayerButton.LYRICS, PlayerButton.QUEUE, PlayerButton.VOLUME, PlayerButton.SPEED),
             playerBarButtons(PlayerBarStyle.INLINE, narrow = false, hidden),
         )
         assertTrue(playerBarButtons(PlayerBarStyle.SLIM, narrow = false, PlayerButton.entries.toSet()).isEmpty())
@@ -111,6 +112,16 @@ class PersonalisationUiTest {
         }
         // In use does not add a button the layout never had.
         assertEquals(playerBarButtons(PlayerBarStyle.STACKED, narrow = true, emptySet()), playerBarButtons(PlayerBarStyle.STACKED, narrow = true, emptySet(), PlayerButton.entries.toSet()))
+    }
+
+    /** A song playing faster or slower than recorded keeps its speed button, put away or squeezed out or not. */
+    @Test
+    fun `a speed that is not normal keeps its button`() {
+        val hidden = setOf(PlayerButton.SPEED)
+        assertFalse(PlayerButton.SPEED in playerBarButtons(PlayerBarStyle.INLINE, narrow = false, hidden))
+        assertTrue(PlayerButton.SPEED in playerBarButtons(PlayerBarStyle.INLINE, narrow = false, hidden, setOf(PlayerButton.SPEED)))
+        assertFalse(PlayerButton.SPEED in playerBarButtons(PlayerBarStyle.FLOATING, narrow = true, emptySet(), tight = true))
+        assertTrue(PlayerButton.SPEED in playerBarButtons(PlayerBarStyle.FLOATING, narrow = true, emptySet(), setOf(PlayerButton.SPEED), tight = true))
     }
 
     // --- Home ---

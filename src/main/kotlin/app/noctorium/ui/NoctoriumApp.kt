@@ -2231,11 +2231,11 @@ internal fun ProviderBadge(provider: ProviderType, compact: Boolean = false) {
 }
 
 /**
- * Volume, boost, mute and speed in one popover, so the bar carries a single icon instead of five controls.
+ * Volume, boost and mute in one popover, so the bar carries a single icon instead of four controls. The speed
+ * has a button of its own beside it: see [SpeedButton].
  *
  * The volume and mute reach Spotify's own app when that is what is playing, and Spotify turns its device
- * up and down; the boost and the speed belong to this computer's player, and rest until a song plays here
- * again.
+ * up and down; the boost belongs to this computer's player, and rests until a song plays here again.
  */
 @Composable
 internal fun VolumeControl(
@@ -2300,20 +2300,58 @@ internal fun VolumeControl(
                         modifier = Modifier.height(30.dp),
                     )
                 }
-                // The speed sits with the volume because both are reached for mid-song, and a podcast is the
-                // likeliest reason to want either.
-                HorizontalDivider(Modifier.padding(vertical = 10.dp), color = ink(.08f))
-                SpeedControl(
-                    state.settings.collectAsState().value.preferences.playbackSpeed,
-                    onSpotify,
-                    compact = true,
-                    set = state::setPlaybackSpeed,
-                )
+                if (onSpotify) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Spotify plays this song in its own app, so the boost and the equaliser wait for the next " +
+                            "song played here.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The playback speed, a button of its own on the bar rather than a part of the volume's popover: a dial at
+ * normal speed, and the speed itself -- "1.25×", lit -- otherwise, so a song is never quietly playing fast.
+ * Its popover has the slider, and a way back to normal.
+ *
+ * It rests while Spotify's own app plays the song, since Spotify plays at its own speed, and says so.
+ */
+@Composable
+internal fun SpeedButton(
+    playback: PlaybackState,
+    state: AppState,
+    size: Dp = 36.dp,
+    /** Told when the popover opens and closes, as [VolumeControl] is, for a bar that must stay open while it is. */
+    onOpenChange: (Boolean) -> Unit = {},
+) {
+    var open by remember { mutableStateOf(false) }
+    val reportOpen by rememberUpdatedState(onOpenChange)
+    LaunchedEffect(open) { reportOpen(open) }
+    DisposableEffect(Unit) { onDispose { reportOpen(false) } }
+    val settings by state.settings.collectAsState()
+    val speed = settings.preferences.playbackSpeed
+    val onSpotify = playsOnSpotify(playback.track, settings.spotify)
+    Box {
+        IconButton({ open = true }, Modifier.size(size)) {
+            if (speed != 1f) {
+                Text(speedLabel(speed), color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            } else {
+                Icon(Icons.Default.Speed, "Speed", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        DropdownMenu(open, { open = false }) {
+            Column(Modifier.width(248.dp).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                SpeedControl(speed, onSpotify, compact = true, set = state::setPlaybackSpeed)
                 if (onSpotify) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Spotify plays this song in its own app, so the speed, the boost and the equaliser wait for " +
-                            "the next song played here.",
+                        "Spotify plays this song in its own app, at its own speed. This one waits for the next song " +
+                            "played here.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
                     )
@@ -2467,6 +2505,7 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                             Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                    if (PlayerButton.SPEED in shown) SpeedButton(playback, state, size = 34.dp)
                     if (PlayerButton.VOLUME in shown) VolumeControl(playback, state)
                 }
             }
@@ -2625,6 +2664,7 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                         // Volume, its readout and the boost toggle used to sit permanently in the bar. They now
                         // live behind the speaker icon, which is the only one of the four you reach for often.
                         // A compact bar leaves it off; playerBarButtons says so along with the rest.
+                        if (PlayerButton.SPEED in shown) SpeedButton(playback, state)
                         if (PlayerButton.VOLUME in shown) {
                             VolumeControl(playback, state)
                             Spacer(Modifier.width(4.dp))

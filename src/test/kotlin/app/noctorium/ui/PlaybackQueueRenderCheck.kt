@@ -193,7 +193,10 @@ class PlaybackQueueRenderCheck {
                 state.setPlaybackSpeed(1.25f)
                 state.setSleepFade(30)
                 val playback = PlaybackState(status = PlaybackStatus.PLAYING, track = nearEnd.current, positionMs = 84_000, durationMs = 264_000)
-                drawAfterClicks(folder, "bar-volume-speed.png", state, 1280, 520, listOf(Offset(VOLUME_X, 520 - BAR_FROM_FOOT)), padded = false) {
+                drawAfterClicks(folder, "bar-volume.png", state, 1280, 520, listOf(Offset(VOLUME_X, 520 - BAR_FROM_FOOT)), padded = false) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) { PlayerBar(nearEnd, playback, state) }
+                }
+                drawAfterClicks(folder, "bar-speed.png", state, 1280, 520, listOf(Offset(SPEED_X, 520 - BAR_FROM_FOOT)), padded = false) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) { PlayerBar(nearEnd, playback, state) }
                 }
                 drawAfterClicks(folder, "bar-sleep-timer-fade.png", state, 1280, 760, listOf(Offset(SLEEP_X, 760 - BAR_FROM_FOOT)), padded = false) {
@@ -363,9 +366,10 @@ class PlaybackQueueRenderCheck {
         const val SAVE_X = 960f
         const val SAVE_Y = 210f
 
-        /** The volume and sleep timer buttons on the Inline bar, and how far above the picture's foot they sit. */
+        /** The volume, speed and sleep timer buttons on the Inline bar, and how far above the picture's foot they sit. */
         const val VOLUME_X = 1248f
-        const val SLEEP_X = 1144f
+        const val SPEED_X = 1213f
+        const val SLEEP_X = 1110f
         const val BAR_FROM_FOOT = 37f
     }
 }
