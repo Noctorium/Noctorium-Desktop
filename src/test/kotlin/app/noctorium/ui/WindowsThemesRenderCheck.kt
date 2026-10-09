@@ -18,15 +18,15 @@ import java.io.File
 import kotlin.test.Test
 
 /**
- * Draws the Windows 98 and XP skins to pictures, off screen: the whole window, screen by screen, with made-up
- * music in it -- Home, the library, a playlist, a search, the queue, now playing on each backdrop, Settings and
- * its pages, dialogs and menus, and the player bar in every layout. Off unless a folder is named, like
- * [PlayerBarRenderCheck]; the pictures go to `windows/` under it:
+ * Draws the Windows skins to pictures, off screen -- 98, Noctorium 98 and XP: the whole window, screen by screen,
+ * with made-up music in it -- Home, the library, a playlist, a search, the queue, now playing on each backdrop,
+ * Settings and its pages, dialogs and menus, and the player bar in every layout. Off unless a folder is named,
+ * like [PlayerBarRenderCheck]; the pictures go to `windows/` under it:
  *
  *     ./gradlew :test --tests "*WindowsThemesRenderCheck*" -Dnoctorium.renderBars=build/bars
  *
- * The same tour through Night and Day goes to `standard/`, and is compared picture by picture with an earlier
- * one when that is named too, to show a change to the skins left every other theme where it was:
+ * The same tour through Night and Day goes to `standard/`. Both are compared picture by picture with an earlier
+ * run when that is named too, to show a change to the skins left 98, XP and every other theme where they were:
  *
  *     -Dnoctorium.compareWith=some/earlier/bars
  *
@@ -42,11 +42,17 @@ class WindowsThemesRenderCheck {
             prepare(state)
             // The standard slider of the day was the trackbar, which is what the Material seek bar becomes.
             state.setProgressBarStyle(ProgressBarStyle.MATERIAL)
-            listOf(ThemePreset.WINDOWS_98, ThemePreset.WINDOWS_XP).forEach { theme ->
+            listOf(ThemePreset.WINDOWS_98, ThemePreset.WINDOWS_98_NOCTORIUM, ThemePreset.WINDOWS_XP).forEach { theme ->
                 state.setTheme(theme)
                 val folder = File(root, "windows/${theme.name.lowercase()}")
+                folder.listFiles { file -> file.name.startsWith("diff-") }?.forEach(File::delete)
                 tour(WindowTour(state, folder), state)
                 handled(WindowTour(state, folder), state, xp = theme == ThemePreset.WINDOWS_XP)
+                // A skin drawn from a palette should draw 98 and XP exactly as before; an earlier tour shows it.
+                System.getProperty("noctorium.compareWith")?.let(::File)?.let { earlier ->
+                    val before = File(earlier, "windows/${theme.name.lowercase()}")
+                    if (before.isDirectory) WindowTour.compare(before, folder, File(folder, "comparison.txt"))
+                }
             }
         } finally {
             restore(state)
@@ -154,6 +160,11 @@ class WindowsThemesRenderCheck {
             tour.fill()
             tour.settingsPage("CUSTOMIZATION")
             tour.capture("settings-customization-whole")
+            // Taller again, for the themes at its foot: the Windows ones offered side by side, each in its colours.
+            tour.open(width = 1280, height = 4600)
+            tour.fill()
+            tour.settingsPage("CUSTOMIZATION")
+            tour.capture("settings-themes", crop = Rect.makeXYWH(0f, 3000f, 1280f, 1500f))
         } finally {
             tour.close()
         }
@@ -182,8 +193,9 @@ class WindowsThemesRenderCheck {
     }
 
     /**
-     * The Taskbar's clock shown and put away, under 98, XP and Night; the taskbar's own menu, opened by the right
-     * button over the clock; and the row in Settings that puts the clock away. The pictures go to `clock/`.
+     * The Taskbar's clock shown and put away, under 98, Noctorium 98, XP and Night; the taskbar's own menu, opened
+     * by the right button over the clock; and the row in Settings that puts the clock away. The pictures go to
+     * `clock/`.
      */
     @Test
     fun `the taskbar clock comes and goes`() {
@@ -192,7 +204,7 @@ class WindowsThemesRenderCheck {
         try {
             prepare(state)
             state.setPlayerBarStyle(PlayerBarStyle.TASKBAR)
-            listOf(ThemePreset.WINDOWS_98, ThemePreset.WINDOWS_XP, ThemePreset.NOCTORIUM_NIGHT).forEach { theme ->
+            listOf(ThemePreset.WINDOWS_98, ThemePreset.WINDOWS_98_NOCTORIUM, ThemePreset.WINDOWS_XP, ThemePreset.NOCTORIUM_NIGHT).forEach { theme ->
                 state.setTheme(theme)
                 val tour = WindowTour(state, File(root, "clock/${theme.name.lowercase()}"))
                 try {
