@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.dp
 import app.noctorium.domain.Track
 import app.noctorium.settings.ThemeSkin
+import app.noctorium.settings.Windows98Palette
 import app.noctorium.ui.RemoteArtwork
 
 /*
@@ -90,8 +91,9 @@ fun PictureWindow(track: Track, title: String, modifier: Modifier, footer: (@Com
 }
 
 /**
- * The type Big type sets the song's name in under a Windows skin: Arial Black in plain black under 98, as a poster
- * made on a 98 machine would have it; Luna's Trebuchet at its boldest, in the blue XP headed things with, under XP.
+ * The type Big type sets the song's name in under a Windows skin: Arial Black in the plain writing colour under 98
+ * -- black, as a poster made on a 98 machine would have it, and white on Noctorium 98's black page -- and Luna's
+ * Trebuchet at its boldest, in the blue XP headed things with, under XP.
  */
 @Composable
 fun posterType(): TextStyle = if (skin() == ThemeSkin.WINDOWS_XP) {
@@ -152,12 +154,15 @@ fun SkinCover(track: Track, size: Dp, modifier: Modifier = Modifier) {
     }
 }
 
-/** The colour Windows is asked to paint the title bar it draws above the window, and its writing, under a skin. */
-fun ThemeSkin.caption(): Pair<Int, Int>? = when (this) {
+/**
+ * The colour Windows is asked to paint the title bar it draws above the window, and its writing, under a skin:
+ * under 98 the active title bar's first colour in the [palette] in force, so the window's own bar starts where
+ * the windows inside it do.
+ */
+fun ThemeSkin.caption(palette: Windows98Palette = Windows98Palette.STANDARD): Pair<Int, Int>? = when (this) {
     ThemeSkin.STANDARD -> null
-    ThemeSkin.WINDOWS_98 -> Windows98Caption
+    ThemeSkin.WINDOWS_98 -> palette.title.toInt() to palette.titleText.toInt()
     ThemeSkin.WINDOWS_XP -> WindowsXpCaption
 }
 
-private val Windows98Caption = app.noctorium.settings.Windows98Colours.TITLE.toInt() to app.noctorium.settings.Windows98Colours.TITLE_TEXT.toInt()
 private val WindowsXpCaption = app.noctorium.settings.WindowsXpColours.TITLE.toInt() to app.noctorium.settings.WindowsXpColours.TITLE_TEXT.toInt()

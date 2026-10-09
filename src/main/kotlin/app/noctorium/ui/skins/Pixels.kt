@@ -38,21 +38,22 @@ internal class Bevel(
     val innerLight: Color,
     val innerDark: Color,
 ) {
+    // Each made afresh when asked for, from the palette in force, so a change of theme redraws them in it.
     companion object {
         /** A button at rest, standing out of the face. */
-        val Raised = Bevel(Classic.Highlight, Classic.DarkShadow, Classic.Light, Classic.Shadow)
+        val Raised: Bevel get() = Bevel(Classic.Highlight, Classic.DarkShadow, Classic.Light, Classic.Shadow)
 
         /** A button held down: the raised edge the other way round. */
-        val Pressed = Bevel(Classic.DarkShadow, Classic.Highlight, Classic.Shadow, Classic.Light)
+        val Pressed: Bevel get() = Bevel(Classic.DarkShadow, Classic.Highlight, Classic.Shadow, Classic.Light)
 
         /** A field or a list, set into the face. */
-        val Sunken = Bevel(Classic.Shadow, Classic.Highlight, Classic.DarkShadow, Classic.Light)
+        val Sunken: Bevel get() = Bevel(Classic.Shadow, Classic.Highlight, Classic.DarkShadow, Classic.Light)
 
         /** A window's own frame, which is a raised edge with its outer light a step softer. */
-        val Window = Bevel(Classic.Light, Classic.DarkShadow, Classic.Highlight, Classic.Shadow)
+        val Window: Bevel get() = Bevel(Classic.Light, Classic.DarkShadow, Classic.Highlight, Classic.Shadow)
 
         /** A group box's groove: a sunken line beside a raised one. */
-        val Etched = Bevel(Classic.Shadow, Classic.Highlight, Classic.Highlight, Classic.Shadow)
+        val Etched: Bevel get() = Bevel(Classic.Shadow, Classic.Highlight, Classic.Highlight, Classic.Shadow)
     }
 }
 
@@ -295,8 +296,8 @@ internal object Art {
         add(".....k.....")
     }
 
-    /** The colours of [radio] and [trackbarThumb], by the letters they are written in. */
-    val bevelPalette: Map<Char, Color> = mapOf(
+    /** The colours of [radio] and [trackbarThumb], by the letters they are written in, from the palette in force. */
+    val bevelPalette: Map<Char, Color> get() = mapOf(
         'w' to Classic.Highlight,
         'h' to Classic.Highlight,
         'l' to Classic.Light,

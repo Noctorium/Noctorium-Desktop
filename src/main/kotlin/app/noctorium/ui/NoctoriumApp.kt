@@ -204,14 +204,16 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     val accentTarget = previewAccent
         ?: if (preferences.accent == AccentPreset.ARTWORK) artworkPalette.primary else Color(preferences.resolvedAccent(null))
     val accent by animateColorAsState(accentTarget, if (previewAccent != null) snap() else tween(600), label = "accent")
-    // Beyond the colours: 98's bevels and Luna's blue, for the two Windows themes, and nothing for the rest.
+    // Beyond the colours: 98's bevels and Luna's blue, for the Windows themes, and nothing for the rest -- and the
+    // colours the 98 skin draws them in, 98's own grey or Noctorium 98's night.
     val skin = preferences.themeSkin
+    val classicPalette = preferences.windows98Palette
 
     // The title bar is Windows', not ours, so it has to be told the colour separately — and told again
     // whenever the theme changes, or a switch to a light theme would leave a black strip above it. Under a
     // Windows skin it is that desktop's own title bar colour, with white writing, as the windows inside are.
-    LaunchedEffect(window, theme, skin) {
-        val caption = skin.caption()
+    LaunchedEffect(window, theme, skin, classicPalette) {
+        val caption = skin.caption(classicPalette)
         WindowChrome.applyDarkTitleBar(
             window,
             backgroundArgb = caption?.first ?: Color(theme.background).toArgb(),
@@ -303,7 +305,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     }
 
     val density = LocalDensity.current
-    SkinnedMaterialTheme(skin, theme, accent, preferences.font, preferences.cornerStyle) {
+    SkinnedMaterialTheme(skin, theme, accent, preferences.font, preferences.cornerStyle, classicPalette) {
       // Text size, applied to the density rather than to the typography.
       //
       // Almost every size in this application is written at the call site as a literal `.sp`, so scaling

@@ -19,6 +19,7 @@ import app.noctorium.settings.CornerStyle
 import app.noctorium.settings.FontChoice
 import app.noctorium.settings.ThemeColours
 import app.noctorium.settings.ThemeSkin
+import app.noctorium.settings.Windows98Palette
 import app.noctorium.ui.noctoriumColorScheme
 import app.noctorium.ui.noctoriumShapes
 
@@ -112,8 +113,14 @@ fun SkinnedMaterialTheme(
     accent: Color,
     font: FontChoice,
     corners: CornerStyle,
+    /** What the 98 skin is drawn in: 98's own grey, or Noctorium 98's night. Nothing else reads it. */
+    palette: Windows98Palette = Windows98Palette.STANDARD,
     content: @Composable () -> Unit,
 ) {
+    // Set before anything below reads it, so the whole window is drawn in one palette from its first frame; see
+    // [Classic] for why it is state rather than a CompositionLocal. Setting the palette already in force changes
+    // nothing, so this costs a recomposition only when the theme does.
+    Classic.palette = palette
     val typography = remember(skin, font) { skinTypography(skin, font) }
     MaterialTheme(
         colorScheme = skinColorScheme(skin, theme, accent),
