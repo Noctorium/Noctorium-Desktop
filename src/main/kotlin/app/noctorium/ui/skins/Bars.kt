@@ -195,7 +195,7 @@ fun SkinDisplay(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
         colorScheme = scheme.copy(
             onSurface = Classic.SelectionText,
             onBackground = Classic.SelectionText,
-            onSurfaceVariant = Classic.Light,
+            onSurfaceVariant = Classic.PaleText,
             primary = Classic.TitleEnd,
             surfaceVariant = Classic.DarkShadow,
             background = Classic.DarkShadow,

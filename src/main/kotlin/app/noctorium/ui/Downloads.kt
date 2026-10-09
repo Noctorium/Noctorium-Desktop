@@ -339,7 +339,8 @@ internal fun DownloadButton(track: Track, state: AppState, size: Dp = 36.dp) {
  * does nothing.
  *
  * Drawn on the theme's own raised card rather than as a system tooltip, which would be the one pale thing in
- * a dark window -- except under a Windows skin, where the pale yellow box with its black edge is the window.
+ * a dark window -- except under a Windows skin, where the tooltip box of that desktop is the window: 98's pale
+ * yellow with its black edge, or Noctorium 98's dark one edged in its writing.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

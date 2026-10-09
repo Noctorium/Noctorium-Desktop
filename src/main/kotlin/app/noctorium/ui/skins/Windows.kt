@@ -110,7 +110,7 @@ internal fun TitleBar(
             fontFamily = if (xp) SkinFonts.trebuchet else SkinFonts.classic,
             fontWeight = FontWeight.Bold,
             fontSize = if (xp) 13.sp else 11.sp,
-            color = if (xp) Luna.TitleText else if (active) Classic.TitleText else Classic.Face,
+            color = if (xp) Luna.TitleText else if (active) Classic.TitleText else Classic.InactiveTitleText,
             shadow = if (xp) Shadow(Color(0xFF0A1E7A).copy(alpha = .75f), Offset(1f, 1f), 1.5f) else null,
         ).rasterisedFor(if (xp) 17f else pixels)
         Box(Modifier.weight(1f).clipToBounds()) {
@@ -421,7 +421,10 @@ internal fun TabPage(modifier: Modifier = Modifier, content: @Composable ColumnS
     )
 }
 
-/** A tooltip: the pale yellow box with a thin black edge, and its words in the small type. */
+/**
+ * A tooltip: the tooltip's face with a thin edge in its writing's colour -- 98's pale yellow edged in black --
+ * and its words in the small type.
+ */
 @Composable
 internal fun TooltipBox(text: String) {
     val skin = skin()

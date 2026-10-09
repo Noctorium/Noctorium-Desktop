@@ -58,6 +58,11 @@ internal fun DrawScope.drawSeekBar(
     page: Color = Color.Black,
     /** A card on that page, which a Luna well is filled with where the page is dark. */
     card: Color = Color.DarkGray,
+    /**
+     * The face of the Classic bar's slab: 98's grey, and under the 98 skin the face of the palette in force, so
+     * Noctorium 98's slab is its own violet rather than a grey one standing on it.
+     */
+    classicFace: Color = Color(SeekBar.CLASSIC_FACE),
 ) {
     val centreY = size.height / 2f
     val head = (size.width * fraction.coerceIn(0f, 1f))
@@ -173,7 +178,7 @@ internal fun DrawScope.drawSeekBar(
                 val x = (head - width / 2f).coerceIn(0f, (size.width - width).coerceAtLeast(0f))
                 val y = centreY - tall / 2f
                 // Raised rather than sunk: the same two edges, the other way round.
-                drawRect(Color(SeekBar.CLASSIC_FACE), Offset(x, y), Size(width, tall))
+                drawRect(classicFace, Offset(x, y), Size(width, tall))
                 drawRect(light, Offset(x, y), Size(width, edge))
                 drawRect(light, Offset(x, y), Size(edge, tall))
                 drawRect(Color.Black.copy(alpha = .7f), Offset(x, y + tall - edge), Size(width, edge))

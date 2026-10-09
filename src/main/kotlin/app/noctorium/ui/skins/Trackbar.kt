@@ -23,6 +23,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -33,6 +34,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import app.noctorium.settings.SeekBar
 import app.noctorium.settings.ThemeSkin
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -235,3 +237,11 @@ fun Slider(
     }
     Trackbar(value, onValueChange, modifier, enabled, valueRange, steps, onValueChangeFinished, interactionSource)
 }
+
+/**
+ * The face the Classic seek bar's slab is drawn in: the face of the palette in force under the 98 skin, which is
+ * 98's grey under 98 itself and Noctorium 98's violet under that, and 98's grey under every other theme, where the
+ * slab is a little piece of 98 set into a modern bar.
+ */
+@Composable
+fun classicSlabFace(): Color = if (skin() == ThemeSkin.WINDOWS_98) Classic.Face else Color(SeekBar.CLASSIC_FACE)

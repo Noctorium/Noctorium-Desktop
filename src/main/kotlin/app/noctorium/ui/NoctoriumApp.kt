@@ -168,6 +168,7 @@ import app.noctorium.ui.skins.SkinTrackCard
 import app.noctorium.ui.skins.SkinnedPlayerBar
 import app.noctorium.ui.skins.TaskbarPlayerBar
 import app.noctorium.ui.skins.caption
+import app.noctorium.ui.skins.classicSlabFace
 import app.noctorium.ui.skins.isWindows
 import app.noctorium.ui.skins.scrollingPage
 import app.noctorium.ui.skins.skinShape
@@ -3991,6 +3992,7 @@ private fun DrawnProgressBar(
     val filledColour = MaterialTheme.colorScheme.primary
     val page = MaterialTheme.colorScheme.background
     val card = MaterialTheme.colorScheme.surfaceContainerHigh
+    val classicFace = classicSlabFace()
     val motion = LocalMotion.current
 
     /*
@@ -4111,6 +4113,7 @@ private fun DrawnProgressBar(
                     hot = hot,
                     page = page,
                     card = card,
+                    classicFace = classicFace,
                 )
             }
         }

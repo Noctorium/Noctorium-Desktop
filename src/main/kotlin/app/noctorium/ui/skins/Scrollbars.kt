@@ -226,9 +226,9 @@ private fun DrawScope.drawClassicScrollbar(geometry: Geometry, pressed: Part?) {
     checkerboard(topLeft = Offset(0f, geometry.trackTop), size = Size(w, geometry.trackLength))
     // The part of the track being paged through goes dark, as it did while the mouse was held on it.
     when (pressed) {
-        Part.PAGE_BACK -> checkerboard(Classic.Text, Classic.Shadow, Offset(0f, geometry.trackTop), Size(w, thumbTop - geometry.trackTop))
+        Part.PAGE_BACK -> checkerboard(Classic.DarkShadow, Classic.Shadow, Offset(0f, geometry.trackTop), Size(w, thumbTop - geometry.trackTop))
         Part.PAGE_FORWARD -> checkerboard(
-            Classic.Text,
+            Classic.DarkShadow,
             Classic.Shadow,
             Offset(0f, thumbTop + thumbLength),
             Size(w, geometry.trackTop + geometry.trackLength - thumbTop - thumbLength),

@@ -123,7 +123,7 @@ private fun Gripper() {
 
 /**
  * The square at the end of Internet Explorer's toolbar where its logo turned while a page loaded -- here
- * Noctorium's mark, set into the face.
+ * Noctorium's mark, on the black of the darkest shadow, set into the face.
  */
 @Composable
 private fun Throbber() {
@@ -131,7 +131,7 @@ private fun Throbber() {
         Modifier
             .size(48.dp, 40.dp)
             .drawBehind {
-                drawRect(Classic.Text)
+                drawRect(Classic.DarkShadow)
                 thinSunken()
             },
         contentAlignment = Alignment.Center,
