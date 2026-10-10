@@ -37,7 +37,7 @@ import app.noctorium.ui.skins.DropdownMenu
 import app.noctorium.ui.skins.DropdownMenuItem
 import app.noctorium.ui.skins.FilterChip
 import app.noctorium.ui.skins.HorizontalDivider
-import androidx.compose.material3.Icon
+import app.noctorium.ui.icons.Icon
 import app.noctorium.ui.skins.IconButton
 import androidx.compose.material3.MaterialTheme
 import app.noctorium.ui.skins.RadioButton

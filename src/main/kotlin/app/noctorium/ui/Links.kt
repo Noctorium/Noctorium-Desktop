@@ -41,7 +41,7 @@ import app.noctorium.ui.skins.skinShape
 import app.noctorium.ui.skins.skinned
 import androidx.compose.material3.CircularProgressIndicator
 import app.noctorium.ui.skins.FilledTonalButton
-import androidx.compose.material3.Icon
+import app.noctorium.ui.icons.Icon
 import app.noctorium.ui.skins.IconButton
 import app.noctorium.ui.skins.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme

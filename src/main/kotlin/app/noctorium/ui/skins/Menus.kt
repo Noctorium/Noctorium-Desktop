@@ -239,7 +239,7 @@ fun MenuCheck(on: Boolean) {
     val skin = skin()
     if (!skin.isWindows) {
         Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-            if (on) androidx.compose.material3.Icon(Icons.Default.Check, null, Modifier.size(20.dp))
+            if (on) app.noctorium.ui.icons.Icon(Icons.Default.Check, null, Modifier.size(20.dp))
         }
         return
     }

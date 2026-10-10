@@ -173,6 +173,10 @@ import app.noctorium.ui.skins.isWindows
 import app.noctorium.ui.skins.scrollingPage
 import app.noctorium.ui.skins.skinShape
 import app.noctorium.ui.skins.skinned
+// Material's icon, drawn from the icon set in force: see IconSets.
+import app.noctorium.ui.icons.Icon
+import app.noctorium.ui.icons.LocalIconSet
+import app.noctorium.ui.icons.onDesktop
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -318,6 +322,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
           LocalTyping provides typing,
           LocalDensity provides Density(density.density, density.fontScale * preferences.textSize.scale),
           LocalMotion provides preferences.animations,
+          LocalIconSet provides preferences.iconSet.onDesktop(),
       ) {
         if (shortcutsOpen) ShortcutsSheet { shortcutsOpen = false }
         // The launch check has an answer nobody asked for; this is where it gets to say so once.
@@ -4597,6 +4602,8 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
         }
 
         ColourSettingsCard(preferences, state)
+
+        IconSetCard(preferences, state)
 
         SettingsPanelCard {
             CardHeading(Icons.Default.PlayCircle, "Playback")

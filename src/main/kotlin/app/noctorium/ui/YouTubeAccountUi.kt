@@ -27,7 +27,7 @@ import app.noctorium.ui.skins.AlertDialog
 import app.noctorium.ui.skins.Button
 import androidx.compose.material3.CircularProgressIndicator
 import app.noctorium.ui.skins.FilterChip
-import androidx.compose.material3.Icon
+import app.noctorium.ui.icons.Icon
 import androidx.compose.material3.MaterialTheme
 import app.noctorium.ui.skins.OutlinedTextField
 import app.noctorium.ui.skins.RadioButton

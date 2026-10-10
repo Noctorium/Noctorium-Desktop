@@ -62,7 +62,7 @@ import app.noctorium.ui.skins.skinCorners
 import app.noctorium.ui.skins.skinShape
 import app.noctorium.ui.skins.skinned
 import app.noctorium.ui.skins.HorizontalDivider
-import androidx.compose.material3.Icon
+import app.noctorium.ui.icons.Icon
 import app.noctorium.ui.skins.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme

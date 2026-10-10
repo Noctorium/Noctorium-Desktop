@@ -54,3 +54,11 @@ Two groups of tests are off unless asked for, because they need the network and 
 jpackage cannot cross-build, which is why releases are made by
 [Noctorium-Installer](https://github.com/Noctorium/Noctorium-Installer) with a runner per platform. That is
 also where the installers are published and what the in-app updater watches.
+
+## Icons
+
+The icon sets offered in Settings › Customization are Compose's Material icons — Standard (Material's filled
+set, as Noctorium has always drawn), Outlined, Rounded, Sharp and Two-tone — under the Apache License 2.0, and
+**Line**, drawn from [Lucide](https://lucide.dev)'s shapes (lucide-react 1.50.0) under the ISC licence, with the
+icons Lucide took from [Feather](https://feathericons.com) under the MIT licence. Both notices are reproduced in
+`src/main/kotlin/app/noctorium/ui/icons/LineIcons.kt`, where the shapes are kept.

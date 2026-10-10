@@ -21,7 +21,7 @@ import app.noctorium.ui.skins.scrollingPage
 import app.noctorium.ui.skins.skinned
 import app.noctorium.ui.skins.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
+import app.noctorium.ui.icons.Icon
 import app.noctorium.ui.skins.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import app.noctorium.ui.skins.OutlinedButton

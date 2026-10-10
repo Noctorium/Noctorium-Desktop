@@ -29,7 +29,7 @@ import app.noctorium.ui.skins.HorizontalDivider
 import app.noctorium.ui.skins.PageCard
 import app.noctorium.ui.skins.TooltipBox
 import app.noctorium.ui.skins.skinned
-import androidx.compose.material3.Icon
+import app.noctorium.ui.icons.Icon
 import app.noctorium.ui.skins.IconButton
 import app.noctorium.ui.skins.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
