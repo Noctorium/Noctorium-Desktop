@@ -18,6 +18,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
@@ -177,8 +178,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
+/**
+ * The whole window. [desktop] is what only the application around it has: the global shortcuts it registers, a
+ * request for the quick search bar from one of them, and the window being shown and hidden.
+ */
 @Composable
-fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: java.awt.Window? = null) {
+fun NoctoriumApp(
+    appState: AppState = remember { desktopAppState() },
+    window: java.awt.Window? = null,
+    desktop: DesktopHooks = DesktopHooks(),
+) {
     val ui by appState.ui.collectAsState()
     val queue by appState.queue.state.collectAsState()
     val playback by appState.playback.collectAsState()
@@ -228,6 +237,10 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     LaunchedEffect(Unit) { PlaybackToolInstaller.ensureReady() }
 
     var shortcutsOpen by remember { mutableStateOf(false) }
+    // The quick search bar over the window, on Ctrl+F (⌘F on a Mac), or asked for by its global shortcut while
+    // Noctorium was already the window in front.
+    var quickSearchOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(desktop.quickSearchAsked) { if (desktop.quickSearchAsked > 0) quickSearchOpen = true }
     // Bumped by the shortcut that means "search"; the search box watches it and takes the caret. A
     // counter rather than a flag, so pressing it twice while already there works the second time too.
     var focusSearch by remember { mutableStateOf(0) }
@@ -237,6 +250,8 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     // an ordinary letter reaching here -- typing "no surprises" into the search box put the words in and
     // toggled shuffle three times on the way past, which is not something either piece of code admits to.
     val typing = remember { mutableStateOf(false) }
+    // The listener's keys, with what they changed in Settings on top of the ones Noctorium comes with.
+    val shortcuts = remember(preferences.desktop.shortcuts) { InAppShortcuts.from(preferences.desktop.shortcuts, isMacPlatform) }
 
     fun handle(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown) return false
@@ -246,27 +261,16 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
             shift = event.isShiftPressed,
             alt = event.isAltPressed,
             typing = typing.value,
+            meta = event.isMetaPressed,
+            shortcuts = shortcuts,
         ) ?: return false
+        if (appState.perform(shortcut)) return true
         when (shortcut) {
-            Shortcut.PlayPause -> appState.togglePlayback()
-            Shortcut.Next -> appState.next()
-            Shortcut.Previous -> appState.previous()
-            is Shortcut.Seek -> {
-                val duration = playback.durationMs
-                if (duration > 0) {
-                    appState.seekTo((playback.positionMs + shortcut.deltaMs).coerceIn(0, duration))
-                }
-            }
-            is Shortcut.Volume -> appState.setVolume((playback.volume + shortcut.delta).coerceIn(0f, 1f))
-            Shortcut.Mute -> appState.toggleMute()
-            Shortcut.Shuffle -> appState.toggleShuffle()
-            Shortcut.Repeat -> appState.cycleRepeat()
-            Shortcut.Like -> queue.current?.let(appState::toggleLike)
-            is Shortcut.Go -> appState.navigate(shortcut.destination)
             Shortcut.Search -> {
                 appState.navigate(Destination.SEARCH)
                 focusSearch++
             }
+            Shortcut.QuickSearch -> quickSearchOpen = true
             Shortcut.Help -> shortcutsOpen = true
             // The clipboard read at the moment of pressing, and the link screen shown so what happened to
             // it is visible: playing, or why not.
@@ -274,6 +278,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                 appState.openLink(copied)
                 appState.navigate(Destination.LINK)
             }
+            Shortcut.ToggleWindow -> desktop.toggleWindow?.invoke() ?: return false
             // The sheet first, and otherwise the caret: having typed in a box, there is no way back to
             // the keyboard without reaching for the mouse, which rather defeats the point of all this.
             // Escape puts focus back where the shortcuts live.
@@ -283,18 +288,26 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                 // Nothing of ours is open, so it belongs to whatever else is listening.
                 else -> return false
             }
+            // Answered by perform() above.
+            else -> return false
         }
         return true
     }
 
-    // Something has to hold focus for a key to arrive at all, and on a fresh window nothing does.
-    LaunchedEffect(Unit) { runCatching { keyboard.requestFocus() } }
+    // Something has to hold focus for a key to arrive at all, and on a fresh window nothing does -- nor once the
+    // box that had it has gone with the page it was on, which left Ctrl+F doing nothing after a search. A screen
+    // that wants the caret in a box of its own asks for it after this.
+    LaunchedEffect(ui.destination) {
+        typing.value = false
+        runCatching { keyboard.requestFocus() }
+    }
 
     // The keys on the keyboard itself, which reach Noctorium whether or not it is the window in front.
     // Only play, pause and the two track keys: those are the ones somebody presses without looking, and
     // they are the ones an application may reasonably take from the whole machine.
-    DisposableEffect(Unit) {
-        val grab = MediaKeys.start { shortcut ->
+    // Only for a real window: a picture of the window drawn off screen takes no keys from the machine it is drawn on.
+    DisposableEffect(window) {
+        val grab = if (window == null) null else MediaKeys.start { shortcut ->
             when (shortcut) {
                 Shortcut.PlayPause -> appState.togglePlayback()
                 Shortcut.Next -> appState.next()
@@ -318,8 +331,17 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
           LocalTyping provides typing,
           LocalDensity provides Density(density.density, density.fontScale * preferences.textSize.scale),
           LocalMotion provides preferences.animations,
+          LocalGlobalShortcuts provides desktop.globalShortcuts,
       ) {
-        if (shortcutsOpen) ShortcutsSheet { shortcutsOpen = false }
+        if (shortcutsOpen) ShortcutsSheet(shortcuts) { shortcutsOpen = false }
+        if (quickSearchOpen) {
+            // Over the whole window, and holding the keyboard while it is open; closing hands the keyboard back
+            // to the window, where the shortcuts listen.
+            QuickSearchPopup(appState) {
+                quickSearchOpen = false
+                runCatching { keyboard.requestFocus() }
+            }
+        }
         // The launch check has an answer nobody asked for; this is where it gets to say so once.
         UpdatePrompt(appState)
         Surface(
@@ -1714,13 +1736,15 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
             value = ui.searchQuery,
             onValueChange = state::search,
             leadingIcon = { Icon(Icons.Default.Search, null) },
-            placeholder = { Text("Artists, songs, albums and playlists") },
+            // A bang -- !sc, !ytm -- sends this one search to its service, and says so beside the words.
+            prefix = ui.searchBang?.let { bang -> { Row(verticalAlignment = Alignment.CenterVertically) { BangChipView(BangChip(bang.typed, serviceName(bang.mode), bang.mode), compact = true); Spacer(Modifier.width(8.dp)) } } },
+            placeholder = { Text("Artists, songs, albums and playlists, or !ytm, !sc, !sp, !bc, !vk for one service") },
             singleLine = true,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth().widthIn(max = 860.dp).focusRequester(box).tracksTyping(),
         )
         Spacer(Modifier.height(12.dp))
-        SearchModePicker(ui.searchMode, state::setSearchMode)
+        SearchModePicker(ui.activeSearchMode, state::setSearchMode)
         Spacer(Modifier.height(18.dp))
         val settings by state.settings.collectAsState()
         when {
