@@ -138,6 +138,30 @@ internal fun Trackbar(
     }
 }
 
+/**
+ * The Slider seek bar under a Windows skin: the trackbar, with the song's place filled into its channel -- 98's
+ * selection colour, XP's progress green -- up to the pointer standing at it, which XP lights while it is pointed at
+ * or dragged. Drawn rather than built from [Trackbar], since the seek bar's gestures are its own.
+ */
+internal fun DrawScope.drawTrackbarSeek(skin: ThemeSkin, fraction: Float, showHead: Boolean, hot: Boolean) {
+    val p = pixel
+    val thumbWidth = THUMB_WIDTH * p
+    val thumbHeight = THUMB_HEIGHT * p
+    val top = floor((size.height - thumbHeight) / 2f / p) * p
+    val channel = top + CHANNEL_FROM_TOP * p
+    val x = floor((fraction.coerceIn(0f, 1f) * (size.width - thumbWidth)) / p) * p
+    val reached = x + thumbWidth / 2f
+    if (skin == ThemeSkin.WINDOWS_XP) {
+        lunaGroove(channel)
+        if (reached > p * 3) drawRoundRect(Luna.Progress, Offset(p * 3, channel + p), Size(reached - p * 3, p * 2), CornerRadius(p))
+        if (showHead) lunaThumb(x, top, enabled = true, lit = hot)
+    } else {
+        classicChannel(channel)
+        if (reached > p * 3) drawRect(Classic.Selection, Offset(p * 3, channel + p), Size(reached - p * 3, p * 2))
+        if (showHead) pixelArt(Art.trackbarThumb, Art.bevelPalette, x, top)
+    }
+}
+
 /** 98's channel: four pixels deep, sunk the way a field is, and running past the pointer's reach at each end. */
 private fun DrawScope.classicChannel(y: Float) {
     val p = pixel

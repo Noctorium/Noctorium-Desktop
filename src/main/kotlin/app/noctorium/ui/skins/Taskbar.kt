@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -172,13 +173,13 @@ fun TaskbarPlayerBar(queue: QueueState, playback: PlaybackState, state: AppState
         ) {
             val narrow = maxWidth < 900.dp
             val cramped = maxWidth < 680.dp
-            val shown = playerBarButtons(PlayerBarStyle.TASKBAR, narrow, preferences.desktop.hiddenPlayerButtons, playerButtonsInUse(state))
+            val shown = playerBarButtons(PlayerBarStyle.TASKBAR, narrow, preferences.desktop, playerButtonsInUse(state))
             Row(
                 Modifier.fillMaxSize().padding(horizontal = if (skin.isWindows) 0.dp else 10.dp, vertical = if (skin == ThemeSkin.WINDOWS_98) 3.dp else 0.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 StartButton(skin, open = destination == Destination.NOW_PLAYING) { state.navigate(Destination.NOW_PLAYING) }
-                QuickLaunch(skin, queue, playback, state)
+                QuickLaunch(skin, queue, playback, state, shown)
                 if (!cramped) {
                     SongButton(skin, current, Modifier.weight(1f, fill = false).widthIn(max = 280.dp)) {
                         if (current != null) state.navigate(Destination.NOW_PLAYING)
@@ -327,7 +328,7 @@ private fun StartButton(skin: ThemeSkin, open: Boolean, action: () -> Unit) {
 
 /** Previous, play and next as a Quick Launch toolbar: small, flat, raised when pointed at. */
 @Composable
-private fun QuickLaunch(skin: ThemeSkin, queue: QueueState, playback: PlaybackState, state: AppState) {
+private fun QuickLaunch(skin: ThemeSkin, queue: QueueState, playback: PlaybackState, state: AppState, shown: Set<PlayerButton>) {
     val button = if (skin.isWindows) 24.dp else 38.dp
     val icon = if (skin.isWindows) 16.dp else 22.dp
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (skin.isWindows) 1.dp else 2.dp)) {
@@ -335,6 +336,9 @@ private fun QuickLaunch(skin: ThemeSkin, queue: QueueState, playback: PlaybackSt
         IconButton(state::previous, Modifier.size(button)) { Icon(Icons.Default.SkipPrevious, "Previous track", Modifier.size(icon)) }
         IconButton(state::togglePlayback, Modifier.size(button), enabled = queue.current != null) {
             PlayPauseIcon(playback.isPlaying, Modifier.size(icon))
+        }
+        if (PlayerButton.STOP in shown) {
+            IconButton(state::stop, Modifier.size(button), enabled = queue.current != null) { Icon(Icons.Default.Stop, "Stop", Modifier.size(icon)) }
         }
         IconButton(state::next, Modifier.size(button), enabled = queue.hasNext) { Icon(Icons.Default.SkipNext, "Next track", Modifier.size(icon)) }
         Separator(skin)

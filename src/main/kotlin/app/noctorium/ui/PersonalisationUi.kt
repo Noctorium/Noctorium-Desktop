@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -110,6 +111,7 @@ import app.noctorium.settings.LyricsSize
 import app.noctorium.settings.NoctoriumPreferences
 import app.noctorium.settings.PlayerBarStyle
 import app.noctorium.settings.PlayerButton
+import app.noctorium.settings.DesktopPreferences
 import app.noctorium.settings.contrastRatio
 import app.noctorium.settings.parseHexColour
 import app.noctorium.settings.toHexColour
@@ -146,6 +148,11 @@ import kotlin.math.roundToInt
  * [tight] is narrower again, where Floating and Display give up shuffle, repeat and an idle sleep timer as well,
  * so the song keeps its room. The Island has the transport and the song and opens to the volume, and nothing
  * more but a timer running or music playing elsewhere, which every bar shows.
+ *
+ * A button that came after the bars were designed -- Stop -- is opt-in ([PlayerButton.optIn]): drawn only once
+ * it is in [shown], the buttons asked for, so nobody's bar grows a button overnight. The Toolbar is built around
+ * Stop and draws it unless it is put away, and draws the row a desktop player's toolbar has -- Stop, repeat,
+ * shuffle and the volume -- with only what is under way beside them.
  */
 internal fun playerBarButtons(
     style: PlayerBarStyle,
@@ -153,8 +160,12 @@ internal fun playerBarButtons(
     hidden: Set<PlayerButton>,
     inUse: Set<PlayerButton> = emptySet(),
     tight: Boolean = false,
+    shown: Set<PlayerButton> = emptySet(),
 ): Set<PlayerButton> {
-    val drawn = PlayerButton.entries.toMutableSet()
+    // Put away is decided last, below, where what is in use is kept whatever was put away.
+    val drawn = PlayerButton.entries
+        .filter { it.isShown(hidden = emptySet(), shown = shown, partOfLayout = style == PlayerBarStyle.TOOLBAR) }
+        .toMutableSet()
     when (style) {
         PlayerBarStyle.STACKED -> {
             drawn -= PlayerButton.LYRICS
@@ -169,11 +180,29 @@ internal fun playerBarButtons(
         PlayerBarStyle.ISLAND -> drawn.retainAll(setOf(PlayerButton.SPEED, PlayerButton.VOLUME) + (inUse intersect setOf(PlayerButton.SLEEP_TIMER, PlayerButton.DEVICES)))
         // The taskbar carries the rest as tray icons, and gives up the two that only lead elsewhere when narrow.
         PlayerBarStyle.TASKBAR -> if (narrow) drawn -= setOf(PlayerButton.LYRICS, PlayerButton.QUEUE)
+        // The add button, the transport and the time are always there; narrow, the volume stays and the repeat
+        // and shuffle that lead it go, as the song's name has already.
+        PlayerBarStyle.TOOLBAR -> {
+            drawn.retainAll(TOOLBAR_BUTTONS + (inUse intersect setOf(PlayerButton.SLEEP_TIMER, PlayerButton.DEVICES, PlayerButton.SPEED)))
+            if (tight) drawn -= setOf(PlayerButton.SHUFFLE, PlayerButton.REPEAT)
+        }
     }
     // A button showing something under way stays, put away or not: a sleep timer counting down, or the music
     // playing on another device, is not something to lose sight of because its button was hidden.
     return drawn - (hidden - inUse)
 }
+
+/** The optional buttons on the Toolbar, the row a desktop player's toolbar carries. */
+internal val TOOLBAR_BUTTONS: Set<PlayerButton> = setOf(PlayerButton.STOP, PlayerButton.REPEAT, PlayerButton.SHUFFLE, PlayerButton.VOLUME)
+
+/** [playerBarButtons] for the listener's own choices: what they put away and the opt-in buttons they asked for. */
+internal fun playerBarButtons(
+    style: PlayerBarStyle,
+    narrow: Boolean,
+    desktop: DesktopPreferences,
+    inUse: Set<PlayerButton>,
+    tight: Boolean = false,
+): Set<PlayerButton> = playerBarButtons(style, narrow, desktop.hiddenPlayerButtons, inUse, tight, desktop.shownPlayerButtons)
 
 /** The buttons showing something under way just now, which [playerBarButtons] keeps whatever was put away. */
 @Composable
@@ -200,6 +229,7 @@ internal fun PlayerButton.icon(): ImageVector = when (this) {
     PlayerButton.VOLUME -> Icons.AutoMirrored.Filled.VolumeUp
     PlayerButton.SPEED -> Icons.Default.Speed
     PlayerButton.DEVICES -> Icons.Default.Devices
+    PlayerButton.STOP -> Icons.Default.Stop
 }
 
 // --- Home ---

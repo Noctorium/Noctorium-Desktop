@@ -17,7 +17,10 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import app.noctorium.settings.ProgressBarStyle
 import app.noctorium.settings.SeekBar
+import app.noctorium.settings.ThemeSkin
 import app.noctorium.settings.WindowsXpColours
+import app.noctorium.ui.skins.drawTrackbarSeek
+import app.noctorium.ui.skins.isWindows
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -63,6 +66,8 @@ internal fun DrawScope.drawSeekBar(
      * Noctorium 98's slab is its own violet rather than a grey one standing on it.
      */
     classicFace: Color = Color(SeekBar.CLASSIC_FACE),
+    /** The skin in force: under a Windows skin the Slider is that desktop's own trackbar, with the song's place filled in. */
+    skin: ThemeSkin = ThemeSkin.STANDARD,
 ) {
     val centreY = size.height / 2f
     val head = (size.width * fraction.coerceIn(0f, 1f))
@@ -315,7 +320,33 @@ internal fun DrawScope.drawSeekBar(
         }
 
         ProgressBarStyle.LUNA -> drawLuna(head, centreY, showHead, hot, lightPage, card)
+
+        ProgressBarStyle.SLIDER -> if (skin.isWindows) {
+            drawTrackbarSeek(skin, fraction, showHead, hot)
+        } else {
+            drawSlider(head, centreY, showHead, hot, track, filled, card)
+        }
     }
+}
+
+/**
+ * A desktop music player's slider: a thin groove with rounded ends, the accent along it as far as the song has
+ * got, and a small round handle -- a ring of the accent round the card's colour, so it stands on a pale page and a
+ * dark one alike, filled with the accent while the pointer is on it or dragging it.
+ */
+private fun DrawScope.drawSlider(head: Float, centreY: Float, showHead: Boolean, hot: Boolean, track: Color, filled: Color, card: Color) {
+    val groove = SeekBar.SLIDER_GROOVE_DP.dp.toPx()
+    val radius = SeekBar.SLIDER_HANDLE_RADIUS_DP.dp.toPx()
+    val corner = CornerRadius(groove / 2f)
+    drawRoundRect(track, Offset(0f, centreY - groove / 2f), Size(size.width, groove), corner)
+    if (head > 0f) drawRoundRect(filled, Offset(0f, centreY - groove / 2f), Size(head.coerceAtLeast(groove), groove), corner)
+    if (!showHead) return
+    // Kept whole on the bar at either end, as a desktop's slider keeps its handle inside its groove.
+    val centre = Offset(head.coerceIn(radius, (size.width - radius).coerceAtLeast(radius)), centreY)
+    // A soft shadow under it, as a desktop's handle stood a little off its groove.
+    drawCircle(Color.Black.copy(alpha = .22f), radius + 1.dp.toPx(), centre + Offset(0f, .5.dp.toPx()))
+    drawCircle(if (hot) filled.mix(card, .25f) else card, radius, centre)
+    drawCircle(filled, radius - .75.dp.toPx(), centre, style = Stroke(1.5.dp.toPx()))
 }
 
 /** The neon's glow: how far each stroke spreads, as a share of the whole glow, and how strong it is. */

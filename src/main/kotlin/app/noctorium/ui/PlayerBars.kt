@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
@@ -145,7 +146,7 @@ internal fun CenteredPlayerBar(queue: QueueState, playback: PlaybackState, state
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val middle = (maxWidth * .42f).coerceIn(300.dp, 560.dp)
             val narrow = maxWidth < 900.dp
-            val shown = playerBarButtons(PlayerBarStyle.CENTERED, narrow, preferences.desktop.hiddenPlayerButtons, playerButtonsInUse(state))
+            val shown = playerBarButtons(PlayerBarStyle.CENTERED, narrow, preferences.desktop, playerButtonsInUse(state))
             Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     BarCover(current, 52.dp, 10.dp, state)
@@ -207,7 +208,7 @@ internal fun SlimPlayerBar(queue: QueueState, playback: PlaybackState, state: Ap
                 val shown = playerBarButtons(
                     if (controlsFirst) PlayerBarStyle.SLIM_LEFT else PlayerBarStyle.SLIM,
                     narrow,
-                    preferences.desktop.hiddenPlayerButtons,
+                    preferences.desktop,
                     playerButtonsInUse(state),
                 )
                 Row(
@@ -276,7 +277,7 @@ internal fun SpotlightPlayerBar(queue: QueueState, playback: PlaybackState, stat
         ) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val narrow = maxWidth < 900.dp
-                val shown = playerBarButtons(PlayerBarStyle.SPOTLIGHT, narrow, preferences.desktop.hiddenPlayerButtons, playerButtonsInUse(state))
+                val shown = playerBarButtons(PlayerBarStyle.SPOTLIGHT, narrow, preferences.desktop, playerButtonsInUse(state))
                 Row(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     BarCover(current, 92.dp, 14.dp, state)
                     Spacer(Modifier.width(18.dp))
@@ -346,7 +347,7 @@ internal fun FloatingPlayerBar(queue: QueueState, playback: PlaybackState, state
         val shown = playerBarButtons(
             PlayerBarStyle.FLOATING,
             narrow,
-            preferences.desktop.hiddenPlayerButtons,
+            preferences.desktop,
             playerButtonsInUse(state),
             tight = tight,
         )
@@ -431,7 +432,7 @@ internal fun IslandPlayerBar(queue: QueueState, playback: PlaybackState, state: 
     val atTop = preferences.playerBarPosition == PlayerBarPosition.TOP
     val backdrop = LocalGlassBackdrop.current
     val moving = LocalMotion.current
-    val shown = playerBarButtons(PlayerBarStyle.ISLAND, narrow = false, preferences.desktop.hiddenPlayerButtons, playerButtonsInUse(state))
+    val shown = playerBarButtons(PlayerBarStyle.ISLAND, narrow = false, preferences.desktop, playerButtonsInUse(state))
 
     var hovered by remember { mutableStateOf(false) }
     var held by remember { mutableStateOf(false) }
@@ -569,7 +570,7 @@ internal fun DisplayPlayerBar(queue: QueueState, playback: PlaybackState, state:
             val shown = playerBarButtons(
                 PlayerBarStyle.DISPLAY,
                 narrow,
-                preferences.desktop.hiddenPlayerButtons,
+                preferences.desktop,
                 playerButtonsInUse(state),
                 tight = tight,
             )
@@ -906,6 +907,12 @@ private fun Transport(
                 CircularProgressIndicator(Modifier.size(playSize * .42f), strokeWidth = 2.dp)
             } else {
                 PlayPauseIcon(playback.isPlaying, Modifier.size(playSize * .56f))
+            }
+        }
+        // Stop, once asked for: back to the start of the song, paused. See AppState.stop.
+        if (PlayerButton.STOP in shown) {
+            IconButton(state::stop, Modifier.size(buttonSize), enabled = queue.current != null) {
+                Icon(Icons.Default.Stop, "Stop", Modifier.size(buttonSize * .52f))
             }
         }
         // Lit while next leads somewhere, autoplay's lined-up songs included: see QueueState.hasNext.
@@ -1263,6 +1270,34 @@ internal fun PlayerBarPicture(style: PlayerBarStyle, selected: Boolean, modifier
                 drawRoundRect(writing.copy(alpha = .08f), Offset(w * .8f, cy - h * .055f), Size(w * .18f, h * .11f), CornerRadius(h * .015f))
                 tools(w * .865f, cy, 2)
                 bar(w * .9f, cy, w * .05f, alpha = .5f)
+            }
+            PlayerBarStyle.TOOLBAR -> {
+                val top = strip(h * .15f)
+                val cy = top + h * .075f
+                // A row of flat buttons, each its own small glyph, play among them in the accent: add, previous,
+                // play, pause, stop and next.
+                val step = w * .052f
+                repeat(6) { i ->
+                    val x = w * .045f + i * step
+                    val side = h * .05f
+                    drawRoundRect(
+                        if (i == 2) accent.copy(alpha = if (selected) .95f else .75f) else writing.copy(alpha = .45f),
+                        Offset(x - side / 2, cy - side / 2),
+                        Size(side, side),
+                        CornerRadius(side * .2f),
+                    )
+                }
+                // The song, small, then the slider: a thin groove with a round handle, and the time after it.
+                cover(w * .36f, cy, h * .07f)
+                bar(w * .36f + h * .1f, cy, w * .1f, alpha = .5f)
+                val grooveLeft = w * .54f
+                val grooveLength = w * .22f
+                bar(grooveLeft, cy, grooveLength, alpha = .2f, thick = stroke * .8f)
+                bar(grooveLeft, cy, grooveLength * .4f, alpha = 1f, thick = stroke * .8f, colour = accent)
+                drawCircle(if (lightPage) Color.White else writing.copy(alpha = .3f), h * .028f, Offset(grooveLeft + grooveLength * .4f, cy))
+                drawCircle(accent, h * .028f, Offset(grooveLeft + grooveLength * .4f, cy), style = Stroke(h * .01f))
+                bar(w * .78f, cy, w * .06f, alpha = .45f)
+                tools(w * .955f, cy, 3)
             }
         }
     }

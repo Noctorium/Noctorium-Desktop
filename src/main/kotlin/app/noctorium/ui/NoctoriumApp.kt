@@ -2393,7 +2393,7 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
                 val narrow = maxWidth < 900.dp
                 val tight = maxWidth < 680.dp
-                val shown = playerBarButtons(PlayerBarStyle.INLINE, narrow, preferences.desktop.hiddenPlayerButtons, inUse, tight)
+                val shown = playerBarButtons(PlayerBarStyle.INLINE, narrow, preferences.desktop, inUse, tight)
                 Row(
                     Modifier.fillMaxSize().padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -2424,6 +2424,10 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                         } else {
                             PlayPauseIcon(playback.isPlaying, Modifier.size(24.dp))
                         }
+                    }
+                    // Stop, once asked for: back to the start of the song, paused. See AppState.stop.
+                    if (PlayerButton.STOP in shown) {
+                        IconButton(state::stop, Modifier.size(34.dp), enabled = current != null) { Icon(Icons.Default.Stop, "Stop", Modifier.size(19.dp)) }
                     }
                     // Lit while next leads somewhere, autoplay's lined-up songs included: see QueueState.hasNext.
                     IconButton(state::next, Modifier.size(34.dp), enabled = queue.hasNext) {
@@ -2551,6 +2555,8 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
         PlayerBarStyle.ISLAND -> return IslandPlayerBar(queue, playback, state)
         PlayerBarStyle.DISPLAY -> return DisplayPlayerBar(queue, playback, state)
         PlayerBarStyle.TASKBAR -> return TaskbarPlayerBar(queue, playback, state)
+        // Inline's row until the Toolbar has a bar of its own.
+        PlayerBarStyle.TOOLBAR -> return InlinePlayerBar(queue, playback, state)
         // Stacked is the one written out below, and was the only layout before there was a choice.
         PlayerBarStyle.STACKED -> Unit
     }
@@ -2571,7 +2577,7 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val compact = maxWidth < 760.dp
-            val shown = playerBarButtons(PlayerBarStyle.STACKED, narrow = compact, playerPreferences.desktop.hiddenPlayerButtons, playerButtonsInUse(state))
+            val shown = playerBarButtons(PlayerBarStyle.STACKED, narrow = compact, playerPreferences.desktop, playerButtonsInUse(state))
             Column {
                 // As above: the rule marks the edge the content is on.
                 if (!stackedAtTop && !LocalInGlass.current) HorizontalDivider(color = stackedRule)
@@ -2639,6 +2645,10 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                             } else {
                                 PlayPauseIcon(playback.isPlaying, Modifier.size(30.dp))
                             }
+                        }
+                        if (PlayerButton.STOP in shown) {
+                            Spacer(Modifier.width(4.dp))
+                            IconButton(state::stop, Modifier.size(36.dp), enabled = current != null) { Icon(Icons.Default.Stop, "Stop") }
                         }
                         Spacer(Modifier.width(8.dp))
                         FilledTonalIconButton(state::next, Modifier.size(40.dp), enabled = queue.hasNext) {
@@ -3993,6 +4003,7 @@ private fun DrawnProgressBar(
     val page = MaterialTheme.colorScheme.background
     val card = MaterialTheme.colorScheme.surfaceContainerHigh
     val classicFace = classicSlabFace()
+    val skin = app.noctorium.ui.skins.skin()
     val motion = LocalMotion.current
 
     /*
@@ -4042,8 +4053,8 @@ private fun DrawnProgressBar(
         null
     }
 
-    // Where the pointer is over the bar, and whether it is dragging, for the one style whose handle answers
-    // being pointed at: Luna's thumb, lit orange as XP lit it.
+    // Where the pointer is over the bar, and whether it is dragging, for the styles whose handle answers being
+    // pointed at: Luna's thumb, lit orange as XP lit it, and the Slider's, filled with the accent.
     var pointerX by remember { mutableStateOf<Float?>(null) }
     var dragging by remember { mutableStateOf(false) }
 
@@ -4069,7 +4080,7 @@ private fun DrawnProgressBar(
                 .fillMaxHeight()
                 .onSizeChanged { widthPx = it.width.coerceAtLeast(1) }
                 .pointerInput(style) {
-                    if (style != ProgressBarStyle.LUNA) return@pointerInput
+                    if (style != ProgressBarStyle.LUNA && style != ProgressBarStyle.SLIDER) return@pointerInput
                     // Watches without consuming, so the taps and drags below still arrive.
                     awaitPointerEventScope {
                         while (true) {
@@ -4114,6 +4125,7 @@ private fun DrawnProgressBar(
                     page = page,
                     card = card,
                     classicFace = classicFace,
+                    skin = skin,
                 )
             }
         }
@@ -4681,21 +4693,23 @@ internal fun ColourSettingsCard(preferences: NoctoriumPreferences, state: AppSta
 /** Which of the player bar's buttons it carries, under the layout and the position that arrange them. */
 @Composable
 internal fun PlayerButtonsSetting(preferences: NoctoriumPreferences, state: AppState) {
-    val hidden = preferences.desktop.hiddenPlayerButtons
+    // Stop is asked for on the other bars and is part of the Toolbar's own row; the chip says which is in force.
+    val toolbar = preferences.playerBarStyle == PlayerBarStyle.TOOLBAR
     Column {
         ToggleChips(
             "Buttons on the player bar",
             PlayerButton.entries,
-            on = { it !in hidden },
+            on = { preferences.desktop.showsPlayerButton(it, partOfLayout = toolbar && it in TOOLBAR_BUTTONS) },
             name = { it.displayName },
             icon = { it.icon() },
         ) { button, shown ->
-            state.updateDesktop { copy(hiddenPlayerButtons = if (shown) hiddenPlayerButtons - button else hiddenPlayerButtons + button) }
+            state.updateDesktop { withPlayerButton(button, shown) }
         }
         Spacer(Modifier.height(6.dp))
         Text(
             "Lit ones are on the bar, in every layout. Play, pause and the two skips always stay, and so do " +
-                "download and add to playlist while the window has room for them. Connect only appears once there is a device to play on, and a hidden sleep timer or Connect still shows while it is in use.",
+                "download and add to playlist while the window has room for them. Connect only appears once there is a device to play on, and a hidden sleep timer or Connect still shows while it is in use. " +
+                "Stop waits to be asked for, except on the Toolbar, whose own row it is part of.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 11.sp,
         )

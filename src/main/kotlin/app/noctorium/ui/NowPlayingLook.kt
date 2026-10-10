@@ -651,6 +651,44 @@ internal fun NowPlayingLayoutPicture(layout: NowPlayingLayout, selected: Boolean
                     )
                 }
             }
+            NowPlayingLayout.PLAYLIST -> {
+                // The cover in its panel on the left; the queue as a table under its tabs, the playing row lit; the
+                // info bar under it with a small cover, the title and the visualiser; and the status bar along the foot.
+                val side = w * .24f
+                drawRoundRect(writing.copy(alpha = .07f), Offset(w * .04f, h * .06f), Size(side + w * .02f, h * .66f), CornerRadius(h * .03f))
+                cover(w * .05f, h * .08f, side)
+                bar(w * .05f, h * .08f + side + h * .05f, side * .7f, alpha = .3f)
+                val tableX = w * .33f
+                val tableW = w * .63f
+                // Two tabs, the first chosen.
+                drawRoundRect(writing.copy(alpha = .16f), Offset(tableX, h * .06f), Size(w * .15f, h * .07f), CornerRadius(h * .015f))
+                drawRoundRect(writing.copy(alpha = .07f), Offset(tableX + w * .16f, h * .06f), Size(w * .11f, h * .07f), CornerRadius(h * .015f))
+                drawRect(writing.copy(alpha = .1f), Offset(tableX, h * .13f), Size(tableW, h * .45f))
+                // The headings, then the rows, column by column.
+                val columns = listOf(0f to .06f, .1f to .34f, .5f to .22f, .78f to .14f)
+                columns.forEach { (at, length) -> bar(tableX + tableW * (at + .02f), h * .155f, tableW * length * .6f, alpha = .45f, thick = stroke * .8f) }
+                repeat(4) { row ->
+                    val y = h * (.22f + row * .085f)
+                    val playing = row == 1
+                    if (playing) drawRect(accent.copy(alpha = if (selected) .4f else .28f), Offset(tableX, y - h * .025f), Size(tableW, h * .075f))
+                    columns.forEach { (at, length) ->
+                        bar(tableX + tableW * (at + .02f), y, tableW * length * (.55f + (row % 2) * .2f), alpha = if (playing) .7f else .26f, thick = stroke * .8f)
+                    }
+                }
+                // The info bar: the cover small, the title large, and the bars of the visualiser at its right.
+                val infoTop = h * .63f
+                cover(tableX, infoTop, h * .15f)
+                title(tableX + h * .19f, infoTop + h * .02f, w * .2f)
+                bar(tableX + h * .19f, infoTop + h * .1f, w * .13f)
+                listOf(.5f, .8f, .65f, 1f, .7f, .45f, .6f, .35f).forEachIndexed { i, level ->
+                    val barHeight = h * .14f * level
+                    drawRect(accent.copy(alpha = .85f), Offset(w * .8f + i * w * .02f, infoTop + h * .15f - barHeight), Size(w * .013f, barHeight))
+                }
+                // The status bar: what is playing on the left, the time on the right.
+                drawRect(writing.copy(alpha = .08f), Offset(0f, h * .86f), Size(w, h * .14f))
+                bar(w * .04f, h * .91f, w * .3f, alpha = .32f, thick = stroke * .8f)
+                bar(w * .8f, h * .91f, w * .15f, alpha = .32f, thick = stroke * .8f)
+            }
         }
     }
 }
