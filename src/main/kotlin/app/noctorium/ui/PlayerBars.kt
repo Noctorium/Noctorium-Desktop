@@ -1264,6 +1264,7 @@ internal fun PlayerBarPicture(style: PlayerBarStyle, selected: Boolean, modifier
                 tools(w * .865f, cy, 2)
                 bar(w * .9f, cy, w * .05f, alpha = .5f)
             }
+            PlayerBarStyle.TOOLBAR -> Unit
         }
     }
 }

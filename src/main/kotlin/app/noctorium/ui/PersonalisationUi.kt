@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -154,7 +155,8 @@ internal fun playerBarButtons(
     inUse: Set<PlayerButton> = emptySet(),
     tight: Boolean = false,
 ): Set<PlayerButton> {
-    val drawn = PlayerButton.entries.toMutableSet()
+    // Opt-in buttons, Stop among them, are not on any of these bars until asked for.
+    val drawn = PlayerButton.entries.filterNot { it.optIn }.toMutableSet()
     when (style) {
         PlayerBarStyle.STACKED -> {
             drawn -= PlayerButton.LYRICS
@@ -169,6 +171,7 @@ internal fun playerBarButtons(
         PlayerBarStyle.ISLAND -> drawn.retainAll(setOf(PlayerButton.SPEED, PlayerButton.VOLUME) + (inUse intersect setOf(PlayerButton.SLEEP_TIMER, PlayerButton.DEVICES)))
         // The taskbar carries the rest as tray icons, and gives up the two that only lead elsewhere when narrow.
         PlayerBarStyle.TASKBAR -> if (narrow) drawn -= setOf(PlayerButton.LYRICS, PlayerButton.QUEUE)
+        PlayerBarStyle.TOOLBAR -> Unit
     }
     // A button showing something under way stays, put away or not: a sleep timer counting down, or the music
     // playing on another device, is not something to lose sight of because its button was hidden.
@@ -200,6 +203,7 @@ internal fun PlayerButton.icon(): ImageVector = when (this) {
     PlayerButton.VOLUME -> Icons.AutoMirrored.Filled.VolumeUp
     PlayerButton.SPEED -> Icons.Default.Speed
     PlayerButton.DEVICES -> Icons.Default.Devices
+    PlayerButton.STOP -> Icons.Default.Stop
 }
 
 // --- Home ---

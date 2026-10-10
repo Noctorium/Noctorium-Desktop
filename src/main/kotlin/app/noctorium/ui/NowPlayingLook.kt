@@ -651,6 +651,7 @@ internal fun NowPlayingLayoutPicture(layout: NowPlayingLayout, selected: Boolean
                     )
                 }
             }
+            NowPlayingLayout.PLAYLIST -> Unit
         }
     }
 }

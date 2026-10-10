@@ -315,6 +315,8 @@ internal fun DrawScope.drawSeekBar(
         }
 
         ProgressBarStyle.LUNA -> drawLuna(head, centreY, showHead, hot, lightPage, card)
+
+        ProgressBarStyle.SLIDER -> Unit
     }
 }
 

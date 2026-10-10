@@ -2551,6 +2551,7 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
         PlayerBarStyle.ISLAND -> return IslandPlayerBar(queue, playback, state)
         PlayerBarStyle.DISPLAY -> return DisplayPlayerBar(queue, playback, state)
         PlayerBarStyle.TASKBAR -> return TaskbarPlayerBar(queue, playback, state)
+        PlayerBarStyle.TOOLBAR -> Unit
         // Stacked is the one written out below, and was the only layout before there was a choice.
         PlayerBarStyle.STACKED -> Unit
     }
