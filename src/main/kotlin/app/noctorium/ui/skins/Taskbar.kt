@@ -87,6 +87,7 @@ import app.noctorium.ui.LocalInGlass
 import app.noctorium.ui.PlayPauseIcon
 import app.noctorium.ui.PlaybackProgressBar
 import app.noctorium.ui.RemoteArtwork
+import app.noctorium.ui.SongMenuArea
 import app.noctorium.ui.SleepTimerButton
 import app.noctorium.ui.SpeedButton
 import app.noctorium.ui.VolumeControl
@@ -140,7 +141,7 @@ fun TaskbarPlayerBar(queue: QueueState, playback: PlaybackState, state: AppState
                         while (true) {
                             val event = awaitPointerEvent()
                             if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
-                                event.changes.firstOrNull()?.let { change ->
+                                event.changes.firstOrNull()?.takeUnless { it.isConsumed }?.let { change ->
                                     menuAt = change.position
                                     change.consume()
                                 }
@@ -181,8 +182,11 @@ fun TaskbarPlayerBar(queue: QueueState, playback: PlaybackState, state: AppState
                 StartButton(skin, open = destination == Destination.NOW_PLAYING) { state.navigate(Destination.NOW_PLAYING) }
                 QuickLaunch(skin, queue, playback, state, shown)
                 if (!cramped) {
-                    SongButton(skin, current, Modifier.weight(1f, fill = false).widthIn(max = 280.dp)) {
-                        if (current != null) state.navigate(Destination.NOW_PLAYING)
+                    // The song's menu on a right click on the song, and the taskbar's own anywhere else along it.
+                    SongMenuArea(current, state, Modifier.weight(1f, fill = false).widthIn(max = 280.dp)) {
+                        SongButton(skin, current, Modifier) {
+                            if (current != null) state.navigate(Destination.NOW_PLAYING)
+                        }
                     }
                 }
                 PlaybackProgressBar(

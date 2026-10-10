@@ -687,22 +687,26 @@ private fun SongDisplay(current: Track?, playback: PlaybackState, state: AppStat
             }
         }
     }
-    // Set into the bar as the displays of the time were, under a Windows skin.
-    if (skinned()) {
-        SkinDisplay(modifier, inside)
-        return
+    // The song's menu on a right click anywhere on the display: see SongMenuArea.
+    SongMenuArea(current, state, modifier) {
+        // Set into the bar as the displays of the time were, under a Windows skin.
+        if (skinned()) {
+            SkinDisplay(Modifier.fillMaxSize(), inside)
+            return@SongMenuArea
+        }
+        Row(
+            Modifier
+                .fillMaxSize()
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .drawWithContent {
+                    drawContent()
+                    drawRect(Brush.verticalGradient(listOf(shade, Color.Transparent), endY = 7.dp.toPx()))
+                }
+                .border(1.dp, ink(.09f), shape),
+            content = inside,
+        )
     }
-    Row(
-        modifier
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .drawWithContent {
-                drawContent()
-                drawRect(Brush.verticalGradient(listOf(shade, Color.Transparent), endY = 7.dp.toPx()))
-            }
-            .border(1.dp, ink(.09f), shape),
-        content = inside,
-    )
 }
 
 /**
@@ -772,11 +776,14 @@ private fun BarSurface(
 private fun BarCover(track: Track?, size: Dp, corner: Dp, state: AppState) {
     val shape = skinShape(RoundedCornerShape(corner))
     val modifier = Modifier.size(size).clip(shape).clickable(enabled = track != null) { state.navigate(Destination.NOW_PLAYING) }
-    if (track != null) {
-        RemoteArtwork(track.artworkUrl, track.provider, modifier)
-    } else {
-        Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.MusicNote, null, Modifier.size(size * .4f))
+    // The song's menu on a right click, as on the song's name beside it.
+    SongMenuArea(track, state) {
+        if (track != null) {
+            RemoteArtwork(track.artworkUrl, track.provider, modifier)
+        } else {
+            Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.MusicNote, null, Modifier.size(size * .4f))
+            }
         }
     }
 }
@@ -788,30 +795,32 @@ private fun BarCover(track: Track?, size: Dp, corner: Dp, state: AppState) {
 @Composable
 private fun SlimLine(current: Track?, playback: PlaybackState, state: AppState, modifier: Modifier) {
     val onSpotify = playsOnSpotify(current, state.settings.collectAsState().value.spotify)
-    Row(
-        modifier.clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            buildAnnotatedString {
-                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(current?.title ?: "Nothing playing") }
-                val second = playback.errorMessage ?: current?.artistLine?.takeIf(String::isNotBlank)
-                if (second != null) {
-                    withStyle(
-                        SpanStyle(
-                            color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    ) { append("  ·  $second") }
-                }
-            },
-            fontSize = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        if (onSpotify) {
-            Spacer(Modifier.width(8.dp))
-            OnSpotifyMark()
+    SongMenuArea(current, state, modifier) {
+        Row(
+            Modifier.clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(current?.title ?: "Nothing playing") }
+                    val second = playback.errorMessage ?: current?.artistLine?.takeIf(String::isNotBlank)
+                    if (second != null) {
+                        withStyle(
+                            SpanStyle(
+                                color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        ) { append("  ·  $second") }
+                    }
+                },
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (onSpotify) {
+                Spacer(Modifier.width(8.dp))
+                OnSpotifyMark()
+            }
         }
     }
 }
@@ -834,34 +843,37 @@ private fun BarTitle(
     snug: Boolean = false,
 ) {
     val spotify = state.settings.collectAsState().value.spotify
-    MotionContent(
-        current,
-        modifier.clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
-        kind = MotionKind.TRACK,
-        contentKey = { it?.queueKey },
-    ) { track ->
-        Column {
-            Text(
-                track?.title ?: "Nothing playing",
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = titleSize,
-                lineHeight = if (snug) titleSize * 1.3f else TextUnit.Unspecified,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
+    // The song's menu on a right click: see SongMenuArea.
+    SongMenuArea(current, state, modifier) {
+        MotionContent(
+            current,
+            Modifier.clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
+            kind = MotionKind.TRACK,
+            contentKey = { it?.queueKey },
+        ) { track ->
+            Column {
                 Text(
-                    playback.errorMessage ?: track?.artistLine ?: "Choose a track to start",
+                    track?.title ?: "Nothing playing",
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = detailSize,
-                    lineHeight = if (snug) detailSize * 1.3f else TextUnit.Unspecified,
-                    modifier = Modifier.weight(1f, fill = false),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = titleSize,
+                    lineHeight = if (snug) titleSize * 1.3f else TextUnit.Unspecified,
                 )
-                if (playsOnSpotify(track, spotify)) {
-                    Spacer(Modifier.width(6.dp))
-                    OnSpotifyMark()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        playback.errorMessage ?: track?.artistLine ?: "Choose a track to start",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = detailSize,
+                        lineHeight = if (snug) detailSize * 1.3f else TextUnit.Unspecified,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (playsOnSpotify(track, spotify)) {
+                        Spacer(Modifier.width(6.dp))
+                        OnSpotifyMark()
+                    }
                 }
             }
         }

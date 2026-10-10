@@ -1921,123 +1921,12 @@ internal fun LikeButton(track: Track, state: AppState, size: Dp = 36.dp) {
 @Composable
 private fun TrackMenu(track: Track, state: AppState) {
     var expanded by remember { mutableStateOf(false) }
-    var addToPlaylistOpen by remember { mutableStateOf(false) }
-    var editOpen by remember { mutableStateOf(false) }
-    val library by state.library.collectAsState()
-    val likes by state.likes.collectAsState()
-    val ui by state.ui.collectAsState()
-    val likedNow = likes.isLiked(track)
-    val pinned = ui.pinnedTracks.any { it.queueKey == track.queueKey }
     Box {
         IconButton({ expanded = true }, Modifier.size(36.dp)) {
             Icon(Icons.Default.MoreVert, "Track actions", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text("Play next") },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null) },
-                onClick = { state.playNext(track); expanded = false },
-            )
-            DropdownMenuItem(
-                text = { Text("Add to queue") },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) },
-                onClick = { state.addToQueue(track); expanded = false },
-            )
-            if (likes.supports(track)) {
-                DropdownMenuItem(
-                    text = { Text(likeLabel(track.provider, likedNow)) },
-                    leadingIcon = {
-                        Icon(if (likedNow) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null)
-                    },
-                    onClick = { state.toggleLike(track); expanded = false },
-                )
-            }
-            val downloads by state.downloadState.collectAsState()
-            // A Spotify track has no audio of its own, so what is on the disk is filed under the recording
-            // matched to it. Asking about the Spotify entry would report it as never downloaded.
-            val onDisk = state.downloadableTrack(track)
-            val job = downloads.jobFor(onDisk)
-            when {
-                // A Bandcamp or VK song is neither downloaded nor saved -- the file is the artist's to sell, or
-                // VK's to license -- so its own page takes the place of both: where a Bandcamp song is bought,
-                // and where a VK one lives. The page alone: the address kept for the song carries what finds
-                // its stream, which means nothing in a browser.
-                !state.canKeep(track) -> DropdownMenuItem(
-                    text = { Text(servicePageLabel(track.provider)) },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) },
-                    trailingIcon = servicePageHint(track.provider)?.let { hint ->
-                        { Text(hint, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp) }
-                    },
-                    onClick = { state.openExternalUrl(track.pageUrl); expanded = false },
-                )
-                // In progress, and tapping it stops it. A download nobody can call off is worse than none.
-                job != null && job.stage != DownloadStage.FAILED -> DropdownMenuItem(
-                    text = { Text("Downloading… ${(job.progress * 100).roundToInt()}%") },
-                    leadingIcon = { Icon(Icons.Default.Downloading, null) },
-                    trailingIcon = { Icon(Icons.Default.Close, null, Modifier.size(16.dp)) },
-                    onClick = { state.cancelDownload(onDisk.queueKey); expanded = false },
-                )
-                job != null -> DropdownMenuItem(
-                    text = { Text("Download failed — try again") },
-                    leadingIcon = { Icon(Icons.Default.ErrorOutline, null, tint = MaterialTheme.colorScheme.error) },
-                    onClick = { state.cancelDownload(onDisk.queueKey); state.downloadTrack(track); expanded = false },
-                )
-                downloads.isDownloaded(onDisk) -> DropdownMenuItem(
-                    text = { Text("Remove download") },
-                    leadingIcon = { Icon(Icons.Default.DownloadDone, null, tint = MaterialTheme.colorScheme.primary) },
-                    onClick = { state.deleteDownload(onDisk.queueKey); expanded = false },
-                )
-                else -> DropdownMenuItem(
-                    text = { Text("Download for offline") },
-                    leadingIcon = { Icon(Icons.Default.Download, null) },
-                    onClick = { state.downloadTrack(track); expanded = false },
-                )
-            }
-            if (state.canKeep(track)) {
-                DropdownMenuItem(
-                    text = { Text(if (state.canSaveAsMp3()) "Save as MP3…" else "Save a copy…") },
-                    leadingIcon = { Icon(Icons.Default.SaveAlt, null) },
-                    // Named for where it lands, because the difference between this and the item above it is
-                    // exactly that one is Noctorium's copy and this one is the listener's.
-                    trailingIcon = {
-                        Text(
-                            state.exportFolder()?.fileName?.toString() ?: "no folder",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp,
-                        )
-                    },
-                    onClick = { state.exportTrack(track); expanded = false },
-                )
-            }
-            HorizontalDivider()
-            DropdownMenuItem(
-                text = { Text(if (pinned) "Unpin from Home" else "Pin to Home") },
-                leadingIcon = { Icon(if (pinned) Icons.Default.PushPin else Icons.Outlined.PushPin, null) },
-                onClick = { state.togglePin(track); expanded = false },
-            )
-            DropdownMenuItem(
-                text = { Text("Edit details…") },
-                leadingIcon = { Icon(Icons.Default.Edit, null) },
-                onClick = { expanded = false; editOpen = true },
-            )
-            DropdownMenuItem(
-                text = { Text("Copy link") },
-                leadingIcon = { Icon(Icons.Default.Link, null) },
-                onClick = { state.copyTrackLink(track); expanded = false },
-            )
-            DropdownMenuItem(
-                text = { Text("Add to playlist") },
-                leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) },
-                trailingIcon = { Icon(Icons.Default.ChevronRight, null, Modifier.size(17.dp)) },
-                onClick = { expanded = false; addToPlaylistOpen = true },
-            )
-        }
-        if (addToPlaylistOpen) {
-            AddToPlaylistDialog(track, library.localPlaylists, state) { addToPlaylistOpen = false }
-        }
-        if (editOpen) {
-            EditTrackDialog(track, ui.trackEdits[track.queueKey], state) { editOpen = false }
-        }
+        // The song's menu, the same one the player bar's song opens on a right click: see SongMenu.
+        SongMenu(track, state, expanded) { expanded = false }
     }
 }
 
@@ -2049,7 +1938,7 @@ private fun TrackMenu(track: Track, state: AppState) {
  * third button forgets the edit altogether. Nothing here is sent anywhere -- it is this device's opinion.
  */
 @Composable
-private fun EditTrackDialog(track: Track, existing: TrackEdit?, state: AppState, dismiss: () -> Unit) {
+internal fun EditTrackDialog(track: Track, existing: TrackEdit?, state: AppState, dismiss: () -> Unit) {
     var title by remember { mutableStateOf(track.title) }
     var artist by remember { mutableStateOf(track.artistLine) }
     AlertDialog(
@@ -2465,28 +2354,31 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                     }
 
                     Spacer(Modifier.width(14.dp))
-                    Row(
-                        Modifier.width(if (tight) 128.dp else if (narrow) 176.dp else 230.dp).clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (current != null) {
-                            RemoteArtwork(current.artworkUrl, current.provider, Modifier.size(40.dp).clip(skinShape(RoundedCornerShape(7.dp))))
-                        } else {
-                            Box(
-                                Modifier.size(40.dp).clip(skinShape(RoundedCornerShape(7.dp))).background(MaterialTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Default.MusicNote, null, Modifier.size(18.dp)) }
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                current?.title ?: "Nothing playing",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.sp,
-                            )
-                            BarArtistLine(current, playback, state, 11.sp)
+                    // The song's menu on a right click: see SongMenuArea.
+                    SongMenuArea(current, state, Modifier.width(if (tight) 128.dp else if (narrow) 176.dp else 230.dp)) {
+                        Row(
+                            Modifier.clickable(enabled = current != null) { state.navigate(Destination.NOW_PLAYING) },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (current != null) {
+                                RemoteArtwork(current.artworkUrl, current.provider, Modifier.size(40.dp).clip(skinShape(RoundedCornerShape(7.dp))))
+                            } else {
+                                Box(
+                                    Modifier.size(40.dp).clip(skinShape(RoundedCornerShape(7.dp))).background(MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center,
+                                ) { Icon(Icons.Default.MusicNote, null, Modifier.size(18.dp)) }
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    current?.title ?: "Nothing playing",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                )
+                                BarArtistLine(current, playback, state, 11.sp)
+                            }
                         }
                     }
 
@@ -2597,29 +2489,32 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                     Modifier.fillMaxWidth().weight(1f).padding(horizontal = if (compact) 10.dp else 18.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                        if (!compact) {
-                            if (current != null) {
-                                RemoteArtwork(current.artworkUrl, current.provider, Modifier.size(52.dp).clip(skinShape(RoundedCornerShape(11.dp))))
-                            } else {
-                                Box(
-                                    Modifier.size(52.dp).clip(skinShape(RoundedCornerShape(11.dp))).background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center,
-                                ) { Icon(Icons.Default.MusicNote, null) }
+                    // The song's menu on a right click: see SongMenuArea.
+                    SongMenuArea(current, state, Modifier.weight(1f)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            if (!compact) {
+                                if (current != null) {
+                                    RemoteArtwork(current.artworkUrl, current.provider, Modifier.size(52.dp).clip(skinShape(RoundedCornerShape(11.dp))))
+                                } else {
+                                    Box(
+                                        Modifier.size(52.dp).clip(skinShape(RoundedCornerShape(11.dp))).background(MaterialTheme.colorScheme.primaryContainer),
+                                        contentAlignment = Alignment.Center,
+                                    ) { Icon(Icons.Default.MusicNote, null) }
+                                }
+                                Spacer(Modifier.width(12.dp))
                             }
-                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    current?.title ?: "Nothing playing",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                BarArtistLine(current, playback, state, 12.sp)
+                            }
+                            if (PlayerButton.LIKE in shown) current?.let { LikeButton(it, state) }
+                            current?.let { DownloadButton(it, state) }
                         }
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                current?.title ?: "Nothing playing",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            BarArtistLine(current, playback, state, 12.sp)
-                        }
-                        if (PlayerButton.LIKE in shown) current?.let { LikeButton(it, state) }
-                        current?.let { DownloadButton(it, state) }
                     }
 
                     Row(
