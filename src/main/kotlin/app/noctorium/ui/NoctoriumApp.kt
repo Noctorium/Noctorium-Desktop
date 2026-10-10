@@ -2623,6 +2623,7 @@ private fun NowPlayingArranged(
         layout == NowPlayingLayout.TURNTABLE ->
             TurntableNowPlaying(track, playback, state, look, shown.panel, shown.wide, panelWidth, panel, arrange, hasNext)
         layout == NowPlayingLayout.POSTER -> PosterNowPlaying(track, playback, state, look, arrange, hasNext)
+        layout == NowPlayingLayout.PLAYLIST -> PlaylistNowPlaying(queue, track, playback, state, arrange)
         layout == NowPlayingLayout.BANNER -> Column(
             Modifier.fillMaxSize().padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -4398,6 +4399,8 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
         }
 
         NowPlayingSettingsCard(preferences, state)
+
+        PlaylistLayoutCard(preferences, state)
 
         LyricsLookCard(preferences.lyrics, state)
 

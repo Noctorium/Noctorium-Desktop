@@ -57,8 +57,8 @@ import app.noctorium.ui.skins.skinShape
 import app.noctorium.ui.skins.skinned
 
 /*
- * The settings that came with the desktop-music-player look, each one composable here, called from one line on the
- * page it belongs to.
+ * The settings that came with the desktop-music-player look: the icon set, and the Playlist layout's visualiser, its
+ * table's columns and its status bar. Each is one composable here, called from one line on the page it belongs to.
  */
 
 // --- Icons ---
@@ -149,4 +149,71 @@ private fun IconSample(set: IconSet, size: Int) {
             }
         }
     }
+}
+
+// --- The Playlist layout ---
+
+/**
+ * The Playlist layout's own choices: the visualiser beside the title, the table's columns and their order, and the
+ * status bar along the foot.
+ */
+@Composable
+internal fun PlaylistLayoutCard(preferences: NoctoriumPreferences, state: AppState) {
+    val columns = QueueColumn.normalised(preferences.queueColumns)
+    SettingsPanelCard {
+        CardHeading(Icons.Default.TableRows, "Playlist layout")
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "For now playing's Playlist layout: the queue as a table, an info bar with a visualiser, and a status bar.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(15.dp))
+        ChoiceRow("Visualiser", VisualiserStyle.entries, preferences.visualiser, { it.displayName }, state::setVisualiser)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            preferences.visualiser.description + " Drawn from the sound itself, so where the player cannot hear it — " +
+                "a song Spotify plays in its own app — there is none, and nothing is measured while it is off screen.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
+        Spacer(Modifier.height(16.dp))
+        ToggleChips(
+            "Columns",
+            QueueColumn.entries,
+            on = { it in columns },
+            name = { it.displayName },
+            mark = { column -> (columns.indexOf(column) + 1).takeIf { it > 0 }?.toString() },
+        ) { column, on -> state.setQueueColumns(queueColumnsToggled(columns, column, on)) }
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Numbered in their order, left to right. Switch one off and on again to send it to the end; the title " +
+                    "always stays. A narrow window gives up the service, the album and the number first.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton({ state.setQueueColumns(QueueColumn.DEFAULT) }, enabled = columns != QueueColumn.DEFAULT) {
+                Text("As they were", fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        ToggleRow(
+            "Status bar",
+            "Along the foot: what is playing, \"Opus, stereo, 48 kHz, 128 kbit/s\", and how far into the whole queue.",
+            preferences.statusBar,
+            change = state::setStatusBar,
+        )
+    }
+}
+
+/**
+ * The columns with [column] switched [on] -- added at the end -- or off. The title cannot be switched off: a table
+ * of songs without their names is not one, and taking it out would only put it back first.
+ */
+internal fun queueColumnsToggled(columns: List<QueueColumn>, column: QueueColumn, on: Boolean): List<QueueColumn> = when {
+    column == QueueColumn.TITLE -> columns
+    on -> QueueColumn.normalised(columns - column + column)
+    else -> QueueColumn.normalised(columns - column)
 }
