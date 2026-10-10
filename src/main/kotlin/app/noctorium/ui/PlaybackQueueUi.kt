@@ -503,6 +503,7 @@ internal fun QueueActionsMenu(queue: QueueState, state: AppState, saved: (String
                 enabled = queue.upNext.isNotEmpty(),
                 onClick = { state.clearUpcoming(); open = false },
             )
+            QueueMenuExtras(queue, state) { open = false }
             HorizontalDivider()
             DropdownMenuItem(
                 text = { Text("Save queue as playlist…") },

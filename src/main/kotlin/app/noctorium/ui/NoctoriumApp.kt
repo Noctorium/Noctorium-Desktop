@@ -3585,6 +3585,8 @@ internal fun QueueScreen(queue: QueueState, state: AppState) {
             }
             Spacer(Modifier.weight(1f))
             if (queue.tracks.isNotEmpty()) {
+                // Beside Clear, for the queue as the song playing alone: see AppState.clearAllButCurrent.
+                TextButton(state::clearAllButCurrent, enabled = canClearAllButCurrent(queue)) { Icon(Icons.Default.PlaylistRemove, null); Spacer(Modifier.width(6.dp)); Text("Clear all but this song") }
                 TextButton(state::clearQueue) { Icon(Icons.Default.ClearAll, null); Spacer(Modifier.width(6.dp)); Text("Clear") }
                 QueueActionsMenu(queue, state) { savedAs = it }
             }
@@ -3638,6 +3640,7 @@ internal fun QueueScreen(queue: QueueState, state: AppState) {
                     leadingIconContentColor = if (autoplay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
             )
+            StopAfterChip(queue, state)
         }
         Spacer(Modifier.height(18.dp))
         if (queue.tracks.isEmpty()) {
