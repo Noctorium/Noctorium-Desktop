@@ -57,8 +57,9 @@ import app.noctorium.ui.skins.skinShape
 import app.noctorium.ui.skins.skinned
 
 /*
- * The settings that came with the desktop-music-player look: the icon set, and the Playlist layout's visualiser, its
- * table's columns and its status bar. Each is one composable here, called from one line on the page it belongs to.
+ * The settings that came with the desktop-music-player look: the icon set, the Playlist layout's visualiser, its
+ * table's columns and its status bar, and what a song picked on Home plays after it. Each is one composable here,
+ * called from one line on the page it belongs to.
  */
 
 // --- Icons ---
@@ -216,4 +217,42 @@ internal fun queueColumnsToggled(columns: List<QueueColumn>, column: QueueColumn
     column == QueueColumn.TITLE -> columns
     on -> QueueColumn.normalised(columns - column + column)
     else -> QueueColumn.normalised(columns - column)
+}
+
+// --- Home ---
+
+/**
+ * What a song picked on Home plays after it: autoplay's songs, as a radio started from it, or the rest of the shelf
+ * it was on. With autoplay off it is always the shelf, which the choice says rather than offering what cannot be.
+ */
+@Composable
+internal fun HomePlaySetting(preferences: NoctoriumPreferences, state: AppState) {
+    Column {
+        Text("Playing a song from Home", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        HomePlay.entries.forEach { choice ->
+            val selected = preferences.homePlay == choice
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(enabled = preferences.autoplay) { state.setHomePlay(choice) }
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                RadioButton(selected, { state.setHomePlay(choice) }, enabled = preferences.autoplay)
+                Column(Modifier.weight(1f).padding(top = 11.dp, bottom = 6.dp).alpha(if (preferences.autoplay) 1f else .45f)) {
+                    Text(choice.displayName, fontSize = 13.sp)
+                    Text(choice.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                }
+            }
+        }
+        if (!preferences.autoplay) {
+            Text(
+                "With autoplay off, a song from Home plays the rest of its shelf: there is no radio to start.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+            )
+        }
+    }
 }

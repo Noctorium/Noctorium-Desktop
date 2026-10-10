@@ -302,6 +302,8 @@ internal fun PlaybackQueueSettingsPanel(preferences: NoctoriumPreferences, state
                 preferences.autoplayAvoidRecent,
                 enabled = preferences.autoplay,
             ) { on -> state.setAutoplayAvoidRecent(on) }
+            Spacer(Modifier.height(14.dp))
+            HomePlaySetting(preferences, state)
         }
 
         SettingsPanelCard {

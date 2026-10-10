@@ -860,7 +860,7 @@ private fun TrackCard(track: Track, sourceQueue: List<Track>, state: AppState, s
             preferences.cardSize.widthDp.dp,
             showBadge,
             alwaysShowControls = preferences.hoverControls == HoverControls.ALWAYS,
-            play = { state.play(track, PlaybackOrigin.HOME, sourceQueue) },
+            play = { state.playFromHome(track, sourceQueue) },
         ) { TrackMenu(track, state) }
         return
     }
@@ -872,7 +872,8 @@ private fun TrackCard(track: Track, sourceQueue: List<Track>, state: AppState, s
     // The cover rises a touch under the pointer, which says "this can be played" before anything is clicked.
     val lift by animateFloatAsState(if (isHovered) 1.035f else 1f, motionSpec(MotionTiming.QUICK + 40), label = "card-lift")
     Surface(
-        onClick = { state.play(track, PlaybackOrigin.HOME, sourceQueue) },
+        // A radio started from the song, or the rest of its shelf, as Settings › Playback and queue says: see playFromHome.
+        onClick = { state.playFromHome(track, sourceQueue) },
         color = Color.Transparent,
         shape = RoundedCornerShape(14.dp),
         interactionSource = interaction,
