@@ -339,6 +339,8 @@ fun NoctoriumApp(
             // to the window, where the shortcuts listen.
             QuickSearchPopup(appState) {
                 quickSearchOpen = false
+                // Its box goes with it, and may not say so on the way out.
+                typing.value = false
                 runCatching { keyboard.requestFocus() }
             }
         }

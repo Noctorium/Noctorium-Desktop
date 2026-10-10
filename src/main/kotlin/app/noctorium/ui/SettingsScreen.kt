@@ -282,6 +282,13 @@ private fun SettingsHome(
     val classic = skinned()
     val matches = remember(query) { SettingsIndex.search(query) }
     var selected by remember(query) { mutableIntStateOf(0) }
+    // The arrows can choose a setting below the fold; the list follows, keeping the chosen one in view.
+    LaunchedEffect(selected, query) {
+        if (query.isBlank()) return@LaunchedEffect
+        val row = (if (settings.message != null) 3 else 2) + selected
+        val shown = list.layoutInfo.visibleItemsInfo.filter { it.offset >= 0 && it.offset + it.size <= list.layoutInfo.viewportEndOffset }.map { it.index }
+        if (row !in shown) list.animateScrollToItem((row - 3).coerceAtLeast(0))
+    }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // Two pages to a row where the window has the room, three under a Windows skin, whose items are smaller.
         val width = maxWidth - 60.dp

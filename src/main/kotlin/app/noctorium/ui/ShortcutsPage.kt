@@ -97,6 +97,12 @@ internal fun ShortcutsSettingsPanel(preferences: NoctoriumPreferences, state: Ap
     var clash by remember { mutableStateOf<Clash?>(null) }
     var refusal by remember { mutableStateOf<Pair<ShortcutAction, String>?>(null) }
 
+    // A chord pressed that is the one the place came with is kept as the default, not as a change of it.
+    fun keep(into: Recording, chord: KeyChord) {
+        val name = into.action.storedName(into.slot)
+        if (chord == into.action.defaultChord(into.slot, isMacPlatform)) state.resetShortcut(name) else state.setShortcut(name, chord.toString())
+    }
+
     fun record(into: Recording, chord: KeyChord?) {
         listening = null
         refusal = null
@@ -120,7 +126,7 @@ internal fun ShortcutsSettingsPanel(preferences: NoctoriumPreferences, state: Ap
             clash = Clash(into, chord, others)
             return
         }
-        state.setShortcut(into.action.storedName(into.slot), chord.toString())
+        keep(into, chord)
     }
 
     fun settle(clash: Clash) {
@@ -131,7 +137,7 @@ internal fun ShortcutsSettingsPanel(preferences: NoctoriumPreferences, state: Ap
         if (clash.recording.global) {
             state.setShortcut(clash.recording.action.id, clash.chord.toString(), global = true)
         } else {
-            state.setShortcut(clash.recording.action.storedName(clash.recording.slot), clash.chord.toString())
+            keep(clash.recording, clash.chord)
         }
     }
 
