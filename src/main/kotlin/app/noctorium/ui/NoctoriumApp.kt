@@ -2452,8 +2452,7 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
         PlayerBarStyle.ISLAND -> return IslandPlayerBar(queue, playback, state)
         PlayerBarStyle.DISPLAY -> return DisplayPlayerBar(queue, playback, state)
         PlayerBarStyle.TASKBAR -> return TaskbarPlayerBar(queue, playback, state)
-        // Inline's row until the Toolbar has a bar of its own.
-        PlayerBarStyle.TOOLBAR -> return InlinePlayerBar(queue, playback, state)
+        PlayerBarStyle.TOOLBAR -> return ToolbarPlayerBar(queue, playback, state)
         // Stacked is the one written out below, and was the only layout before there was a choice.
         PlayerBarStyle.STACKED -> Unit
     }
@@ -3791,6 +3790,11 @@ internal fun PlaybackProgressBar(
      * all, but not seekable, so a click on it goes to whatever holds it.
      */
     interactive: Boolean = true,
+    /**
+     * The two times together after the bar -- "0:58 / 2:31" -- as a desktop player's toolbar has them, rather than
+     * one at each end.
+     */
+    timesAfter: Boolean = false,
 ) {
     val durationMs = playback.durationMs.coerceAtLeast(0)
     // Whether the track's length is known yet. Standing in 1 ms for the unknown made every ratio below round
@@ -3824,6 +3828,7 @@ internal fun PlaybackProgressBar(
             songKey = playback.track?.queueKey,
             durationMs = durationMs,
             compact = compact,
+            timesAfter = timesAfter,
             onScrub = { fraction ->
                 dragging = true
                 draggedPosition = (fraction * maximum).coerceIn(0f, maximum)
@@ -3839,12 +3844,14 @@ internal fun PlaybackProgressBar(
     }
 
     Row(modifier.height(34.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            formatPlaybackTime(displayedPosition.toLong()),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = if (compact) 10.sp else 11.sp,
-            modifier = Modifier.width(if (compact) 38.dp else 44.dp),
-        )
+        if (!timesAfter) {
+            Text(
+                formatPlaybackTime(displayedPosition.toLong()),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = if (compact) 10.sp else 11.sp,
+                modifier = Modifier.width(if (compact) 38.dp else 44.dp),
+            )
+        }
         Slider(
             value = if (hasDuration) displayedPosition.coerceIn(0f, maximum) else 0f,
             onValueChange = {
@@ -3860,13 +3867,17 @@ internal fun PlaybackProgressBar(
             valueRange = 0f..maximum,
             modifier = Modifier.weight(1f),
         )
-        Text(
-            trailing,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = if (compact) 10.sp else 11.sp,
-            textAlign = if (compact) androidx.compose.ui.text.style.TextAlign.End else null,
-            modifier = Modifier.width(if (compact) 38.dp else 48.dp),
-        )
+        if (timesAfter) {
+            TimesAfter(formatPlaybackTime(displayedPosition.toLong()), trailing, ink(.68f))
+        } else {
+            Text(
+                trailing,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = if (compact) 10.sp else 11.sp,
+                textAlign = if (compact) androidx.compose.ui.text.style.TextAlign.End else null,
+                modifier = Modifier.width(if (compact) 38.dp else 48.dp),
+            )
+        }
     }
 }
 
@@ -3893,6 +3904,7 @@ private fun DrawnProgressBar(
     songKey: String?,
     durationMs: Long,
     compact: Boolean,
+    timesAfter: Boolean,
     onScrub: (Float) -> Unit,
     onScrubFinished: () -> Unit,
     modifier: Modifier = Modifier,
@@ -3968,12 +3980,14 @@ private fun DrawnProgressBar(
         ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            formatPlaybackTime(positionMs.toLong()),
-            color = ink(.68f),
-            fontSize = if (compact) 10.sp else 11.sp,
-            modifier = Modifier.width(if (compact) 36.dp else 42.dp),
-        )
+        if (!timesAfter) {
+            Text(
+                formatPlaybackTime(positionMs.toLong()),
+                color = ink(.68f),
+                fontSize = if (compact) 10.sp else 11.sp,
+                modifier = Modifier.width(if (compact) 36.dp else 42.dp),
+            )
+        }
         Box(
             Modifier
                 .weight(1f)
@@ -4029,13 +4043,17 @@ private fun DrawnProgressBar(
                 )
             }
         }
-        Text(
-            trailingLabel,
-            color = ink(.68f),
-            fontSize = if (compact) 10.sp else 11.sp,
-            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-            modifier = Modifier.width(if (compact) 36.dp else 42.dp),
-        )
+        if (timesAfter) {
+            TimesAfter(formatPlaybackTime(positionMs.toLong()), trailingLabel, ink(.68f))
+        } else {
+            Text(
+                trailingLabel,
+                color = ink(.68f),
+                fontSize = if (compact) 10.sp else 11.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                modifier = Modifier.width(if (compact) 36.dp else 42.dp),
+            )
+        }
     }
 }
 
