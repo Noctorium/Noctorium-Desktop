@@ -183,7 +183,7 @@ private fun connectSubtitle(target: String?, controlledBy: String?, others: Int)
 
 /** Somewhere to put the device name, so a house with three of these can tell them apart. */
 @Composable
-internal fun ConnectSettingsRows(state: AppState) {
+internal fun ConnectSettingsRows(state: AppState) = SettingAnchor("Noctorium Connect") {
     val connect by state.connect.collectAsState()
     val settings by state.settings.collectAsState()
     var name by remember(settings.preferences.connect.deviceName) {
