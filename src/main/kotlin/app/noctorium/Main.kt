@@ -27,6 +27,17 @@ import app.noctorium.ui.AppIcon
 import app.noctorium.ui.DesktopTray
 import app.noctorium.ui.NoctoriumApp
 import app.noctorium.ui.TrackAnnouncer
+import app.noctorium.ui.DesktopHooks
+import app.noctorium.ui.NoctoriumLook
+import app.noctorium.ui.QuickExit
+import app.noctorium.ui.QuickSearchWindowContent
+import app.noctorium.ui.Shortcut
+import app.noctorium.ui.ShortcutAction
+import app.noctorium.ui.globalBindings
+import app.noctorium.ui.perform
+import app.noctorium.hotkeys.GlobalHotKeys
+import app.noctorium.hotkeys.SystemHotKeys
+import app.noctorium.platform.Foreground
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import java.awt.Desktop
@@ -78,11 +89,27 @@ fun main(args: Array<String>) {
         )
         LaunchedEffect(Unit) { if (intoTray && !trayAvailable) windowState.isMinimized = true }
 
+        // The global shortcuts, registered with the system while they are switched on and given back when they are
+        // switched off or Noctorium quits. A press arrives on a thread of their own and is handed to this one.
+        val globalPresses = remember { AtomicReference<(String) -> Unit>({}) }
+        val globalHotKeys = remember {
+            GlobalHotKeys(
+                SystemHotKeys.support(),
+                onPressed = { action -> javax.swing.SwingUtilities.invokeLater { globalPresses.get()(action) } },
+                title = { action -> ShortcutAction.byId(action)?.title ?: action },
+            )
+        }
+        LaunchedEffect(desktop.shortcuts) {
+            globalHotKeys.apply(desktop.shortcuts.globalEnabled, globalBindings(desktop.shortcuts).mapKeys { it.key.id })
+        }
+        DisposableEffect(Unit) { onDispose { globalHotKeys.close() } }
+
         var quitting by remember { mutableStateOf(false) }
         val quit: () -> Unit = {
             if (!quitting) {
                 quitting = true
                 visible = false
+                globalHotKeys.close()
                 appState.close()
                 instance?.close()
                 // Chromium, once a sign-in has started it, is shut down and waited for before the process
@@ -117,6 +144,43 @@ fun main(args: Array<String>) {
                 null
             }
         }
+
+        // The quick search bar from a global shortcut: over Noctorium's own window when that is in front, and
+        // otherwise in a small window of its own, which gives the front back to whatever had it when it closes.
+        var quickSearchAsked by remember { mutableIntStateOf(0) }
+        var quickWindow by remember { mutableStateOf(false) }
+        val beforeQuickSearch = remember { AtomicReference<Any?>(null) }
+        val frame = remember { AtomicReference<java.awt.Window?>(null) }
+        val inFront: () -> Boolean = { visible && !windowState.isMinimized && isInFront(frame.get()) }
+        // Out of the way: into the tray where there is one, which is where closing it leads, or down to the taskbar.
+        val toggleWindow: () -> Unit = {
+            if (inFront()) {
+                if (tray != null) visible = false else windowState.isMinimized = true
+            } else {
+                open()
+            }
+        }
+        val closeQuickWindow: (QuickExit) -> Unit = { exit ->
+            quickWindow = false
+            if (exit == QuickExit.SEARCH_PAGE) open() else Foreground.restore(beforeQuickSearch.getAndSet(null), visible && !windowState.isMinimized)
+        }
+        globalPresses.set { id ->
+            val action = ShortcutAction.byId(id)
+            when (action?.shortcut) {
+                null -> Unit
+                Shortcut.ToggleWindow -> toggleWindow()
+                Shortcut.QuickSearch -> when {
+                    inFront() -> quickSearchAsked++
+                    quickWindow -> Unit
+                    else -> {
+                        beforeQuickSearch.set(Foreground.capture())
+                        quickWindow = true
+                    }
+                }
+                else -> appState.perform(action.shortcut)
+            }
+        }
+
         // In the tray whenever closing the window leads there, and whenever the window is waiting in it; and
         // while tracks are announced, because the note comes from the icon and there is no note without one.
         val inTray = tray != null && (desktop.closeToTray || !visible || desktop.announceTracks)
@@ -131,7 +195,6 @@ fun main(args: Array<String>) {
         // A note from the tray when a new song starts, if the listener asked for one. Told about every change
         // to what is playing; the announcer decides which of them is a start worth announcing, and the window
         // is asked whether it is in front at that moment rather than watched the rest of the time.
-        val frame = remember { AtomicReference<java.awt.Window?>(null) }
         val announcer = remember { TrackAnnouncer() }
         LaunchedEffect(tray, playback.track?.queueKey, playback.status == PlaybackStatus.PLAYING) {
             val track = playback.track ?: return@LaunchedEffect
@@ -152,6 +215,7 @@ fun main(args: Array<String>) {
                 val system = Desktop.getDesktop()
                 if (system.isSupported(Desktop.Action.APP_QUIT_HANDLER)) {
                     system.setQuitHandler { _, response ->
+                        runCatching { globalHotKeys.close() }
                         runCatching { appState.close() }
                         runCatching { instance?.close() }
                         // macOS waits for the answer, so Chromium can be shut down first, as above.
@@ -202,10 +266,52 @@ fun main(args: Array<String>) {
             // Each size is drawn at its own size, so the taskbar's small icon is rendered rather than shrunk.
             window.iconImages = AppIcon.images()
             LaunchedEffect(raises) { if (raises > 0) raise(window) }
-            NoctoriumApp(appState, window)
+            NoctoriumApp(appState, window, DesktopHooks(globalHotKeys.state, quickSearchAsked, toggleWindow))
+        }
+
+        // The quick search's own window, for its global shortcut from another program: small, always on top,
+        // with no frame of its own -- the bar is the window -- a fifth of the way down the screen.
+        if (quickWindow) {
+            val screen = remember { java.awt.Toolkit.getDefaultToolkit().screenSize }
+            val quickState = rememberWindowState(
+                position = WindowPosition(((screen.width - QUICK_WINDOW_WIDTH) / 2).dp, (screen.height / 5).dp),
+                width = QUICK_WINDOW_WIDTH.dp,
+                height = QUICK_WINDOW_HEIGHT.dp,
+            )
+            Window(
+                onCloseRequest = { closeQuickWindow(QuickExit.CLOSED) },
+                state = quickState,
+                title = "Noctorium quick search",
+                icon = BitmapPainter(AppIcon.image(64).toComposeImageBitmap()),
+                undecorated = true,
+                transparent = true,
+                resizable = false,
+                alwaysOnTop = true,
+            ) {
+                // In front and with the keyboard, and left on top: raise() would take the always-on-top away again.
+                LaunchedEffect(window) {
+                    window.toFront()
+                    window.requestFocus()
+                }
+                // Clicking anywhere else puts it away, as a launcher's bar does.
+                DisposableEffect(window) {
+                    val leaving = object : java.awt.event.WindowAdapter() {
+                        override fun windowDeactivated(event: java.awt.event.WindowEvent?) {
+                            if (quickWindow) closeQuickWindow(QuickExit.CLOSED)
+                        }
+                    }
+                    window.addWindowListener(leaving)
+                    onDispose { window.removeWindowListener(leaving) }
+                }
+                NoctoriumLook(appState) { QuickSearchWindowContent(appState, closeQuickWindow) }
+            }
         }
     }
 }
+
+/** The quick search window's size: the bar, its seven results and its footer, with room for the shadow. */
+private const val QUICK_WINDOW_WIDTH = 700
+private const val QUICK_WINDOW_HEIGHT = 540
 
 /**
  * Brings the window in front of whatever is covering it.

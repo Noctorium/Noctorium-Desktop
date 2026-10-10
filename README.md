@@ -30,6 +30,16 @@ Settings, credentials and downloads live in `%LOCALAPPDATA%\Noctorium` on Window
 `~/Library/Application Support/Noctorium` on a Mac (sign-ins in the Keychain) and `~/.local/share/noctorium`
 on Linux, and a folder left by an earlier name of the application is adopted on first run.
 
+## Keyboard shortcuts
+
+Every shortcut can be changed in Settings, under Keyboard shortcuts; `?` lists them, and Ctrl+F (⌘F on a Mac)
+brings up the quick search bar, which takes `!ytm`, `!sc`, `!sp`, `!bc`, `!vk` and `!all` at the start or the end.
+Global shortcuts — from any program — are off until switched on there, and are registered with the system's own
+hot-key service, never a keyboard hook: `RegisterHotKey` on Windows, Carbon's `RegisterEventHotKey` on a Mac,
+`XGrabKey` under X11, and on Wayland the desktop portal's GlobalShortcuts, where the desktop offers it (KDE Plasma,
+GNOME 48 and newer); elsewhere the page says they are not supported. A chord another program holds is shown as
+taken.
+
 ## Testing
 
 ```bash
