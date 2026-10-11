@@ -105,10 +105,51 @@ internal class WindowTour(private val state: AppState, private val folder: File)
 
     /** A key as the keyboard would send it, with shift held for [shift]. Only ever into this picture. */
     @OptIn(androidx.compose.ui.InternalComposeUiApi::class)
-    fun press(key: Key, char: Char, shift: Boolean = false) {
+    fun press(key: Key, char: Char, shift: Boolean = false, ctrl: Boolean = false) {
         val scene = checkNotNull(scene)
         listOf(KeyEventType.KeyDown, KeyEventType.KeyUp).forEach { type ->
-            scene.sendKeyEvent(KeyEvent(key, type, codePoint = char.code, isShiftPressed = shift))
+            scene.sendKeyEvent(KeyEvent(key, type, codePoint = char.code, isCtrlPressed = ctrl, isShiftPressed = shift))
+        }
+    }
+
+    /**
+     * Types [text] a character at a time into whatever has the caret, as the keyboard would: a key down, the
+     * character it types, and the key up, made as AWT makes them -- a box takes its characters from the middle one.
+     */
+    @OptIn(androidx.compose.ui.InternalComposeUiApi::class)
+    fun type(text: String) {
+        val scene = checkNotNull(scene)
+        val source = java.awt.Canvas()
+        text.forEach { char ->
+            val code = java.awt.event.KeyEvent.getExtendedKeyCodeForChar(char.code)
+            val shift = if (char == '!' || char.isUpperCase()) java.awt.event.InputEvent.SHIFT_DOWN_MASK else 0
+            val now = System.currentTimeMillis()
+            listOf(
+                KeyEventType.KeyDown to java.awt.event.KeyEvent(source, java.awt.event.KeyEvent.KEY_PRESSED, now, shift, code, char),
+                KeyEventType.Unknown to java.awt.event.KeyEvent(source, java.awt.event.KeyEvent.KEY_TYPED, now, shift, java.awt.event.KeyEvent.VK_UNDEFINED, char),
+                KeyEventType.KeyUp to java.awt.event.KeyEvent(source, java.awt.event.KeyEvent.KEY_RELEASED, now, shift, code, char),
+            ).forEach { (type, awt) ->
+                scene.sendKeyEvent(KeyEvent(Key(code), type, codePoint = char.code, isShiftPressed = shift != 0, nativeEvent = awt))
+            }
+            settle(1)
+        }
+    }
+
+    /**
+     * Stops the search typing started from going to the services -- it is a picture, and they are not asked -- and
+     * puts [tracks] in its place, as found for [query].
+     */
+    fun searched(query: String, tracks: List<Track>) {
+        val job = AppState::class.java.getDeclaredField("searchJob").apply { isAccessible = true }.get(state) as? kotlinx.coroutines.Job
+        job?.cancel()
+        ui {
+            it.copy(
+                searchQuery = query,
+                searchBang = app.noctorium.core.SearchBangs.parse(query).bang,
+                searchResults = SearchResults(tracks = tracks),
+                searchLoading = false,
+                errorMessage = null,
+            )
         }
     }
 
@@ -139,17 +180,16 @@ internal class WindowTour(private val state: AppState, private val folder: File)
         }
     }
 
-    /** Opens a Settings page by name, the way the playback tools banner does: asked for, then gone to. */
-    fun settingsPage(page: String) {
+    /**
+     * Opens a Settings page by name, the way the playback tools banner does: asked for, then gone to. [anchor] is a
+     * setting on it to show, as the settings search does. CUSTOMIZATION, which is the five pages of Look now, opens
+     * the first of them, the player bar's, where the taskbar's Properties go.
+     */
+    fun settingsPage(page: String, anchor: String? = null) {
         ui { it.copy(destination = Destination.HOME) }
         settle(2)
-        val pages = Class.forName("app.noctorium.ui.SettingsPage")
-        val wanted = pages.enumConstants.first { (it as Enum<*>).name == page }
-        Class.forName("app.noctorium.ui.NoctoriumAppKt").getDeclaredField("pendingSettingsPage").apply {
-            isAccessible = true
-            set(null, wanted)
-        }
-        ui { it.copy(destination = Destination.SETTINGS) }
+        val wanted = if (page == "CUSTOMIZATION") SettingsPage.PLAYER_BAR else SettingsPage.valueOf(page)
+        openSettingsPage(state, wanted, anchor)
     }
 
     /** Everything a tour shows: Home's rows, the library, a playlist, a search and the queue. */

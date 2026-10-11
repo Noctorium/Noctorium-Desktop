@@ -106,7 +106,7 @@ internal fun YouTubeChannelChooser(channels: List<YouTubeChannel>, settings: Set
 
 /** The switch for filing what is played here in the account's YouTube Music history. */
 @Composable
-internal fun YouTubeHistorySetting(settings: SettingsState, state: AppState) {
+internal fun YouTubeHistorySetting(settings: SettingsState, state: AppState) = SettingAnchor("Add what I play to my YouTube Music history") {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Default.History, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(10.dp))

@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.sp
  * what the keys actually do.
  */
 @Composable
-fun ShortcutsSheet(dismiss: () -> Unit) {
+fun ShortcutsSheet(shortcuts: InAppShortcuts, dismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = dismiss,
         title = { Text("Keyboard shortcuts", fontWeight = FontWeight.Bold) },
@@ -42,7 +42,7 @@ fun ShortcutsSheet(dismiss: () -> Unit) {
                 (if (skinned()) Modifier.fillMaxWidth() else Modifier.widthIn(max = 460.dp)).heightIn(max = 460.dp).scrollingPage(),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                shortcutHelp.forEach { (group, rows) ->
+                shortcutHelp(shortcuts).forEach { (group, rows) ->
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             group.uppercase(),
@@ -77,7 +77,8 @@ fun ShortcutsSheet(dismiss: () -> Unit) {
                 Spacer(Modifier.height(2.dp))
                 Text(
                     "While the caret is in a box, letters are letters — only the combinations with Ctrl, " +
-                        "and Escape, still do anything.",
+                        "and Escape, still do anything. Every one of these can be changed in Settings, under " +
+                        "Keyboard shortcuts, which also has the ones that work from any program.",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

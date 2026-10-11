@@ -2,6 +2,7 @@ package app.noctorium.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -154,9 +155,10 @@ class PersonalisationRenderCheck {
             state.setTheme(ThemePreset.NOCTORIUM_NIGHT)
             state.setCustomAccent(0xFF2EC4B6)
             state.setFont(FontChoice.SERIF)
-            panel(folder, "colour-card-serif.png", state, 760, 1180) { ColourSettingsCard(it, state) }
+            // The typeface is on its own page now, with the text size.
+            panel(folder, "colour-card-serif.png", state, 760, 1180) { Column { ColourSettingsCard(it, state); TextSettingsCard(it, state) } }
             state.setFont(FontChoice.MONO)
-            panel(folder, "colour-card-mono.png", state, 760, 1180) { ColourSettingsCard(it, state) }
+            panel(folder, "colour-card-mono.png", state, 760, 1180) { Column { ColourSettingsCard(it, state); TextSettingsCard(it, state) } }
             state.setFont(FontChoice.DEFAULT)
 
             val before = state.settings.value.preferences.customAccent

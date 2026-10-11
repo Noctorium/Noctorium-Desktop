@@ -411,7 +411,7 @@ internal fun formatGain(gain: Float): String {
     return (if (rounded > 0f) "+" else "−") + digits
 }
 
-/** The Sound page: for now the equaliser, which is all there is to say about how things sound. */
+/** The Sound page: the equaliser, and the volume booster for when full volume is not enough. */
 @Composable
 internal fun SoundSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
     Column(
@@ -422,6 +422,8 @@ internal fun SoundSettingsPanel(preferences: NoctoriumPreferences, state: AppSta
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         EqualizerCard(preferences.equalizer, state)
+
+        VolumeBoosterCard(preferences, state)
     }
 }
 
@@ -664,7 +666,7 @@ internal fun EqualizerCurve(gains: List<Float>, active: Boolean, commit: (Int, F
 
 /** The preamp: decibels added before the bands, written when the slider is let go of. */
 @Composable
-private fun PreampRow(preampDb: Float, enabled: Boolean = true, commit: (Float) -> Unit) {
+private fun PreampRow(preampDb: Float, enabled: Boolean = true, commit: (Float) -> Unit) = SettingAnchor("Preamp") {
     var dragging by remember(preampDb) { mutableFloatStateOf(preampDb) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.width(132.dp)) {
@@ -856,7 +858,7 @@ internal fun AccentColourPicker(current: Long, page: Long, choose: (Long) -> Uni
 /** The three typefaces side by side, each written in itself, so the choice is made by reading them. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun FontChooser(selected: FontChoice, choose: (FontChoice) -> Unit) {
+internal fun FontChooser(selected: FontChoice, choose: (FontChoice) -> Unit) = SettingAnchor("Typeface") {
     Column {
         Text("Typeface", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
@@ -966,11 +968,11 @@ internal fun <T> ToggleChips(
     icon: ((T) -> ImageVector)? = null,
     mark: ((T) -> String?)? = null,
     toggle: (T, Boolean) -> Unit,
-) {
+) = SettingAnchor(label) {
     // A run of checkboxes under a Windows skin, which is what several things on and off were.
     if (skinned()) {
         CheckBoxes(label, options, on, name, icon, mark, toggle)
-        return
+        return@SettingAnchor
     }
     Column {
         label?.let {

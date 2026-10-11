@@ -118,16 +118,18 @@ internal fun UpdatePanel(state: AppState) {
             }
 
             Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Switch(settings.preferences.updates.checkOnLaunch, state::setUpdateCheckOnLaunch)
-                Spacer(Modifier.padding(horizontal = 6.dp))
-                Column {
-                    Text("Look for updates when Noctorium starts", fontSize = 13.sp)
-                    Text(
-                        "One request to GitHub, and nothing is downloaded without asking.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
-                    )
+            SettingAnchor("Look for updates when Noctorium starts") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(settings.preferences.updates.checkOnLaunch, state::setUpdateCheckOnLaunch)
+                    Spacer(Modifier.padding(horizontal = 6.dp))
+                    Column {
+                        Text("Look for updates when Noctorium starts", fontSize = 13.sp)
+                        Text(
+                            "One request to GitHub, and nothing is downloaded without asking.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                        )
+                    }
                 }
             }
         }

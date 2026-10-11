@@ -155,16 +155,16 @@ class WindowsThemesRenderCheck {
             state.updateNowPlaying { NowPlayingPreferences() }
             state.setNowPlayingBackdrop(NowPlayingBackdrop.WASH)
             state.setPlayerBarStyle(PlayerBarStyle.INLINE)
-            // The whole of Customization at once, in a window tall enough to hold it.
-            tour.open(width = 1280, height = 3600)
+            // Each page of Look whole, in a window tall enough to hold it: what was Customization, one long page.
+            tour.open(width = 1280, height = 2400)
             tour.fill()
-            tour.settingsPage("CUSTOMIZATION")
-            tour.capture("settings-customization-whole")
-            // Taller again, for the themes at its foot: the Windows ones offered side by side, each in its colours.
-            tour.open(width = 1280, height = 4600)
-            tour.fill()
-            tour.settingsPage("CUSTOMIZATION")
-            tour.capture("settings-themes", crop = Rect.makeXYWH(0f, 3000f, 1280f, 1500f))
+            listOf("PLAYER_BAR", "NOW_PLAYING", "THEME", "TEXT", "BROWSING").forEach { page ->
+                tour.settingsPage(page)
+                tour.capture("settings-look-${page.lowercase()}-whole")
+            }
+            // The themes on their own page: the Windows ones offered side by side, each in its colours.
+            tour.settingsPage("THEME")
+            tour.capture("settings-themes", crop = Rect.makeXYWH(0f, 0f, 1280f, 1500f))
         } finally {
             tour.close()
         }
@@ -225,7 +225,7 @@ class WindowsThemesRenderCheck {
                     tour.capture("taskbar-menu", crop = Rect.makeXYWH(760f, 800f - 280f, 520f, 280f))
                     tour.press(Key.Escape, '\u001b')
                     tour.settle()
-                    tour.settingsPage("CUSTOMIZATION")
+                    tour.settingsPage("PLAYER_BAR")
                     tour.capture("settings-clock-row")
                     // Properties, from Home and from another page of Settings: both land on Customization.
                     val properties = if (night) Offset(1180f, 720f) else Offset(1150f, 772f)
@@ -307,7 +307,7 @@ class WindowsThemesRenderCheck {
             state.setNowPlayingBackdrop(NowPlayingBackdrop.WASH)
             tour.go(Destination.SETTINGS)
             tour.capture("settings")
-            listOf("CUSTOMIZATION", "SOUND", "PLAYBACK_QUEUE", "LYRICS", "STARTUP").forEach { page ->
+            listOf("PLAYER_BAR", "THEME", "NOW_PLAYING", "SOUND", "PLAYBACK_QUEUE", "LYRICS", "STARTUP", "SHORTCUTS").forEach { page ->
                 tour.settingsPage(page)
                 tour.capture("settings-${page.lowercase()}")
             }

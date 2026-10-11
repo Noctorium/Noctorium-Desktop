@@ -1,0 +1,154 @@
+package app.noctorium.ui
+
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.ImageComposeScene
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Density
+import app.noctorium.core.AppState
+import app.noctorium.desktopAppState
+import app.noctorium.settings.AccentPreset
+import app.noctorium.settings.PlayerBarStyle
+import app.noctorium.settings.SettingMatchKind
+import app.noctorium.settings.ThemePreset
+import app.noctorium.settings.resolvedAccent
+import app.noctorium.settings.themeColours
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.test.fail
+
+/**
+ * The settings search's index against the pages themselves.
+ *
+ * Every page is drawn, off screen, in the states that show the most of it, and each setting it draws with the
+ * shared controls -- or marks with [SettingAnchor] -- is checked for an entry in [SettingsIndex]. So a setting
+ * added to a page cannot be left out of the search: this fails, naming it, until it has an entry. And each entry
+ * is checked the other way, for a setting by that name on its page, so an entry cannot outlive its setting.
+ */
+class SettingsIndexTest {
+
+    private val made = lazy { desktopAppState() }
+    private val state: AppState by made
+
+    @AfterTest
+    fun close() {
+        if (!made.isInitialized()) return
+        state.setTheme(ThemePreset.NOCTORIUM_NIGHT)
+        state.setAccent(AccentPreset.THEME)
+        state.setPlayerBarStyle(PlayerBarStyle.INLINE)
+        state.close()
+    }
+
+    /** Every setting each page draws, by page, in the state the settings are in now. */
+    private fun drawn(): Map<SettingsPage, Set<String>> = SettingsPage.entries.associateWith { page ->
+        val names = linkedSetOf<String>()
+        val scene = ImageComposeScene(1100, 6000, Density(1f)) {
+            val settings = state.settings.collectAsState().value
+            val preferences = settings.preferences
+            MaterialTheme(colorScheme = noctoriumColorScheme(preferences.themeColours(), Color(preferences.resolvedAccent(null)))) {
+                Surface(Modifier.fillMaxSize()) {
+                    CompositionLocalProvider(LocalSettingsAnchors provides SettingsAnchors(record = { names += it })) {
+                        SettingsPageContent(page, settings, state)
+                    }
+                }
+            }
+        }
+        try {
+            scene.render()
+            scene.render()
+        } finally {
+            scene.close()
+        }
+        names
+    }
+
+    @Test
+    fun `every setting on every page has an entry in the index, and every entry a setting`() {
+        val seen = SettingsPage.entries.associateWith { mutableSetOf<String>() }
+        fun look() = drawn().forEach { (page, names) -> seen.getValue(page) += names }
+        look()
+        // The settings that only show once something above them is chosen: the clock with the Taskbar, the six
+        // colours with the Custom theme, the picker with an accent of your own.
+        state.setPlayerBarStyle(PlayerBarStyle.TASKBAR)
+        state.setTheme(ThemePreset.CUSTOM)
+        state.setAccent(AccentPreset.CUSTOM)
+        look()
+
+        val missing = seen.flatMap { (page, names) ->
+            names.filter { name -> SettingsIndex.settings.none { it.page == page && it.anchor == name } }.map { "${page.name}: \"$it\"" }
+        }
+        if (missing.isNotEmpty()) {
+            fail("These settings are on their pages but not in SettingsIndex, so the search cannot find them:\n" + missing.joinToString("\n"))
+        }
+        // Those only there once signed in, or in an installed copy, say so in the index and are taken at their word.
+        val stale = SettingsIndex.settings.filter { it.anchor != null && it.onlyWhen == null && it.anchor !in seen.getValue(it.page) }
+            .map { "${it.page.name}: \"${it.entry.title}\" at \"${it.anchor}\"" }
+        if (stale.isNotEmpty()) {
+            fail("These entries in SettingsIndex point at settings their pages do not draw:\n" + stale.joinToString("\n"))
+        }
+    }
+
+    @Test
+    fun `every page has its settings in the index, and no two entries share a name`() {
+        SettingsPage.entries.forEach { page ->
+            assertTrue(SettingsIndex.settings.any { it.page == page }, "$page has nothing in the index")
+        }
+        val ids = SettingsIndex.entries.map { it.id }
+        assertEquals(ids.size, ids.toSet().size, "two entries with one name: " + ids.groupBy { it }.filterValues { it.size > 1 }.keys)
+        SettingsIndex.settings.forEach { setting ->
+            assertEquals(setting.page.path, setting.entry.section)
+            assertTrue(setting.entry.description.isNotBlank(), "${setting.entry.title} says nothing about what it does")
+        }
+    }
+
+    private fun first(query: String) = SettingsIndex.search(query).firstOrNull()?.setting
+        ?: fail("Nothing found for \"$query\"")
+
+    @Test
+    fun `what people call a setting finds it, as well as its name`() {
+        assertEquals("Theme", first("dark mode").entry.title)
+        assertEquals("Theme", first("light theme").entry.title)
+        assertEquals("Volume booster", first("louder").entry.title)
+        assertEquals("Volume booster", first("boost").entry.title)
+        assertEquals(SettingsPage.SHORTCUTS, first("hotkeys").page)
+        assertEquals(SettingsPage.SHORTCUTS, first("keyboard").page)
+        assertEquals("Equaliser", first("eq").entry.title)
+        assertEquals("Equaliser", first("equalizer").entry.title)
+        assertEquals("Equaliser", first("equaliser").entry.title)
+        assertEquals("Accent", first("accent color").entry.title)
+        assertEquals("Skip the parts of a YouTube video that are not the music", first("sponsorblock").entry.title)
+        assertEquals(SettingsPage.STARTUP, first("start with windows").page)
+        assertEquals("Text size", first("font size").entry.title)
+        assertEquals("When you close Noctorium", first("minimize to tray").entry.title)
+        assertEquals("Quick search", first("ctrl+f").entry.title)
+        assertEquals(SettingsPage.SCROBBLING, first("last.fm").page)
+    }
+
+    @Test
+    fun `a name is found before a description, and a typo in a long word is forgiven`() {
+        val found = SettingsIndex.search("autoplay")
+        assertEquals("Autoplay", found.first().setting.entry.title)
+        assertEquals(SettingMatchKind.TITLE_START, found.first().match.kind)
+        assertEquals("Equaliser", first("equaliserr").entry.title, "one letter too many")
+        assertEquals("Animations", first("animatoins").entry.title, "two letters the wrong way round")
+        assertTrue(SettingsIndex.search("").isEmpty())
+        assertTrue(SettingsIndex.search("zzzz qqqq").isEmpty())
+    }
+
+    @Test
+    fun `every shortcut can be found by what it does, on the Shortcuts page`() {
+        ShortcutAction.entries.forEach { action ->
+            assertTrue(
+                SettingsIndex.settings.any { it.page == SettingsPage.SHORTCUTS && it.anchor == action.title },
+                "${action.title} cannot be found",
+            )
+        }
+        assertEquals(SettingsPage.SHORTCUTS, first("stop after this song").page)
+    }
+}

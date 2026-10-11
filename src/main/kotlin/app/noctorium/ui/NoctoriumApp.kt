@@ -18,6 +18,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
@@ -181,8 +182,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
+/**
+ * The whole window. [desktop] is what only the application around it has: the global shortcuts it registers, a
+ * request for the quick search bar from one of them, and the window being shown and hidden.
+ */
 @Composable
-fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: java.awt.Window? = null) {
+fun NoctoriumApp(
+    appState: AppState = remember { desktopAppState() },
+    window: java.awt.Window? = null,
+    desktop: DesktopHooks = DesktopHooks(),
+) {
     val ui by appState.ui.collectAsState()
     val queue by appState.queue.state.collectAsState()
     val playback by appState.playback.collectAsState()
@@ -232,6 +241,10 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     LaunchedEffect(Unit) { PlaybackToolInstaller.ensureReady() }
 
     var shortcutsOpen by remember { mutableStateOf(false) }
+    // The quick search bar over the window, on Ctrl+F (⌘F on a Mac), or asked for by its global shortcut while
+    // Noctorium was already the window in front.
+    var quickSearchOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(desktop.quickSearchAsked) { if (desktop.quickSearchAsked > 0) quickSearchOpen = true }
     // Bumped by the shortcut that means "search"; the search box watches it and takes the caret. A
     // counter rather than a flag, so pressing it twice while already there works the second time too.
     var focusSearch by remember { mutableStateOf(0) }
@@ -241,6 +254,8 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
     // an ordinary letter reaching here -- typing "no surprises" into the search box put the words in and
     // toggled shuffle three times on the way past, which is not something either piece of code admits to.
     val typing = remember { mutableStateOf(false) }
+    // The listener's keys, with what they changed in Settings on top of the ones Noctorium comes with.
+    val shortcuts = remember(preferences.desktop.shortcuts) { InAppShortcuts.from(preferences.desktop.shortcuts, isMacPlatform) }
 
     fun handle(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown) return false
@@ -250,27 +265,16 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
             shift = event.isShiftPressed,
             alt = event.isAltPressed,
             typing = typing.value,
+            meta = event.isMetaPressed,
+            shortcuts = shortcuts,
         ) ?: return false
+        if (appState.perform(shortcut)) return true
         when (shortcut) {
-            Shortcut.PlayPause -> appState.togglePlayback()
-            Shortcut.Next -> appState.next()
-            Shortcut.Previous -> appState.previous()
-            is Shortcut.Seek -> {
-                val duration = playback.durationMs
-                if (duration > 0) {
-                    appState.seekTo((playback.positionMs + shortcut.deltaMs).coerceIn(0, duration))
-                }
-            }
-            is Shortcut.Volume -> appState.setVolume((playback.volume + shortcut.delta).coerceIn(0f, 1f))
-            Shortcut.Mute -> appState.toggleMute()
-            Shortcut.Shuffle -> appState.toggleShuffle()
-            Shortcut.Repeat -> appState.cycleRepeat()
-            Shortcut.Like -> queue.current?.let(appState::toggleLike)
-            is Shortcut.Go -> appState.navigate(shortcut.destination)
             Shortcut.Search -> {
                 appState.navigate(Destination.SEARCH)
                 focusSearch++
             }
+            Shortcut.QuickSearch -> quickSearchOpen = true
             Shortcut.Help -> shortcutsOpen = true
             // The clipboard read at the moment of pressing, and the link screen shown so what happened to
             // it is visible: playing, or why not.
@@ -278,6 +282,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                 appState.openLink(copied)
                 appState.navigate(Destination.LINK)
             }
+            Shortcut.ToggleWindow -> desktop.toggleWindow?.invoke() ?: return false
             // The sheet first, and otherwise the caret: having typed in a box, there is no way back to
             // the keyboard without reaching for the mouse, which rather defeats the point of all this.
             // Escape puts focus back where the shortcuts live.
@@ -287,18 +292,26 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                 // Nothing of ours is open, so it belongs to whatever else is listening.
                 else -> return false
             }
+            // Answered by perform() above.
+            else -> return false
         }
         return true
     }
 
-    // Something has to hold focus for a key to arrive at all, and on a fresh window nothing does.
-    LaunchedEffect(Unit) { runCatching { keyboard.requestFocus() } }
+    // Something has to hold focus for a key to arrive at all, and on a fresh window nothing does -- nor once the
+    // box that had it has gone with the page it was on, which left Ctrl+F doing nothing after a search. A screen
+    // that wants the caret in a box of its own asks for it after this.
+    LaunchedEffect(ui.destination) {
+        typing.value = false
+        runCatching { keyboard.requestFocus() }
+    }
 
     // The keys on the keyboard itself, which reach Noctorium whether or not it is the window in front.
     // Only play, pause and the two track keys: those are the ones somebody presses without looking, and
     // they are the ones an application may reasonably take from the whole machine.
-    DisposableEffect(Unit) {
-        val grab = MediaKeys.start { shortcut ->
+    // Only for a real window: a picture of the window drawn off screen takes no keys from the machine it is drawn on.
+    DisposableEffect(window) {
+        val grab = if (window == null) null else MediaKeys.start { shortcut ->
             when (shortcut) {
                 Shortcut.PlayPause -> appState.togglePlayback()
                 Shortcut.Next -> appState.next()
@@ -323,8 +336,19 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
           LocalDensity provides Density(density.density, density.fontScale * preferences.textSize.scale),
           LocalMotion provides preferences.animations,
           LocalIconSet provides preferences.iconSet.onDesktop(),
+          LocalGlobalShortcuts provides desktop.globalShortcuts,
       ) {
-        if (shortcutsOpen) ShortcutsSheet { shortcutsOpen = false }
+        if (shortcutsOpen) ShortcutsSheet(shortcuts) { shortcutsOpen = false }
+        if (quickSearchOpen) {
+            // Over the whole window, and holding the keyboard while it is open; closing hands the keyboard back
+            // to the window, where the shortcuts listen.
+            QuickSearchPopup(appState) {
+                quickSearchOpen = false
+                // Its box goes with it, and may not say so on the way out.
+                typing.value = false
+                runCatching { keyboard.requestFocus() }
+            }
+        }
         // The launch check has an answer nobody asked for; this is where it gets to say so once.
         UpdatePrompt(appState)
         Surface(
@@ -341,10 +365,7 @@ fun NoctoriumApp(appState: AppState = remember { desktopAppState() }, window: ja
                     NavigationRail(ui.destination, preferences.desktop.hiddenDestinations, appState::navigate)
                 }
                 Column(Modifier.weight(1f)) {
-                    PlaybackToolsBanner {
-                        pendingSettingsPage = SettingsPage.PLAYBACK_TOOLS
-                        appState.navigate(Destination.SETTINGS)
-                    }
+                    PlaybackToolsBanner { openSettingsPage(appState, SettingsPage.PLAYBACK_TOOLS) }
                     val playerAtTop = preferences.playerBarPosition == PlayerBarPosition.TOP
                     val screens: @Composable () -> Unit = {
                         // One screen easing in over the last rather than the window cutting between them.
@@ -633,10 +654,7 @@ private fun HomePutAway(everything: Boolean, state: AppState) {
             modifier = Modifier.widthIn(max = 460.dp),
         )
         Spacer(Modifier.height(18.dp))
-        FilledTonalButton({
-            pendingSettingsPage = SettingsPage.CUSTOMIZATION
-            state.navigate(Destination.SETTINGS)
-        }) {
+        FilledTonalButton({ openSettingsPage(state, SettingsPage.BROWSING, "On Home") }) {
             Icon(Icons.Default.Tune, null, Modifier.size(17.dp))
             Spacer(Modifier.width(8.dp))
             Text("Choose what Home shows")
@@ -1720,13 +1738,15 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
             value = ui.searchQuery,
             onValueChange = state::search,
             leadingIcon = { Icon(Icons.Default.Search, null) },
-            placeholder = { Text("Artists, songs, albums and playlists") },
+            // A bang -- !sc, !ytm -- sends this one search to its service, and says so beside the words.
+            prefix = ui.searchBang?.let { bang -> { Row(verticalAlignment = Alignment.CenterVertically) { BangChipView(BangChip(bang.typed, serviceName(bang.mode), bang.mode), compact = true); Spacer(Modifier.width(8.dp)) } } },
+            placeholder = { Text("Artists, songs, albums and playlists, or !ytm, !sc, !sp, !bc, !vk for one service") },
             singleLine = true,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth().widthIn(max = 860.dp).focusRequester(box).tracksTyping(),
         )
         Spacer(Modifier.height(12.dp))
-        SearchModePicker(ui.searchMode, state::setSearchMode)
+        SearchModePicker(ui.activeSearchMode, state::setSearchMode)
         Spacer(Modifier.height(18.dp))
         val settings by state.settings.collectAsState()
         when {
@@ -2940,8 +2960,7 @@ internal fun NowPlayingArranger(look: NowPlayingPreferences, backdrop: NowPlayin
         Spacer(Modifier.height(10.dp))
         TextButton({
             close()
-            pendingSettingsPage = SettingsPage.CUSTOMIZATION
-            state.navigate(Destination.SETTINGS)
+            openSettingsPage(state, SettingsPage.NOW_PLAYING)
         }) {
             Text("More in Settings", fontSize = 12.sp)
         }
@@ -4017,346 +4036,38 @@ private fun PlaybackError(message: String) {
     }
 }
 
-private enum class SettingsPage {
-    ACCOUNT, PROFILE, CUSTOMIZATION, SOUND, PLAYBACK_QUEUE, YOUTUBE, SOUNDCLOUD, SPOTIFY, BANDCAMP, VK, SCROBBLING, LYRICS,
-    STARTUP, DISCORD, UPDATES, PLAYBACK_TOOLS, DIAGNOSTICS
-}
-
-/**
- * A settings page something elsewhere has asked for.
- *
- * Which page is open is local to [SettingsScreen] and should stay that way -- but the banner shown when
- * mpv is missing has to be able to land on the page that fixes it, rather than on the settings list with
- * a instruction to go looking. Read once and cleared, so it cannot pin the screen open.
+/*
+ * The pages of Look -- Theme and colours, Typeface and text, Player bar, Now playing, Home and browsing -- which
+ * were one page, Customization, until it grew too long to find anything on. Each option previews itself with a
+ * real, working control rather than a screenshot, so the choice is made by looking at the thing itself.
  */
-private var pendingSettingsPage: SettingsPage? = null
 
-/** Counts the pages asked for, so that a Settings screen already open goes to one as well. */
-private val settingsPageAsked = mutableIntStateOf(0)
-
-/**
- * Settings, open at Customization: where the taskbar's own menu sends "Properties", as Windows' taskbar sent its
- * Properties to the taskbar's settings. Settings may be open already, at another page, and goes there too.
- */
-internal fun openCustomization(state: AppState) {
-    pendingSettingsPage = SettingsPage.CUSTOMIZATION
-    settingsPageAsked.intValue++
-    state.navigate(Destination.SETTINGS)
-}
-
+/** The player bar: its layout, where it sits and what it carries; and the seek bar on it. */
 @Composable
-internal fun SettingsScreen(state: AppState) {
-    val settings by state.settings.collectAsState()
-    var page by remember { mutableStateOf(pendingSettingsPage.also { pendingSettingsPage = null }) }
-    // A page asked for while this screen was already open.
-    val asked by settingsPageAsked
-    LaunchedEffect(asked) {
-        pendingSettingsPage?.let {
-            page = it
-            pendingSettingsPage = null
-        }
-    }
-    // Going into a page and back out again slides, the way a phone's settings do, rather than cutting.
-    MotionContent(page, Modifier.fillMaxSize(), kind = MotionKind.PAGE, forward = { _, to -> to != null }) { shown ->
-        if (shown != null) {
-            SettingsDetailHeader(pageTitle(shown), { page = null }) {
-                when (shown) {
-                    SettingsPage.ACCOUNT -> NoctoriumAccountPanel(state)
-                    SettingsPage.PROFILE -> ProfileSettingsPanel(settings.preferences, state)
-                    SettingsPage.CUSTOMIZATION -> CustomizationPanel(settings.preferences, state)
-                    SettingsPage.SOUND -> SoundSettingsPanel(settings.preferences, state)
-                    SettingsPage.PLAYBACK_QUEUE -> PlaybackQueueSettingsPanel(settings.preferences, state)
-                    SettingsPage.YOUTUBE -> YouTubeAccountPanel(settings, state)
-                    SettingsPage.SOUNDCLOUD -> AccountConnectionPanel(
-                        ProviderType.SOUNDCLOUD,
-                        settings.preferences.soundCloudCookies,
-                        settings.soundCloudAccount,
-                        state,
-                        settings.preferences.soundCloudUsername,
-                    )
-                    SettingsPage.SPOTIFY -> SpotifySettingsPanel(settings, state)
-                    SettingsPage.BANDCAMP -> BandcampSettingsPanel(settings, state)
-                    SettingsPage.VK -> VkSettingsPanel(settings, state)
-                    SettingsPage.SCROBBLING -> ScrobblingSettingsPanel(settings, state)
-                    SettingsPage.LYRICS -> LyricsSettingsPanel(settings.preferences, state)
-                    SettingsPage.STARTUP -> StartupSettingsPanel(settings.preferences, state)
-                    SettingsPage.DISCORD -> DiscordSettingsPanel(settings.preferences, state)
-                    SettingsPage.UPDATES -> UpdatePanel(state)
-                    SettingsPage.PLAYBACK_TOOLS -> PlaybackToolsPanel()
-                    SettingsPage.DIAGNOSTICS -> DiagnosticsPanel(settings, state)
-                }
-            }
-        } else {
-            // A Control Panel, in a folder's white pane, under a Windows skin; the pages are property sheets.
-            BrowsingPane { SettingsHome(settings, state) { page = it } }
-        }
-    }
-}
-
-/** The list of settings, each tile a way into its page. */
-@Composable
-private fun SettingsHome(settings: SettingsState, state: AppState, open: (SettingsPage) -> Unit) {
-    val list = rememberLazyListState()
-    LazyColumn(
-        Modifier.fillMaxSize().classicScrollbar(list).padding(horizontal = 30.dp),
-        state = list,
-        contentPadding = chromePadding(top = 26.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(if (skinned()) 2.dp else 11.dp),
-    ) {
-        item {
-            ScreenTitle("Settings", 34.sp)
-            Text("Accounts, services and how Noctorium behaves.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-            Spacer(Modifier.height(12.dp))
-        }
-        settings.message?.let { message ->
-            item {
-                if (skinned()) {
-                    InfoBar(Icons.Default.CheckCircle, message, MaterialTheme.colorScheme.primary, state::clearSettingsMessage)
-                    return@item
-                }
-                Surface(color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .55f), shape = RoundedCornerShape(11.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CheckCircle, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(9.dp)); Text(message, Modifier.weight(1f), fontSize = 12.sp)
-                        IconButton(state::clearSettingsMessage, Modifier.size(28.dp)) { Icon(Icons.Default.Close, "Dismiss", Modifier.size(16.dp)) }
-                    }
-                }
-            }
-        }
-        item {
-            val account by state.account.collectAsState()
-            SettingsCard(
-                account.user?.displayName ?: "Noctorium account",
-                if (account.signedIn) {
-                    "${account.stats.streams} streamed · ${account.stats.uniqueTracks} different · " +
-                        "${formatHours(account.stats.hours)} listened"
-                } else {
-                    "Sign in to count what you listen to"
-                },
-                Icons.Default.Insights,
-                { open(SettingsPage.ACCOUNT) },
-            )
-        }
-        item {
-            SettingsCard(
-                settings.preferences.profileName,
-                "Your local Noctorium profile",
-                Icons.Default.AccountCircle,
-                { open(SettingsPage.PROFILE) },
-            )
-        }
-        item {
-            SettingsCard(
-                "Customization",
-                "Theme, colour, typeface, lyrics, Home and the player",
-                Icons.Default.Tune,
-                { open(SettingsPage.CUSTOMIZATION) },
-            )
-        }
-        item {
-            // Its own page rather than a card under Customization: how the music sounds is not how
-            // Noctorium looks, and somebody looking for an equaliser looks for the word Sound.
-            val equalizer = settings.preferences.equalizer
-            SettingsCard(
-                "Sound",
-                if (equalizer.enabled) "Equaliser on · ${equalizer.preset.displayName}" else "Equaliser off",
-                Icons.Default.Equalizer,
-                { open(SettingsPage.SOUND) },
-                equalizer.enabled,
-            )
-        }
-        item {
-            // Beside Sound, as how the music goes on rather than how it sounds: its speed, what follows the
-            // queue, whether the queue is kept, and how the sleep timer ends it.
-            SettingsCard(
-                "Playback and queue",
-                playbackSummary(settings.preferences),
-                Icons.AutoMirrored.Filled.QueueMusic,
-                { open(SettingsPage.PLAYBACK_QUEUE) },
-            )
-        }
-        item {
-            SettingsCard(
-                "YouTube Music",
-                accountSummary(settings.preferences.youtubeCookies, settings.youtubeAccount),
-                Icons.Default.PlayCircle,
-                { open(SettingsPage.YOUTUBE) },
-                settings.youtubeAccount.status == AccountConnectionStatus.CONNECTED,
-            )
-        }
-        item {
-            SettingsCard(
-                "SoundCloud",
-                accountSummary(settings.preferences.soundCloudCookies, settings.soundCloudAccount),
-                Icons.Default.Cloud,
-                { open(SettingsPage.SOUNDCLOUD) },
-                settings.soundCloudAccount.status == AccountConnectionStatus.CONNECTED,
-            )
-        }
-        item {
-            SettingsCard(
-                "Spotify library",
-                spotifySummary(settings.spotify),
-                Icons.Default.LibraryMusic,
-                { open(SettingsPage.SPOTIFY) },
-                settings.spotify.connected,
-            )
-        }
-        item {
-            SettingsCard(
-                "Bandcamp",
-                bandcampSummary(settings.preferences.bandcampUsername, settings.bandcamp),
-                Icons.Default.Album,
-                { open(SettingsPage.BANDCAMP) },
-                settings.preferences.bandcampUsername.isNotBlank(),
-            )
-        }
-        item {
-            SettingsCard(
-                "VK Music",
-                vkSummary(settings.vk),
-                Icons.Default.Headphones,
-                { open(SettingsPage.VK) },
-                settings.vk.connected,
-            )
-        }
-        item {
-            val connected = listOf(settings.scrobbling.lastFm, settings.scrobbling.listenBrainz)
-                .filter { it.status == ScrobbleConnectionStatus.CONNECTED }
-                .mapNotNull { it.username }
-            SettingsCard(
-                "Scrobbling",
-                if (connected.isEmpty()) "Connect Last.fm or ListenBrainz" else "Connected: ${connected.joinToString()}",
-                Icons.Default.History,
-                { open(SettingsPage.SCROBBLING) },
-                connected.isNotEmpty(),
-            )
-        }
-        item {
-            SettingsCard(
-                "Lyrics providers",
-                settings.preferences.lyricsProvider?.let { "Opens on ${it.displayName} · 8 sources" }
-                    ?: "LRCLIB, Better Lyrics, Genius and 5 more",
-                Icons.Default.Lyrics,
-                { open(SettingsPage.LYRICS) },
-            )
-        }
-        item {
-            SettingsCard(
-                "Startup and tray",
-                startupSubtitle(settings.preferences),
-                Icons.Default.PowerSettingsNew,
-                { open(SettingsPage.STARTUP) },
-            )
-        }
-        item {
-            // Read from the live setting. This once read the field that only exists to carry a choice over
-            // from an older build, which is never written and so always said Disabled however it was set.
-            val discord = settings.preferences.discord
-            SettingsCard(
-                "Discord Rich Presence",
-                if (discord.enabled) "Enabled · ${discord.timestamps.displayName}" else "Disabled",
-                Icons.Default.SportsEsports,
-                { open(SettingsPage.DISCORD) },
-                discord.enabled,
-            )
-        }
-        item { SettingsCard("Updates", updatesSubtitle(state), Icons.Default.SystemUpdateAlt, { open(SettingsPage.UPDATES) }) }
-        item {
-            SettingsCard(
-                "Playback tools",
-                playbackToolsSubtitle(),
-                Icons.Default.Extension,
-                { open(SettingsPage.PLAYBACK_TOOLS) },
-            )
-        }
-        item { SettingsCard("Diagnostics", "Check yt-dlp, mpv and storage", Icons.Default.MonitorHeart, { open(SettingsPage.DIAGNOSTICS) }) }
-    }
-}
-
-/** The state of the two programs playback depends on, on the tile rather than one click inside it. */
-@Composable
-private fun playbackToolsSubtitle(): String {
-    val tools by PlaybackToolInstaller.state.collectAsState()
-    val installing = tools.installing
-    return when {
-        installing != null -> "Installing ${installing.displayName}…"
-        tools.tools.isEmpty() -> "yt-dlp and mpv"
-        tools.missingRequired.isNotEmpty() ->
-            tools.missingRequired.joinToString(" and ") { it.displayName } + " is missing"
-        else -> "yt-dlp and mpv are ready"
-    }
-}
-
-/** Says on the tile itself when there is something new, so it is not hidden one click away. */
-@Composable
-private fun updatesSubtitle(state: AppState): String {
-    val updates by state.updates.collectAsState()
-    val available = updates.available
-    return when {
-        available != null -> "Noctorium ${available.version} is available"
-        updates.currentVersion.isNotBlank() -> "You have ${updates.currentVersion}"
-        else -> "Check for a newer Noctorium"
-    }
-}
-
-private fun pageTitle(page: SettingsPage) = when (page) {
-    SettingsPage.ACCOUNT -> "Noctorium account"
-    SettingsPage.PROFILE -> "Your Noctorium profile"
-    SettingsPage.CUSTOMIZATION -> "Customization"
-    SettingsPage.SOUND -> "Sound"
-    SettingsPage.PLAYBACK_QUEUE -> "Playback and queue"
-    SettingsPage.YOUTUBE -> "YouTube Music account"
-    SettingsPage.SOUNDCLOUD -> "SoundCloud account"
-    SettingsPage.SPOTIFY -> "Spotify library"
-    SettingsPage.BANDCAMP -> "Bandcamp"
-    SettingsPage.VK -> "VK Music"
-    SettingsPage.SCROBBLING -> "Scrobbling"
-    SettingsPage.LYRICS -> "Lyrics providers"
-    SettingsPage.STARTUP -> "Startup and tray"
-    SettingsPage.DISCORD -> "Discord Rich Presence"
-    SettingsPage.UPDATES -> "Updates"
-    SettingsPage.PLAYBACK_TOOLS -> "Playback tools"
-    SettingsPage.DIAGNOSTICS -> "Diagnostics"
-}
-
-@Composable
-private fun SettingsDetailHeader(title: String, back: () -> Unit, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 30.dp, vertical = 24.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to settings") }
-            Spacer(Modifier.width(6.dp)); ScreenTitle(title, 28.sp)
-        }
-        Spacer(Modifier.height(18.dp))
-        Box(Modifier.fillMaxSize()) { content() }
-    }
-}
-
-/**
- * Choices about how Noctorium looks. Each option previews itself with a real, working control rather than a
- * screenshot, so the choice is made by looking at the thing itself.
- */
-@Composable
-private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppState) {
-    Column(Modifier.fillMaxSize().scrollingPage().padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+internal fun PlayerBarSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
+    SettingsPageColumn {
         SettingsPanelCard {
-            CardHeading(Icons.Default.Tune, "Seek bar")
+            CardHeading(Icons.Default.Tune, "Player bar")
             Spacer(Modifier.height(6.dp))
             Text(
-                "Used in the player bar and on the now playing screen. Both can be dragged and clicked to seek.",
+                "The bar with the controls on it, along the foot of the window or the top.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
             )
             Spacer(Modifier.height(15.dp))
-            Text("Player bar layout", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(9.dp))
-            PlayerBarStylePicker(preferences.playerBarStyle, state::setPlayerBarStyle)
-            Spacer(Modifier.height(7.dp))
-            Text(
-                preferences.playerBarStyle.description,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-            )
+            SettingAnchor("Player bar layout") {
+                Column {
+                    Text("Player bar layout", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(9.dp))
+                    PlayerBarStylePicker(preferences.playerBarStyle, state::setPlayerBarStyle)
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        preferences.playerBarStyle.description,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                }
+            }
             // While the player bar is a taskbar, with a clock in its tray to show or not.
             if (preferences.playerBarStyle == PlayerBarStyle.TASKBAR) {
                 Spacer(Modifier.height(12.dp))
@@ -4383,28 +4094,52 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
             )
             Spacer(Modifier.height(15.dp))
             PlayerButtonsSetting(preferences, state)
-            Spacer(Modifier.height(18.dp))
-            SaveMusicSetting(preferences, state)
-            Spacer(Modifier.height(18.dp))
-            Text("Seek bar style", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(9.dp))
-            ProgressBarStyle.entries.forEach { option ->
-                ProgressStyleOption(
-                    option = option,
-                    selected = preferences.progressBarStyle == option,
-                    choose = { state.setProgressBarStyle(option) },
-                )
-                Spacer(Modifier.height(10.dp))
+        }
+
+        SettingsPanelCard {
+            CardHeading(Icons.Default.LinearScale, "Seek bar")
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Used in the player bar and on the now playing screen. Both can be dragged and clicked to seek.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(15.dp))
+            SettingAnchor("Seek bar style") {
+                Column {
+                    Text("Seek bar style", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(9.dp))
+                    ProgressBarStyle.entries.forEach { option ->
+                        ProgressStyleOption(
+                            option = option,
+                            selected = preferences.progressBarStyle == option,
+                            choose = { state.setProgressBarStyle(option) },
+                        )
+                        Spacer(Modifier.height(10.dp))
+                    }
+                }
             }
             ChoiceRow("Right-hand figure", TimeDisplay.entries, preferences.timeDisplay, { it.displayName }, state::setTimeDisplay)
         }
+    }
+}
 
+/** The now playing screen, and how the lyrics are set on it. */
+@Composable
+internal fun NowPlayingSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
+    SettingsPageColumn {
         NowPlayingSettingsCard(preferences, state)
 
         PlaylistLayoutCard(preferences, state)
 
         LyricsLookCard(preferences.lyrics, state)
+    }
+}
 
+/** The theme, and the colours and finish laid over it. */
+@Composable
+internal fun ThemeSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
+    SettingsPageColumn {
         SettingsPanelCard {
             CardHeading(Icons.Default.Palette, "Theme")
             Spacer(Modifier.height(6.dp))
@@ -4440,62 +4175,88 @@ private fun CustomizationPanel(preferences: NoctoriumPreferences, state: AppStat
         ColourSettingsCard(preferences, state)
 
         IconSetCard(preferences, state)
+    }
+}
 
-        SettingsPanelCard {
-            CardHeading(Icons.Default.PlayCircle, "Playback")
-            Spacer(Modifier.height(12.dp))
-            ToggleRow(
-                "Skip the parts of a YouTube video that are not the music",
-                "Intros, outros, sponsor reads and talking, as marked by SponsorBlock's contributors. " +
-                    "YouTube Music tracks are never touched. Asks sponsor.ajay.app by a hash of the video id.",
-                preferences.skipNonMusic,
-                change = state::setSkipNonMusic,
-            )
-        }
+/** The size of everything written, and the typeface it is written in. */
+@Composable
+internal fun TextSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
+    SettingsPageColumn {
+        TextSettingsCard(preferences, state)
+    }
+}
 
+/** Cards, badges, what Home holds and what the sidebar offers. */
+@Composable
+internal fun BrowsingSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
+    SettingsPageColumn {
         BrowsingSettingsCard(preferences, state)
+    }
+}
 
-        SettingsPanelCard {
-            CardHeading(Icons.Default.Start, "Startup")
-            Spacer(Modifier.height(12.dp))
-            ChoiceRow("Open Noctorium on", StartPage.entries, preferences.startPage, { it.displayName }, state::setStartPage)
-        }
+/** Skipping what is not the music in a YouTube video: on the Playback and queue page, with how the music goes on. */
+@Composable
+internal fun SkipNonMusicCard(preferences: NoctoriumPreferences, state: AppState) {
+    SettingsPanelCard {
+        CardHeading(Icons.Default.PlayCircle, "Skipping")
+        Spacer(Modifier.height(12.dp))
+        ToggleRow(
+            "Skip the parts of a YouTube video that are not the music",
+            "Intros, outros, sponsor reads and talking, as marked by SponsorBlock's contributors. " +
+                "YouTube Music tracks are never touched. Asks sponsor.ajay.app by a hash of the video id.",
+            preferences.skipNonMusic,
+            change = state::setSkipNonMusic,
+        )
+    }
+}
+
+/** Which page Noctorium opens on: on the Startup and tray page, with how it starts. */
+@Composable
+internal fun StartPageCard(preferences: NoctoriumPreferences, state: AppState) {
+    SettingsPanelCard {
+        CardHeading(Icons.Default.Start, "Opening")
+        Spacer(Modifier.height(12.dp))
+        ChoiceRow("Open Noctorium on", StartPage.entries, preferences.startPage, { it.displayName }, state::setStartPage)
     }
 }
 
 /**
- * The colours and the type: the accent, with a picker for the listener's own, then animations, surfaces,
- * corners, the text size and the typeface.
+ * The colours: the accent, with a picker for the listener's own, then animations, surfaces and corners. The text
+ * size and the typeface have a page of their own, [TextSettingsCard].
  */
 @Composable
 internal fun ColourSettingsCard(preferences: NoctoriumPreferences, state: AppState) {
     SettingsPanelCard {
         CardHeading(Icons.Default.Palette, "Colour")
         Spacer(Modifier.height(12.dp))
-        Text("Accent", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(9.dp))
-        // Swatches rather than names: the colour is the label.
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            AccentPreset.entries.forEach { option ->
-                AccentSwatch(
-                    option,
-                    Color(preferences.themeColours().accent),
-                    Color(preferences.customAccent or 0xFF000000L),
-                    preferences.accent == option,
-                ) { state.setAccent(option) }
+        SettingAnchor("Accent") {
+            Column {
+                Text("Accent", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(9.dp))
+                // Swatches rather than names: the colour is the label.
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AccentPreset.entries.forEach { option ->
+                        AccentSwatch(
+                            option,
+                            Color(preferences.themeColours().accent),
+                            Color(preferences.customAccent or 0xFF000000L),
+                            preferences.accent == option,
+                        ) { state.setAccent(option) }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    when (preferences.accent) {
+                        AccentPreset.ARTWORK -> "The interface follows the cover of whatever is playing."
+                        AccentPreset.THEME -> "The accent the theme was designed with."
+                        AccentPreset.CUSTOM -> "Your own colour, wherever the theme would have put its accent."
+                        else -> preferences.accent.displayName
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                )
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            when (preferences.accent) {
-                AccentPreset.ARTWORK -> "The interface follows the cover of whatever is playing."
-                AccentPreset.THEME -> "The accent the theme was designed with."
-                AccentPreset.CUSTOM -> "Your own colour, wherever the theme would have put its accent."
-                else -> preferences.accent.displayName
-            },
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 11.sp,
-        )
         // Shown only once Your own is chosen, so the card stays short for everybody happy with a swatch.
         if (preferences.accent == AccentPreset.CUSTOM) {
             Spacer(Modifier.height(14.dp))
@@ -4520,7 +4281,15 @@ internal fun ColourSettingsCard(preferences: NoctoriumPreferences, state: AppSta
         Text(preferences.surfaceStyle.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         Spacer(Modifier.height(16.dp))
         ChoiceRow("Corners", CornerStyle.entries, preferences.cornerStyle, { it.displayName }, state::setCornerStyle)
-        Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** The type: everything's size at once, and the typeface. */
+@Composable
+internal fun TextSettingsCard(preferences: NoctoriumPreferences, state: AppState) {
+    SettingsPanelCard {
+        CardHeading(Icons.Default.TextFields, "Text")
+        Spacer(Modifier.height(12.dp))
         ChoiceRow("Text size", TextSize.entries, preferences.textSize, { it.displayName }, state::setTextSize)
         Spacer(Modifier.height(6.dp))
         Text(
@@ -4657,11 +4426,15 @@ internal fun NowPlayingSettingsCard(preferences: NoctoriumPreferences, state: Ap
             fontSize = 12.sp,
         )
         Spacer(Modifier.height(15.dp))
-        Text("Layout", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(9.dp))
-        NowPlayingLayoutPicker(look.layout) { layout -> state.updateNowPlaying { copy(layout = layout) } }
-        Spacer(Modifier.height(7.dp))
-        Text(look.layout.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+        SettingAnchor("Layout") {
+            Column {
+                Text("Layout", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(9.dp))
+                NowPlayingLayoutPicker(look.layout) { layout -> state.updateNowPlaying { copy(layout = layout) } }
+                Spacer(Modifier.height(7.dp))
+                Text(look.layout.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            }
+        }
         Spacer(Modifier.height(16.dp))
         ChoiceRow("Cover", CoverStyle.entries, look.cover, { it.displayName }) { cover -> state.updateNowPlaying { copy(cover = cover) } }
         Spacer(Modifier.height(6.dp))
@@ -4704,11 +4477,11 @@ internal fun NowPlayingSettingsCard(preferences: NoctoriumPreferences, state: Ap
 }
 
 @Composable
-internal fun CardHeading(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String) {
+internal fun CardHeading(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String) = SettingAnchor(title) {
     // Set into the group box's top edge under a Windows skin, as a group box's caption was.
     if (skinned()) {
         GroupLegend(title)
-        return
+        return@SettingAnchor
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
@@ -4743,11 +4516,11 @@ internal fun <T> ChoiceRow(
     name: (T) -> String,
     enabled: Boolean,
     choose: (T) -> Unit,
-) {
+) = SettingAnchor(label) {
     // Option buttons under a Windows skin, which is what a choice of one was on those desktops.
     if (skinned()) {
         OptionButtons(label, options, selected, name, enabled, choose)
-        return
+        return@SettingAnchor
     }
     Column {
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -4784,11 +4557,11 @@ internal fun <T> ChoiceRow(
 }
 
 @Composable
-internal fun ToggleRow(title: String, description: String, checked: Boolean, enabled: Boolean = true, change: (Boolean) -> Unit) {
+internal fun ToggleRow(title: String, description: String, checked: Boolean, enabled: Boolean = true, change: (Boolean) -> Unit) = SettingAnchor(title) {
     // A checkbox with its words beside it under a Windows skin: neither desktop had a switch.
     if (skinned()) {
         CheckRow(title, description, checked, enabled, change)
-        return
+        return@SettingAnchor
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         // Held off by a switch above it, the words fade with the switch, so the row reads as waiting and
@@ -5016,7 +4789,7 @@ private val SEEK_BAR_PREVIEW_SONG = Track(
 )
 
 @Composable
-private fun ProfileSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
+internal fun ProfileSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
     var name by remember(preferences.profileName) { mutableStateOf(preferences.profileName) }
     SettingsPanelCard {
         Icon(Icons.Default.AccountCircle, null, Modifier.size(54.dp), tint = MaterialTheme.colorScheme.primary)
@@ -5346,7 +5119,7 @@ private fun YouTubeSignInWindow(state: AppState, close: () -> Unit) {
 
 /** YouTube Music through a signed-in browser session, the same arrangement SoundCloud uses. */
 @Composable
-private fun YouTubeAccountPanel(settings: SettingsState, state: AppState) {
+internal fun YouTubeAccountPanel(settings: SettingsState, state: AppState) {
     val likes by state.likes.collectAsState()
     val source = settings.preferences.youtubeCookies
     var signInOpen by remember { mutableStateOf(false) }
@@ -5463,7 +5236,7 @@ private fun YouTubeAccountPanel(settings: SettingsState, state: AppState) {
 }
 
 @Composable
-private fun AccountConnectionPanel(
+internal fun AccountConnectionPanel(
     provider: ProviderType,
     source: CookieSource,
     connection: AccountConnectionState,
@@ -5783,7 +5556,7 @@ internal fun AccountFact(text: String) {
     }
 }
 
-private fun accountSummary(source: CookieSource, connection: AccountConnectionState): String = when {
+internal fun accountSummary(source: CookieSource, connection: AccountConnectionState): String = when {
     !source.isConfigured -> "Public mode — connect a browser session"
     connection.status == AccountConnectionStatus.CHECKING -> "Checking ${source.describe()}…"
     connection.status == AccountConnectionStatus.ERROR -> "${source.describe()} — needs attention"
@@ -5801,7 +5574,7 @@ private fun pickCookieFile(): String? {
 }
 
 @Composable
-private fun ScrobblingSettingsPanel(settings: SettingsState, state: AppState) {
+internal fun ScrobblingSettingsPanel(settings: SettingsState, state: AppState) {
     var listenBrainzToken by remember { mutableStateOf("") }
     var lastFmApiKey by remember { mutableStateOf("") }
     var lastFmSharedSecret by remember { mutableStateOf("") }
@@ -6012,7 +5785,7 @@ internal fun LyricsSettingsPanel(preferences: NoctoriumPreferences, state: AppSt
 
 /** What the startup tile says: how Noctorium starts, and what closing it does. */
 @Composable
-private fun startupSubtitle(preferences: NoctoriumPreferences): String {
+internal fun startupSubtitle(preferences: NoctoriumPreferences): String {
     val mode = remember { LaunchAtLogin.system.mode() }
     val closing = if (preferences.desktop.closeToTray && DesktopTray.supported) "Closes to the tray" else "Closing quits"
     val starting = when (mode) {
@@ -6024,7 +5797,7 @@ private fun startupSubtitle(preferences: NoctoriumPreferences): String {
 }
 
 /** Windows by name, where it is Windows; the Mac, on a Mac; anything else is the computer. */
-private fun computerName(): String {
+internal fun computerName(): String {
     val os = System.getProperty("os.name").orEmpty()
     return when {
         os.startsWith("Windows", ignoreCase = true) -> "Windows"
@@ -6136,29 +5909,33 @@ internal fun StartupSettingsPanel(preferences: NoctoriumPreferences, state: AppS
                 )
             }
         }
+
+        StartPageCard(preferences, state)
     }
 }
 
 @Composable
-private fun DiscordSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
+internal fun DiscordSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
     val discord = preferences.discord
     val status by state.discordStatus.collectAsState()
     var applicationId by remember(discord.applicationId) { mutableStateOf(discord.applicationId) }
 
     Column(Modifier.fillMaxSize().scrollingPage().padding(bottom = chromeBottom()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsPanelCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.SportsEsports, null, Modifier.size(38.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(13.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Show listening activity", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text(
-                        "Publishes the current track to your Discord profile over the local client. Nothing leaves this computer except what you see below.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                    )
+            SettingAnchor("Show listening activity") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.SportsEsports, null, Modifier.size(38.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(13.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Show listening activity", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Publishes the current track to your Discord profile over the local client. Nothing leaves this computer except what you see below.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                        )
+                    }
+                    Switch(discord.enabled, state::setDiscordPresence)
                 }
-                Switch(discord.enabled, state::setDiscordPresence)
             }
             Spacer(Modifier.height(14.dp))
             DiscordCardPreview(status.preview, discord)
@@ -6443,7 +6220,7 @@ private fun PresenceButtonFields(label: String, button: PresenceButton, change: 
 }
 
 @Composable
-private fun DiagnosticsPanel(settings: SettingsState, state: AppState) {
+internal fun DiagnosticsPanel(settings: SettingsState, state: AppState) {
     Column {
         Button(state::runDiagnostics, enabled = !settings.diagnosticsRunning) {
             if (settings.diagnosticsRunning) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Default.MonitorHeart, null, Modifier.size(18.dp))
@@ -6473,30 +6250,6 @@ internal fun SettingsPanelCard(content: @Composable ColumnScope.() -> Unit) {
     }
     Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(16.dp), modifier = Modifier.widthIn(max = 720.dp)) {
         Column(Modifier.fillMaxWidth().padding(22.dp), content = content)
-    }
-}
-
-@Composable
-private fun SettingsCard(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    action: () -> Unit,
-    active: Boolean = false,
-) {
-    // An item in a Control Panel under a Windows skin.
-    if (skinned()) {
-        ControlPanelItem(title, subtitle, icon, action, active)
-        return
-    }
-    Surface(onClick = action, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .5f), shape = RoundedCornerShape(15.dp)) {
-        Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(15.dp))
-            Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.SemiBold); Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
-            if (active) { Icon(Icons.Default.CheckCircle, "Active", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(9.dp)) }
-            Icon(Icons.Default.ChevronRight, null)
-        }
     }
 }
 
@@ -6540,7 +6293,7 @@ internal fun ProviderType.acceptsTrack(track: Track): Boolean = when {
 }
 
 /** Hours as something readable: a fresh account should not be told it has listened for "0.0" hours. */
-private fun formatHours(hours: Double): String = when {
+internal fun formatHours(hours: Double): String = when {
     hours <= 0.0 -> "no time yet"
     hours < 1.0 -> "${(hours * 60).roundToInt()} min"
     hours < 10.0 -> "${String.format(java.util.Locale.US, "%.1f", hours)} h"
@@ -6554,7 +6307,7 @@ private fun formatHours(hours: Double): String = when {
  * sent once and never written down.
  */
 @Composable
-private fun NoctoriumAccountPanel(state: AppState) {
+internal fun NoctoriumAccountPanel(state: AppState) {
     val account by state.account.collectAsState()
     var creating by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }

@@ -226,7 +226,7 @@ internal fun queueColumnsToggled(columns: List<QueueColumn>, column: QueueColumn
  * it was on. With autoplay off it is always the shelf, which the choice says rather than offering what cannot be.
  */
 @Composable
-internal fun HomePlaySetting(preferences: NoctoriumPreferences, state: AppState) {
+internal fun HomePlaySetting(preferences: NoctoriumPreferences, state: AppState) = SettingAnchor("Playing a song from Home") {
     Column {
         Text("Playing a song from Home", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))

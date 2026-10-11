@@ -273,7 +273,7 @@ internal fun PlaybackQueueSettingsPanel(preferences: NoctoriumPreferences, state
                 preferences.autoplay,
             ) { on -> state.setAutoplay(on) }
             Spacer(Modifier.height(14.dp))
-            Text("Where its songs come from", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            SettingAnchor("Where its songs come from") { Text("Where its songs come from", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
             Spacer(Modifier.height(4.dp))
             AutoplaySource.entries.forEach { source ->
                 val selected = preferences.autoplayFrom == source
@@ -332,6 +332,8 @@ internal fun PlaybackQueueSettingsPanel(preferences: NoctoriumPreferences, state
                 fontSize = 11.sp,
             )
         }
+
+        SkipNonMusicCard(preferences, state)
     }
 }
 
