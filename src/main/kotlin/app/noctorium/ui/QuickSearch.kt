@@ -64,7 +64,6 @@ import app.noctorium.core.AppUiState
 import app.noctorium.core.Destination
 import app.noctorium.core.SearchBangs
 import app.noctorium.core.SearchMode
-import app.noctorium.domain.PlaybackOrigin
 import app.noctorium.domain.Track
 import app.noctorium.settings.resolvedAccent
 import app.noctorium.settings.themeColours
@@ -158,7 +157,7 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
         when (key) {
             QuickKey.UP, QuickKey.DOWN -> chosen = quickChoice(chosen, key, results.size)
             QuickKey.PLAY -> results.getOrNull(chosen)?.let { track ->
-                state.play(track, PlaybackOrigin.SEARCH, results)
+                state.playFromSearch(track, results)
                 leave(QuickExit.PLAYED)
             }
             QuickKey.QUEUE -> results.getOrNull(chosen)?.let { track ->

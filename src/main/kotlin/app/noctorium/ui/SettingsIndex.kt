@@ -212,8 +212,8 @@ internal object SettingsIndex {
             setting("Speed", "Faster or slower without changing the pitch, from half to double.", "playback speed", "tempo", "faster", "slower", "podcast", "rate")
             setting("Autoplay", "When the queue runs out, songs like the last one carry on.", "radio", "endless", "keep playing", "continue", "infinite play", "recommendations")
             setting(
-                "Playing a song from Home", "A song picked on Home starts a radio from it, or plays the rest of its shelf after it.",
-                "home autoplay", "start radio", "shelf", "home tab", "what plays next",
+                "Playing a song from Home or a search", "A song picked on Home or from a search starts a radio from it, or plays the rest of its shelf or results after it.",
+                "home autoplay", "search autoplay", "start radio", "shelf", "home tab", "search results", "what plays next",
             )
             setting(
                 "Where its songs come from", "Whether autoplay's songs come from the same service as the last song, or any.",

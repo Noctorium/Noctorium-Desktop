@@ -226,9 +226,9 @@ internal fun queueColumnsToggled(columns: List<QueueColumn>, column: QueueColumn
  * it was on. With autoplay off it is always the shelf, which the choice says rather than offering what cannot be.
  */
 @Composable
-internal fun HomePlaySetting(preferences: NoctoriumPreferences, state: AppState) = SettingAnchor("Playing a song from Home") {
+internal fun HomePlaySetting(preferences: NoctoriumPreferences, state: AppState) = SettingAnchor("Playing a song from Home or a search") {
     Column {
-        Text("Playing a song from Home", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text("Playing a song from Home or a search", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
         HomePlay.entries.forEach { choice ->
             val selected = preferences.homePlay == choice
@@ -249,7 +249,7 @@ internal fun HomePlaySetting(preferences: NoctoriumPreferences, state: AppState)
         }
         if (!preferences.autoplay) {
             Text(
-                "With autoplay off, a song from Home plays the rest of its shelf: there is no radio to start.",
+                "With autoplay off, a song from Home or a search plays the songs around it: there is no radio to start.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
             )

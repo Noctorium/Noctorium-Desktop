@@ -1844,7 +1844,7 @@ private fun SearchResultsList(results: SearchResults, state: AppState) {
             }
         }
         items(results.tracks, key = { it.queueKey }) { track ->
-            TrackRow(track, results.tracks, state)
+            TrackRow(track, results.tracks, state, fromSearch = true)
         }
     }
 }
@@ -1867,9 +1867,10 @@ private fun SearchModePicker(selected: SearchMode, select: (SearchMode) -> Unit)
 }
 
 @Composable
-private fun TrackRow(track: Track, sourceQueue: List<Track>, state: AppState) {
+/** A song in a list. One picked from a search's results starts autoplay from it, as Playback and queue says. */
+private fun TrackRow(track: Track, sourceQueue: List<Track>, state: AppState, fromSearch: Boolean = false) {
     ListRow(
-        onClick = { state.play(track, PlaybackOrigin.SEARCH, sourceQueue) },
+        onClick = { if (fromSearch) state.playFromSearch(track, sourceQueue) else state.play(track, PlaybackOrigin.SEARCH, sourceQueue) },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .36f),
         shape = RoundedCornerShape(12.dp),
     ) {
