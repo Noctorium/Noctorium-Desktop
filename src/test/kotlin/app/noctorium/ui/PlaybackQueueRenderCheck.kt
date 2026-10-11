@@ -364,7 +364,8 @@ class PlaybackQueueRenderCheck {
         const val MENU_X = 1050f
         const val MENU_Y = 52f
         const val SAVE_X = 960f
-        const val SAVE_Y = 210f
+        // Below Clear all but this song and Stop after this song.
+        const val SAVE_Y = 306f
 
         /** The volume, speed and sleep timer buttons on the Inline bar, and how far above the picture's foot they sit. */
         const val VOLUME_X = 1248f
