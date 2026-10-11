@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Devices
@@ -218,14 +217,13 @@ private fun RemoteControls(state: AppState, remote: RemoteState?) {
 
         var volume by remember(remote?.volume) { mutableFloatStateOf(remote?.volume ?: 1f) }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.AutoMirrored.Filled.VolumeDown, "Volume, there", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.AutoMirrored.Filled.VolumeUp, "Volume, there", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Slider(
                 value = volume,
                 onValueChange = { volume = it },
                 modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
                 onValueChangeFinished = { state.connectSetVolume(volume) },
             )
-            Icon(Icons.AutoMirrored.Filled.VolumeUp, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
