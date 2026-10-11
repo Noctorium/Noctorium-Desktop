@@ -275,14 +275,22 @@ private fun ToolbarSong(current: Track?, playback: PlaybackState, state: AppStat
                         fontSize = if (skinned) 11.sp else 12.sp,
                         lineHeight = if (skinned) 13.sp else 15.sp,
                     )
-                    Text(
-                        playback.errorMessage ?: current?.artistLine ?: "Choose a track to start",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = if (skinned) 10.sp else 11.sp,
-                        lineHeight = if (skinned) 12.sp else 14.sp,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            playback.errorMessage ?: current?.artistLine ?: "Choose a track to start",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = if (skinned) 10.sp else 11.sp,
+                            lineHeight = if (skinned) 12.sp else 14.sp,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        // Spotify's own app is the one playing, as every bar says.
+                        if (playsOnSpotify(current, state.settings.collectAsState().value.spotify)) {
+                            Spacer(Modifier.width(6.dp))
+                            OnSpotifyMark()
+                        }
+                    }
                 }
             }
         }
