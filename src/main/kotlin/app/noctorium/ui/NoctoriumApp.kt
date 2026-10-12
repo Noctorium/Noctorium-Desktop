@@ -1006,7 +1006,7 @@ private fun LibraryScreen(state: AppState) {
         val local = rememberLast(library.openLocalPlaylist?.takeIf { "local:${it.id}" == shown })
         val service = rememberLast(library.openPlaylist?.takeIf { "playlist:${it.playlistKey}" == shown })
         when {
-            shown.startsWith("local:") -> local?.let { LocalPlaylistDetail(it, library.notice, state) }
+            shown.startsWith("local:") -> local?.let { LocalPlaylistDetail(it, library.notice, library.noticeIsProblem, state) }
             shown.startsWith("playlist:") -> service?.let { PlaylistDetail(it, library, state) }
             else -> LibraryList(library, state, { newPlaylistOpen = true }, { importOpen = true })
         }
@@ -1040,7 +1040,7 @@ private fun LibraryList(library: LibraryState, state: AppState, newPlaylist: () 
             }
         }
         Spacer(Modifier.height(10.dp))
-        library.notice?.let { LibraryNotice(it, state::clearLibraryNotice) }
+        library.notice?.let { LibraryNotice(it, library.noticeIsProblem, state::clearLibraryNotice) }
         val downloads by state.downloadState.collectAsState()
         downloads.message?.let { LibraryNotice(it, state::clearDownloadMessage) }
         if (downloads.entries.isNotEmpty() || downloads.active.isNotEmpty()) {
@@ -1093,15 +1093,25 @@ private fun LibraryList(library: LibraryState, state: AppState, newPlaylist: () 
 }
 
 @Composable
-private fun LibraryNotice(message: String, dismiss: () -> Unit) {
+private fun LibraryNotice(message: String, dismiss: () -> Unit) = LibraryNotice(message, problem = false, dismiss)
+
+/** A short word on what just happened; with [problem], on what did not, so a refusal is never shown with a tick. */
+@Composable
+private fun LibraryNotice(message: String, problem: Boolean, dismiss: () -> Unit) {
+    val icon = if (problem) Icons.Default.WarningAmber else Icons.Default.CheckCircle
+    val tint = if (problem) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     // The information bar under a Windows skin.
     if (skinned()) {
-        InfoBar(Icons.Default.CheckCircle, message, MaterialTheme.colorScheme.primary, dismiss)
+        InfoBar(icon, message, tint, dismiss)
         return
     }
-    Surface(color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .5f), shape = RoundedCornerShape(11.dp)) {
+    Surface(
+        color = if (problem) MaterialTheme.colorScheme.errorContainer.copy(alpha = .35f)
+        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = .5f),
+        shape = RoundedCornerShape(11.dp),
+    ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.CheckCircle, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(icon, null, Modifier.size(17.dp), tint = tint)
             Spacer(Modifier.width(9.dp))
             SelectionContainer(Modifier.weight(1f)) { Text(message, fontSize = 12.sp) }
             IconButton(dismiss, Modifier.size(26.dp)) { Icon(Icons.Default.Close, "Dismiss", Modifier.size(15.dp)) }
@@ -1136,7 +1146,7 @@ private fun LocalPlaylistRow(playlist: LocalPlaylist, state: AppState, open: () 
 }
 
 @Composable
-private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, state: AppState) {
+private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, noticeIsProblem: Boolean, state: AppState) {
     var renameOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     val songs = rememberLazyListState()
@@ -1220,7 +1230,7 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, state:
             }
         }
         Spacer(Modifier.height(10.dp))
-        notice?.let { LibraryNotice(it, state::clearLibraryNotice) }
+        notice?.let { LibraryNotice(it, noticeIsProblem, state::clearLibraryNotice) }
         Spacer(Modifier.height(8.dp))
         Text(
             "A share link carries the whole playlist inside it, so anyone with Noctorium can paste it and get the same tracks.",
@@ -1305,7 +1315,7 @@ private fun NewPlaylistDialog(
                             option == PlaylistDestination.SPICE -> "Stays on this computer, any service."
                             available && option == PlaylistDestination.SOUNDCLOUD ->
                                 "Made on your account, private until you change it."
-                            available -> "Made on your YouTube account."
+                            available -> "Made on your YouTube account, private until you change it."
                             else -> unavailableNote
                         }
                         // Option buttons with what each means beneath them, under a Windows skin.
@@ -1481,7 +1491,7 @@ private fun PlaylistRow(playlist: Playlist, open: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            VisibilityBadge(playlist.isPublic, compact = true)
+            VisibilityBadge(playlist.shownVisibility, compact = true)
             Spacer(Modifier.width(7.dp))
             ProviderBadge(playlist.provider, compact = true)
             Spacer(Modifier.width(8.dp))
@@ -1549,10 +1559,18 @@ internal fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: Ap
                 }
             }
         }
-        // Account actions sit on their own line: in the title row they crowded out the name entirely.
-        if (playlist.editableOnService()) {
+        // Account actions sit on their own line: in the title row they crowded out the name entirely. A YouTube
+        // playlist's page says whether it is the listener's own, and that page is what is loading, so its
+        // actions wait for it rather than standing on somebody else's playlist for the second it takes.
+        val youTube = playlist.provider == ProviderType.YOUTUBE_MUSIC || playlist.provider == ProviderType.YOUTUBE_VIDEO
+        if (playlist.editableOnService() && !(youTube && library.openPlaylistLoading)) {
             Spacer(Modifier.height(12.dp))
             ServicePlaylistActions(playlist, state)
+        }
+        // What the last change made here came to, worked or turned down, beside the playlist it was made to.
+        library.notice?.let { notice ->
+            Spacer(Modifier.height(10.dp))
+            LibraryNotice(notice, library.noticeIsProblem, state::clearLibraryNotice)
         }
         Spacer(Modifier.height(16.dp))
         when {
@@ -1595,66 +1613,32 @@ internal fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: Ap
     }
 }
 
-/** Says who can see a playlist. Absent when the service has not told us, rather than guessing "public". */
-@Composable
-private fun VisibilityBadge(isPublic: Boolean?, compact: Boolean = false) {
-    if (isPublic == null) return
-    val label = if (isPublic) "Public" else "Private"
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = if (isPublic) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .55f)
-        else ink(.08f),
-        border = BorderStroke(1.dp, ink(.1f)),
-    ) {
-        Row(
-            Modifier.padding(horizontal = if (compact) 8.dp else 11.dp, vertical = if (compact) 3.dp else 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                if (isPublic) Icons.Default.Public else Icons.Default.Lock,
-                null,
-                Modifier.size(if (compact) 11.dp else 14.dp),
-                tint = if (isPublic) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.width(5.dp))
-            Text(
-                label,
-                fontSize = if (compact) 10.sp else 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (isPublic) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
 /**
  * Rename, delete and privacy for a playlist that lives on a service account rather than only in Noctorium.
  *
  * Named service by service rather than SoundCloud-or-else-YouTube: a Bandcamp collection or a Spotify list
- * that ever got this far would otherwise have been renamed on YouTube.
+ * that ever got this far would otherwise have been renamed on YouTube. YouTube has a privacy SoundCloud does
+ * not -- unlisted -- and a description to edit, so it has actions of its own; see [YouTubePlaylistActions].
  */
 @Composable
 private fun ServicePlaylistActions(playlist: Playlist, state: AppState) {
     when (playlist.provider) {
-        ProviderType.SOUNDCLOUD -> SoundCloudPlaylistActions(playlist, state, onSoundCloud = true)
-        ProviderType.YOUTUBE_MUSIC, ProviderType.YOUTUBE_VIDEO -> SoundCloudPlaylistActions(playlist, state, onSoundCloud = false)
+        ProviderType.SOUNDCLOUD -> SoundCloudPlaylistActions(playlist, state)
+        ProviderType.YOUTUBE_MUSIC, ProviderType.YOUTUBE_VIDEO -> YouTubePlaylistActions(playlist, state)
         // Read-only here: nothing of theirs is renamed, deleted or made public from Noctorium.
         ProviderType.SPOTIFY, ProviderType.BANDCAMP, ProviderType.VK, ProviderType.LOCAL -> Unit
     }
 }
 
 @Composable
-private fun SoundCloudPlaylistActions(playlist: Playlist, state: AppState, onSoundCloud: Boolean = true) {
+private fun SoundCloudPlaylistActions(playlist: Playlist, state: AppState) {
     var renaming by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     if (renaming) {
         PlaylistNameDialog("Rename on ${playlist.provider.displayName}", playlist.title, "Rename") { title ->
             renaming = false
-            title?.let {
-                if (onSoundCloud) state.renameSoundCloudPlaylist(playlist.id, it)
-                else state.renameYouTubePlaylist(playlist.id, it)
-            }
+            title?.let { state.renameSoundCloudPlaylist(playlist.id, it) }
         }
     }
     if (confirmDelete) {
@@ -1670,7 +1654,7 @@ private fun SoundCloudPlaylistActions(playlist: Playlist, state: AppState, onSou
             confirmButton = {
                 Button({
                     confirmDelete = false
-                    if (onSoundCloud) state.deleteSoundCloudPlaylist(playlist.id) else state.deleteYouTubePlaylist(playlist.id)
+                    state.deleteSoundCloudPlaylist(playlist.id)
                 }) { Text("Delete") }
             },
             dismissButton = { OutlinedButton({ confirmDelete = false }) { Text("Keep") } },
@@ -1678,14 +1662,11 @@ private fun SoundCloudPlaylistActions(playlist: Playlist, state: AppState, onSou
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
-        VisibilityBadge(playlist.isPublic)
+        VisibilityBadge(playlist.shownVisibility)
         // Only offered when SoundCloud has actually told us the current state, so the button cannot claim to
         // flip something whose value is unknown.
         playlist.isPublic?.let { isPublic ->
-            OutlinedButton({
-                if (onSoundCloud) state.setSoundCloudPlaylistVisibility(playlist.id, !isPublic)
-                else state.setYouTubePlaylistVisibility(playlist.id, !isPublic)
-            }) {
+            OutlinedButton({ state.setSoundCloudPlaylistVisibility(playlist.id, !isPublic) }) {
                 Icon(
                     if (isPublic) Icons.Default.Lock else Icons.Default.Public,
                     null,
