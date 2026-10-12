@@ -128,6 +128,8 @@ enum class ShortcutAction(
     GO_NOW_PLAYING("goNowPlaying", "Go to Now playing", ShortcutGroup.PLACES, Shortcut.Go(Destination.NOW_PLAYING), listOf("6")),
     GO_QUEUE("goQueue", "Go to the queue", ShortcutGroup.PLACES, Shortcut.Go(Destination.QUEUE), listOf("7")),
     GO_SETTINGS("goSettings", "Go to Settings", ShortcutGroup.PLACES, Shortcut.Go(Destination.SETTINGS), listOf("8")),
+    // After Settings rather than before it, so the keys the sidebar had before Connect still go where they did.
+    GO_CONNECT("goConnect", "Go to Connect", ShortcutGroup.PLACES, Shortcut.Go(Destination.CONNECT), listOf("9")),
     PASTE_LINK("pasteLink", "Play the link you copied", ShortcutGroup.PLACES, Shortcut.PasteLink, listOf("Mod+V")),
     HELP("help", "The list of shortcuts", ShortcutGroup.PLACES, Shortcut.Help, listOf("Shift+Slash")),
 

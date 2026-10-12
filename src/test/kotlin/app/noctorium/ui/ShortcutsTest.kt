@@ -64,6 +64,8 @@ class ShortcutsTest {
         assertEquals(Shortcut.Go(Destination.NOW_PLAYING), press(Key.Six))
         assertEquals(Shortcut.Go(Destination.QUEUE), press(Key.Seven))
         assertEquals(Shortcut.Go(Destination.SETTINGS), press(Key.Eight))
+        // Connect came after the rest had their numbers, and takes the next one rather than moving theirs.
+        assertEquals(Shortcut.Go(Destination.CONNECT), press(Key.Nine))
         assertEquals(Shortcut.Go(Destination.HOME), press(Key.NumPad1))
     }
 
