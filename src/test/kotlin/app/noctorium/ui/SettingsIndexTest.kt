@@ -128,6 +128,11 @@ class SettingsIndexTest {
         assertEquals("When you close Noctorium", first("minimize to tray").entry.title)
         assertEquals("Quick search", first("ctrl+f").entry.title)
         assertEquals(SettingsPage.SCROBBLING, first("last.fm").page)
+        // The history on the profile page, before Home's row of the songs played lately and the YouTube history.
+        assertEquals("History", first("history").entry.title)
+        assertEquals("History", first("recently played").entry.title)
+        assertEquals("History", first("listening history").entry.title)
+        assertEquals(SettingsPage.PROFILE, first("clear history").page)
     }
 
     @Test

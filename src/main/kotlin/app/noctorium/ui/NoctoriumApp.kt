@@ -4851,21 +4851,6 @@ private val SEEK_BAR_PREVIEW_SONG = Track(
     sourceUrl = "",
 )
 
-@Composable
-internal fun ProfileSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
-    var name by remember(preferences.profileName) { mutableStateOf(preferences.profileName) }
-    SettingsPanelCard {
-        Icon(Icons.Default.AccountCircle, null, Modifier.size(54.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(14.dp))
-        Text("Local profile", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text("This name stays on this computer and identifies your Noctorium setup.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        Spacer(Modifier.height(18.dp))
-        OutlinedTextField(name, { name = it.take(40) }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth().tracksTyping())
-        Spacer(Modifier.height(14.dp))
-        Button({ state.setProfileName(name) }) { Icon(Icons.Default.Save, null); Spacer(Modifier.width(7.dp)); Text("Save profile") }
-    }
-}
-
 /**
  * Hosts SoundCloud's own sign-in page in embedded Chromium. SoundCloud has no OAuth to build against — app
  * registration has been closed for years — so signing in on their real page inside Noctorium is the closest thing

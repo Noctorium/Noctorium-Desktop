@@ -60,15 +60,28 @@ import kotlin.math.roundToInt
  *
  * For the song playing now it also carries Stop after this song, ticked while it is set, since the playing song's
  * menu is where somebody looks for what happens when it ends.
+ *
+ * A list with things of its own to do with the song puts them around the song's: [first] before everything -- the
+ * history's Play -- and [last] after it, where taking the song out of that list goes. Each is handed what closes
+ * the menu.
  */
 @Composable
-internal fun SongMenu(track: Track, state: AppState, expanded: Boolean, dismiss: () -> Unit) {
+internal fun SongMenu(
+    track: Track,
+    state: AppState,
+    expanded: Boolean,
+    first: @Composable (close: () -> Unit) -> Unit = {},
+    last: @Composable (close: () -> Unit) -> Unit = {},
+    dismiss: () -> Unit,
+) {
     var addToPlaylistOpen by remember { mutableStateOf(false) }
     var editOpen by remember { mutableStateOf(false) }
     val library by state.library.collectAsState()
     val ui by state.ui.collectAsState()
     DropdownMenu(expanded = expanded, onDismissRequest = dismiss) {
+        first(dismiss)
         SongMenuItems(track, state, dismiss, addToPlaylist = { addToPlaylistOpen = true }, edit = { editOpen = true })
+        last(dismiss)
     }
     if (addToPlaylistOpen) {
         AddToPlaylistDialog(track, library.localPlaylists, state) { addToPlaylistOpen = false }
