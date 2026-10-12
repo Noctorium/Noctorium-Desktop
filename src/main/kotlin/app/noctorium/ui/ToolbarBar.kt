@@ -192,7 +192,7 @@ internal fun ToolbarPlayerBar(queue: QueueState, playback: PlaybackState, state:
                     }
                     // What is under way stays on any bar: a sleep timer counting down, the music playing elsewhere, a speed.
                     if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state, size = button)
-                    if (PlayerButton.DEVICES in shown) ConnectButton(state, Modifier.size(button))
+                    if (PlayerButton.DEVICES in shown) DevicesButton(state, Modifier.size(button))
                     if (PlayerButton.SPEED in shown) SpeedButton(playback, state, size = button)
                     if (PlayerButton.VOLUME in shown) VolumeControl(playback, state, size = button)
                 }

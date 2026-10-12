@@ -380,6 +380,7 @@ fun NoctoriumApp(
                                 Destination.NOW_PLAYING -> NowPlayingScreen(queue, playback, appState)
                                 Destination.QUEUE -> BrowsingPane { QueueScreen(queue, appState) }
                                 Destination.SETTINGS -> SettingsScreen(appState)
+                                Destination.CONNECT -> BrowsingPane { ConnectScreen(playback, appState) }
                             }
                         }
                     }
@@ -502,15 +503,21 @@ internal fun BoxScope.FloatingContent(
  * it still go there, so a page somebody rarely visits costs them no room and is still a key away.
  */
 @Composable
-private fun NavigationRail(selected: Destination, hidden: Set<Destination>, navigate: (Destination) -> Unit) {
+private fun NavigationRail(selected: Destination, hidden: Set<Destination>, navigate: (Destination) -> Unit) = BoxWithConstraints(
+    Modifier.width(RAIL_WIDTH).fillMaxHeight(),
+) {
+    // A window near its shortest keeps every item, Settings at the foot included, by spacing them a little closer.
+    val compact = maxHeight < RAIL_ROOMY_FROM
+
     @Composable
     fun item(destination: Destination) {
         if (sidebarShows(destination, hidden)) {
-            NavItem(destination.sidebarLabel(), destination.sidebarIcon(), selected == destination) { navigate(destination) }
+            NavItem(destination.sidebarLabel(), destination.sidebarIcon(), selected == destination, compact) { navigate(destination) }
         }
     }
-    Column(
-        Modifier.width(RAIL_WIDTH).fillMaxHeight().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 18.dp),
+    // The rows as tall as their writing, there: a row is otherwise never less than the forty-eight points a finger wants.
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides if (compact) 0.dp else LocalMinimumInteractiveComponentSize.current) { Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 18.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // The same artwork the window, the taskbar and the phone's launcher show, so the mark beside
@@ -533,16 +540,17 @@ private fun NavigationRail(selected: Destination, hidden: Set<Destination>, navi
                 softWrap = false,
             )
         }
-        Spacer(Modifier.height(26.dp))
+        Spacer(Modifier.height(if (compact) 14.dp else 26.dp))
         item(Destination.HOME)
         item(Destination.SEARCH)
         item(Destination.LINK)
         item(Destination.LIBRARY)
         item(Destination.DOWNLOADS)
         // Now Playing and Queue were reachable only by clicking the player bar; they are destinations, so they
-        // belong in the rail alongside everything else. Their heading goes when both of them have.
-        if (sidebarShows(Destination.NOW_PLAYING, hidden) || sidebarShows(Destination.QUEUE, hidden)) {
-            Spacer(Modifier.height(18.dp))
+        // belong in the rail alongside everything else, and Connect -- where the music is playing -- beside them.
+        // Their heading goes when all of them have.
+        if (PLAYING_DESTINATIONS.any { sidebarShows(it, hidden) }) {
+            Spacer(Modifier.height(if (compact) 10.dp else 18.dp))
             Text(
                 "PLAYING",
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .6f),
@@ -552,10 +560,11 @@ private fun NavigationRail(selected: Destination, hidden: Set<Destination>, navi
             )
             item(Destination.NOW_PLAYING)
             item(Destination.QUEUE)
+            item(Destination.CONNECT)
         }
         Spacer(Modifier.weight(1f))
         item(Destination.SETTINGS)
-    }
+    } }
 }
 
 /**
@@ -566,8 +575,11 @@ private fun NavigationRail(selected: Destination, hidden: Set<Destination>, navi
  */
 private val RAIL_WIDTH = 196.dp
 
+/** How tall the window has to be for the sidebar's items at their ordinary spacing, Connect among them. */
+private val RAIL_ROOMY_FROM = 640.dp
+
 @Composable
-private fun NavItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, action: () -> Unit) {
+private fun NavItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, compact: Boolean, action: () -> Unit) {
     val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     Surface(
         onClick = action,
@@ -575,7 +587,7 @@ private fun NavItem(label: String, icon: androidx.compose.ui.graphics.vector.Ima
         shape = RoundedCornerShape(10.dp),
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
     ) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = if (compact) 7.dp else 11.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, label, tint = color)
             Spacer(Modifier.width(12.dp))
             Text(label, color = color, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2333,7 +2345,7 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                     // Outside the badge, not inside it. BadgedBox has one content slot: a second child in
                     // there is laid on top of the first, so this button was drawn over the queue button and
                     // every click on it went to the queue instead.
-                    if (PlayerButton.DEVICES in shown) ConnectButton(state)
+                    if (PlayerButton.DEVICES in shown) DevicesButton(state)
                     if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
                     if (PlayerButton.QUEUE in shown) {
                         BadgedBox(badge = { if (queue.tracks.isNotEmpty()) Badge { Text(queue.tracks.size.toString()) } }) {
@@ -2519,7 +2531,7 @@ internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppSta
                             VolumeControl(playback, state)
                             Spacer(Modifier.width(4.dp))
                         }
-                        if (PlayerButton.DEVICES in shown) ConnectButton(state)
+                        if (PlayerButton.DEVICES in shown) DevicesButton(state)
                         if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
                         if (PlayerButton.QUEUE in shown) {
                             BadgedBox(

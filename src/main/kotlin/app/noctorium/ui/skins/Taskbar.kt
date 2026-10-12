@@ -81,7 +81,7 @@ import app.noctorium.settings.PlayerBarPosition
 import app.noctorium.settings.PlayerBarStyle
 import app.noctorium.settings.PlayerButton
 import app.noctorium.settings.ThemeSkin
-import app.noctorium.ui.ConnectButton
+import app.noctorium.ui.DevicesButton
 import app.noctorium.ui.LikeButton
 import app.noctorium.ui.LocalInGlass
 import app.noctorium.ui.PlayPauseIcon
@@ -506,7 +506,7 @@ private fun TrayIcons(skin: ThemeSkin, queue: QueueState, playback: PlaybackStat
     }
     if (PlayerButton.SPEED in shown) SpeedButton(playback, state, size = button)
     if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state, size = button)
-    if (PlayerButton.DEVICES in shown) ConnectButton(state, Modifier.size(button))
+    if (PlayerButton.DEVICES in shown) DevicesButton(state, Modifier.size(button))
 }
 
 /** The time, as the clock in the corner of the screen showed it, moving on at each minute. */

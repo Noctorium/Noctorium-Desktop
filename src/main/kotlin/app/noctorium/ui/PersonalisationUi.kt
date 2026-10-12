@@ -212,7 +212,8 @@ internal fun playerButtonsInUse(state: AppState): Set<PlayerButton> {
     val speed = state.settings.collectAsState().value.preferences.playbackSpeed
     return buildSet {
         if (timer != null) add(PlayerButton.SLEEP_TIMER)
-        if (connect.target != null) add(PlayerButton.DEVICES)
+        // The music on another device, or another device driving this one: the way to the Connect page stays.
+        if (connect.target != null || connect.controlledBy != null) add(PlayerButton.DEVICES)
         // A song playing faster or slower than recorded is something under way too.
         if (speed != 1f) add(PlayerButton.SPEED)
     }
@@ -287,7 +288,11 @@ internal val HIDEABLE_DESTINATIONS: List<Destination> = listOf(
     Destination.DOWNLOADS,
     Destination.NOW_PLAYING,
     Destination.QUEUE,
+    Destination.CONNECT,
 )
+
+/** The sidebar's Playing group: what is playing, what is next, and where it is playing. */
+internal val PLAYING_DESTINATIONS: List<Destination> = listOf(Destination.NOW_PLAYING, Destination.QUEUE, Destination.CONNECT)
 
 /**
  * Whether the sidebar shows a destination. Home and Settings always: without Home there is nowhere to
@@ -306,6 +311,7 @@ internal fun Destination.sidebarLabel(): String = when (this) {
     Destination.NOW_PLAYING -> "Now playing"
     Destination.QUEUE -> "Queue"
     Destination.SETTINGS -> "Settings"
+    Destination.CONNECT -> "Connect"
 }
 
 internal fun Destination.sidebarIcon(): ImageVector = when (this) {
@@ -317,6 +323,7 @@ internal fun Destination.sidebarIcon(): ImageVector = when (this) {
     Destination.NOW_PLAYING -> Icons.Default.GraphicEq
     Destination.QUEUE -> Icons.AutoMirrored.Filled.QueueMusic
     Destination.SETTINGS -> Icons.Default.Settings
+    Destination.CONNECT -> Icons.Default.Devices
 }
 
 // --- Announcing tracks ---

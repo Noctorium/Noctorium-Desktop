@@ -269,7 +269,7 @@ tasks.test {
     System.getProperty("noctorium.renderBars")?.let { systemProperty("noctorium.renderBars", it) }
     // And an earlier set of those pictures to compare them with, pixel for pixel.
     System.getProperty("noctorium.compareWith")?.let { systemProperty("noctorium.compareWith", it) }
-    // Where ConnectMenuRenderCheck draws the Connect menu, when it is asked to.
+    // Where ConnectRenderCheck draws the Connect page and the player as the remote, when it is asked to.
     System.getProperty("noctorium.renderConnect")?.let { systemProperty("noctorium.renderConnect", it) }
     // A live run wants the real programs, and the test folder above has none of its own. They are named
     // through the same variables a listener can set, so the lookup being tested is the real one.

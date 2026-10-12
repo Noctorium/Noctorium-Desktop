@@ -10,11 +10,13 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -50,11 +52,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.noctorium.core.Destination
 import app.noctorium.domain.Track
 import app.noctorium.settings.ThemeSkin
+import app.noctorium.ui.PLAYING_DESTINATIONS
 import app.noctorium.ui.RemoteArtwork
 import app.noctorium.ui.sidebarIcon
 import app.noctorium.ui.sidebarLabel
@@ -77,15 +81,19 @@ internal fun SkinRail(selected: Destination, hidden: Set<Destination>, playing: 
 // --- 98: the toolbar ---
 
 @Composable
-private fun ToolbarRail(selected: Destination, hidden: Set<Destination>, navigate: (Destination) -> Unit) {
+private fun ToolbarRail(selected: Destination, hidden: Set<Destination>, navigate: (Destination) -> Unit) = BoxWithConstraints(
+    Modifier.width(86.dp).fillMaxHeight(),
+) {
+    // A window near its shortest keeps every button, Settings at the foot included, by making them a little shorter.
+    val height = if (maxHeight < 620.dp) 44.dp else 52.dp
+
     @Composable
     fun item(destination: Destination) {
-        if (sidebarShows(destination, hidden)) ToolbarItem(destination, selected == destination) { navigate(destination) }
+        if (sidebarShows(destination, hidden)) ToolbarItem(destination, selected == destination, height) { navigate(destination) }
     }
     Column(
         Modifier
-            .width(86.dp)
-            .fillMaxHeight()
+            .fillMaxSize()
             .background(Classic.Face)
             .padding(start = 4.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -99,10 +107,11 @@ private fun ToolbarRail(selected: Destination, hidden: Set<Destination>, navigat
         item(Destination.LINK)
         item(Destination.LIBRARY)
         item(Destination.DOWNLOADS)
-        if (sidebarShows(Destination.NOW_PLAYING, hidden) || sidebarShows(Destination.QUEUE, hidden)) {
+        if (PLAYING_DESTINATIONS.any { sidebarShows(it, hidden) }) {
             EtchedSeparator(Modifier.padding(vertical = 5.dp))
             item(Destination.NOW_PLAYING)
             item(Destination.QUEUE)
+            item(Destination.CONNECT)
         }
         Spacer(Modifier.weight(1f))
         EtchedSeparator(Modifier.padding(vertical = 5.dp))
@@ -141,7 +150,7 @@ private fun Throbber() {
 }
 
 @Composable
-private fun ToolbarItem(destination: Destination, chosen: Boolean, action: () -> Unit) {
+private fun ToolbarItem(destination: Destination, chosen: Boolean, height: Dp, action: () -> Unit) {
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
     val pressed by source.collectIsPressedAsState()
@@ -149,7 +158,7 @@ private fun ToolbarItem(destination: Destination, chosen: Boolean, action: () ->
     Column(
         Modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(height)
             .hoverable(source)
             .clickable(source, indication = null, role = Role.Tab, onClick = action)
             .drawBehind {
@@ -195,10 +204,11 @@ private fun TaskPane(selected: Destination, hidden: Set<Destination>, playing: T
             link(Destination.LIBRARY)
             link(Destination.DOWNLOADS)
         }
-        if (sidebarShows(Destination.NOW_PLAYING, hidden) || sidebarShows(Destination.QUEUE, hidden)) {
+        if (PLAYING_DESTINATIONS.any { sidebarShows(it, hidden) }) {
             TaskPanel("Playing") {
                 link(Destination.NOW_PLAYING)
                 link(Destination.QUEUE)
+                link(Destination.CONNECT)
             }
         }
         TaskPanel("Other places") { link(Destination.SETTINGS) }

@@ -519,7 +519,7 @@ internal fun IslandPlayerBar(queue: QueueState, playback: PlaybackState, state: 
                             Spacer(Modifier.width(6.dp))
                             Transport(queue, playback, state, playSize = 36.dp, shown = shown, buttonSize = 32.dp)
                             if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
-                            if (PlayerButton.DEVICES in shown) ConnectButton(state)
+                            if (PlayerButton.DEVICES in shown) DevicesButton(state)
                         }
                         // The song's place, along the foot of the pill and kept off its rounded ends, while it is
                         // shut. Open, the seek bar says the same thing larger.
@@ -954,7 +954,7 @@ private fun Transport(
  */
 @Composable
 private fun BarTools(queue: QueueState, playback: PlaybackState, state: AppState, shown: Set<PlayerButton>) {
-    if (PlayerButton.DEVICES in shown) ConnectButton(state)
+    if (PlayerButton.DEVICES in shown) DevicesButton(state)
     if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
     if (PlayerButton.QUEUE in shown) QueueButton(queue, state, 34.dp)
     if (PlayerButton.LYRICS in shown) {
