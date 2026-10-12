@@ -1,5 +1,7 @@
 package app.noctorium.ui
 
+import androidx.compose.ui.graphics.vector.ImageVector
+import app.noctorium.core.Destination
 import app.noctorium.settings.SettingEntry
 import app.noctorium.settings.SettingsSearch
 
@@ -14,7 +16,23 @@ internal data class IndexedSetting(
     val entry: SettingEntry,
     /** When the setting is only on its page some of the time -- "once you are signed in to YouTube Music" -- when. */
     val onlyWhen: String? = null,
-)
+    /**
+     * A place of its own outside Settings that this is found on and opens -- the Connect page, which is where
+     * somebody searching Settings for "devices" or "firewall" wants to be. [page] is then where its settings are.
+     */
+    val destination: Destination? = null,
+) {
+    /** Where it is, as the search shows it: "You › Noctorium account", or the page outside Settings, "Connect". */
+    val where: String get() = destination?.sidebarLabel() ?: page.path
+
+    /** Its picture in the search: its page's, or the sidebar's for a page outside Settings. */
+    val icon: ImageVector get() = destination?.sidebarIcon() ?: page.icon()
+
+    /** Opens it: its page in Settings, at the setting, with [open]; or the page outside Settings, with [go]. */
+    fun openWith(open: (SettingsPage, String?) -> Unit, go: (Destination) -> Unit) {
+        if (destination != null) go(destination) else open(page, anchor)
+    }
+}
 
 /**
  * Every setting in the desktop's Settings, in one place, for the search box at the top of them.
@@ -40,6 +58,39 @@ internal object SettingsIndex {
         SettingsSearch.search(query, entries).map { FoundSetting(byId.getValue(it.entry.id), it) }
 
     private fun build(): List<IndexedSetting> = buildList {
+        // The Connect page is not in Settings, but Settings is where somebody looks for "play on my phone" or "why
+        // does it not see my laptop": these open the page itself. First, so "devices" finds the devices before the
+        // account's settings for them.
+        outside(Destination.CONNECT, settingsOn = SettingsPage.ACCOUNT) {
+            setting(
+                "Connect", "Where the music is playing, every one of your devices on this network, and moving the music between them.",
+                "noctorium connect", "cast", "remote", "remote control", "play on another device", "multiroom",
+                "spotify connect", "listening on", "playing on",
+            )
+            setting(
+                "Devices on this network", "Every device of yours with Noctorium open, what each is playing, and whether it is a computer, a phone or a terminal.",
+                "my devices", "other devices", "phone", "laptop", "other computer", "speakers", "terminal", "idle",
+            )
+            setting(
+                "Play here, or play on another device", "Moves the music from wherever it is to any of your devices, at the same second, with the whole queue.",
+                "play here", "play on", "play on my phone", "play on my computer", "move the music", "send to phone",
+                "send to computer", "hand over", "handover", "transfer", "bring it back", "take it back", "switch device",
+            )
+            setting(
+                "Who is controlling whom", "Which device is the remote control of which: this computer driving the phone, or the phone driving it.",
+                "controlled from", "controlling", "driving", "remote control", "being controlled",
+            )
+            setting(
+                "Add a device by its address", "Finds one of your devices by its address and port, on a network that keeps devices from hearing each other.",
+                "ip address", "address", "port", "manual", "add device", "guest network", "virtual machine", "adb",
+            )
+            setting(
+                "Not finding a device?", "The same account, the same Wi-Fi, the firewall on Windows, and a phone allowed to run in the background.",
+                "firewall", "windows firewall", "public network", "private network", "wifi", "wi-fi", "same account",
+                "not showing", "missing device", "cannot find", "can't find", "not found", "troubleshoot", "background",
+                "battery", "help",
+            )
+        }
         page(SettingsPage.ACCOUNT) {
             setting(
                 "Noctorium account", "Sign in to count what you stream, how many different songs and for how long. The same account as the website.",
@@ -48,8 +99,9 @@ internal object SettingsIndex {
                 anchor = null,
             )
             setting(
-                "Noctorium Connect", "Play on your other devices with Noctorium on the same network, and let them find this one.",
+                "Noctorium Connect", "What this computer is called on your other devices, whether they can find it, and the way to the Connect page.",
                 "devices", "cast", "remote", "play on another device", "other computer", "phone", "multiroom", "network",
+                "connect settings",
                 onlyWhen = "once you are signed in",
             )
             setting(
@@ -382,14 +434,27 @@ internal object SettingsIndex {
         PageEntries(page, this).entries()
     }
 
-    private class PageEntries(private val page: SettingsPage, val out: MutableList<IndexedSetting>) {
+    /** What is found on [destination], a page outside Settings, whose own settings are on [settingsOn]. */
+    private fun MutableList<IndexedSetting>.outside(destination: Destination, settingsOn: SettingsPage, entries: PageEntries.() -> Unit) {
+        PageEntries(settingsOn, this, destination).entries()
+    }
+
+    private class PageEntries(private val page: SettingsPage, val out: MutableList<IndexedSetting>, private val destination: Destination? = null) {
         /** A setting called [title], drawn on the page under [anchor] -- its own name unless said otherwise. */
         fun setting(title: String, description: String, vararg keywords: String, anchor: String? = title, onlyWhen: String? = null) {
             out += IndexedSetting(
                 page,
-                anchor,
-                SettingEntry(id = "${page.name}:$title", title = title, section = page.path, description = description, keywords = keywords.toList()),
+                // A page outside Settings opens at its top: it has no settings of its own to light up.
+                anchor.takeIf { destination == null },
+                SettingEntry(
+                    id = "${destination?.name ?: page.name}:$title",
+                    title = title,
+                    section = destination?.sidebarLabel() ?: page.path,
+                    description = description,
+                    keywords = keywords.toList(),
+                ),
                 onlyWhen,
+                destination,
             )
         }
     }

@@ -67,6 +67,8 @@ internal fun SettingsSearchBox(
     selected: Int,
     select: (Int) -> Unit,
     open: (SettingsPage, String?) -> Unit,
+    /** Where a setting found on a page outside Settings -- the Connect page -- is opened. */
+    go: (app.noctorium.core.Destination) -> Unit = {},
     typeHere: Int = 0,
 ) {
     val classic = skinned()
@@ -94,7 +96,7 @@ internal fun SettingsSearchBox(
                     Key.DirectionDown -> { if (matches.isNotEmpty()) select((selected + 1).coerceAtMost(matches.lastIndex)); matches.isNotEmpty() }
                     Key.DirectionUp -> { if (matches.isNotEmpty()) select((selected - 1).coerceAtLeast(0)); matches.isNotEmpty() }
                     Key.Enter, Key.NumPadEnter -> matches.getOrNull(selected)?.let { found ->
-                        open(found.setting.page, found.setting.anchor)
+                        found.setting.openWith(open, go)
                         true
                     } ?: false
                     // An empty box lets Escape through, to give the keyboard back to the shortcuts.
@@ -106,7 +108,13 @@ internal fun SettingsSearchBox(
 }
 
 /** The settings that match [query], as rows of the home's list, or a word saying there are none. */
-internal fun LazyListScope.settingsResults(query: String, matches: List<FoundSetting>, selected: Int, open: (SettingsPage, String?) -> Unit) {
+internal fun LazyListScope.settingsResults(
+    query: String,
+    matches: List<FoundSetting>,
+    selected: Int,
+    open: (SettingsPage, String?) -> Unit,
+    go: (app.noctorium.core.Destination) -> Unit = {},
+) {
     if (matches.isEmpty()) {
         item(key = "no-settings") { NothingFound(query) }
         return
@@ -120,7 +128,7 @@ internal fun LazyListScope.settingsResults(query: String, matches: List<FoundSet
         )
     }
     itemsIndexed(matches, key = { _, found -> found.setting.entry.id }) { index, found ->
-        FoundSettingRow(found, query, index == selected) { open(found.setting.page, found.setting.anchor) }
+        FoundSettingRow(found, query, index == selected) { found.setting.openWith(open, go) }
     }
 }
 
@@ -153,7 +161,7 @@ private fun FoundSettingRow(found: FoundSetting, query: String, chosen: Boolean,
     val why = listOfNotNull(
         when (found.match.kind) {
             SettingMatchKind.KEYWORD -> found.match.keyword?.let { "Also called “$it”" }
-            SettingMatchKind.SECTION -> "In ${found.setting.page.path}"
+            SettingMatchKind.SECTION -> "In ${found.setting.where}"
             else -> null
         },
         found.setting.onlyWhen?.let { "There $it" },
@@ -161,13 +169,13 @@ private fun FoundSettingRow(found: FoundSetting, query: String, chosen: Boolean,
     if (classic) {
         ListRow(open, shape = RectangleShape, color = androidx.compose.ui.graphics.Color.Transparent, selected = chosen) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(found.setting.page.icon(), null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
+                Icon(found.setting.icon, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(title, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(8.dp))
-                        Text(found.setting.page.path, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(found.setting.where, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(
                         listOfNotNull(why, entry.description.ifBlank { null }).joinToString(" · "),
@@ -189,13 +197,13 @@ private fun FoundSettingRow(found: FoundSetting, query: String, chosen: Boolean,
         modifier = Modifier.fillMaxWidth().widthIn(max = 860.dp),
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(found.setting.page.icon(), null, Modifier.size(22.dp), tint = accent)
+            Icon(found.setting.icon, null, Modifier.size(22.dp), tint = accent)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.width(10.dp))
-                    Text(found.setting.page.path, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text(found.setting.where, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
                 if (entry.description.isNotBlank()) {
                     Text(entry.description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)

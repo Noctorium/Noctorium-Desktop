@@ -102,7 +102,7 @@ class SettingsIndexTest {
         val ids = SettingsIndex.entries.map { it.id }
         assertEquals(ids.size, ids.toSet().size, "two entries with one name: " + ids.groupBy { it }.filterValues { it.size > 1 }.keys)
         SettingsIndex.settings.forEach { setting ->
-            assertEquals(setting.page.path, setting.entry.section)
+            assertEquals(setting.where, setting.entry.section)
             assertTrue(setting.entry.description.isNotBlank(), "${setting.entry.title} says nothing about what it does")
         }
     }
@@ -150,5 +150,31 @@ class SettingsIndexTest {
             )
         }
         assertEquals(SettingsPage.SHORTCUTS, first("stop after this song").page)
+    }
+
+    @Test
+    fun `the Connect page is found from Settings, and opens itself rather than a page of Settings`() {
+        val devices = first("devices")
+        assertEquals("Devices on this network", devices.entry.title)
+        assertEquals(app.noctorium.core.Destination.CONNECT, devices.destination)
+        assertEquals("Connect", devices.where)
+        assertEquals(app.noctorium.core.Destination.CONNECT, first("connect").destination)
+        assertEquals(app.noctorium.core.Destination.CONNECT, first("cast").destination)
+        assertEquals("Not finding a device?", first("firewall").entry.title)
+        assertEquals("Not finding a device?", first("windows firewall").entry.title)
+        assertEquals("Add a device by its address", first("ip address").entry.title)
+        assertEquals("Play here, or play on another device", first("play on my phone").entry.title)
+        assertEquals("Who is controlling whom", first("controlled from").entry.title)
+        // Its settings are where they were: naming this computer, and whether it can be found.
+        assertEquals("Name this device", first("device name").entry.title)
+        assertEquals("Let my other devices find this one", first("discoverable").entry.title)
+
+        var opened: Pair<SettingsPage, String?>? = null
+        var went: app.noctorium.core.Destination? = null
+        devices.openWith({ page, anchor -> opened = page to anchor }, { went = it })
+        assertEquals(app.noctorium.core.Destination.CONNECT, went)
+        assertEquals(null, opened)
+        first("discoverable").openWith({ page, anchor -> opened = page to anchor }, { went = null })
+        assertEquals(SettingsPage.ACCOUNT to "Noctorium Connect", opened)
     }
 }

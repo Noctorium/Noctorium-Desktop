@@ -307,14 +307,14 @@ private fun SettingsHome(
                 ScreenTitle("Settings", 34.sp)
                 Text("Accounts, services and how Noctorium behaves.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 Spacer(Modifier.height(if (classic) 10.dp else 14.dp))
-                SettingsSearchBox(query, search, matches, selected, { selected = it }, open, typeHere)
+                SettingsSearchBox(query, search, matches, selected, { selected = it }, open, go = state::navigate, typeHere = typeHere)
                 Spacer(Modifier.height(if (classic) 6.dp else 4.dp))
             }
             settings.message?.let { message ->
                 item { SettingsMessage(message, state) }
             }
             if (query.isNotBlank()) {
-                settingsResults(query, matches, selected, open)
+                settingsResults(query, matches, selected, open, go = state::navigate)
             } else {
                 SettingsSection.entries.forEach { section ->
                     item(key = "section-${section.name}") { SectionHeading(section) }
