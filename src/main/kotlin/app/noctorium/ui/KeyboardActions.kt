@@ -11,7 +11,8 @@ import app.noctorium.settings.ShortcutPreferences
  * (the search box, the help sheet, the quick search bar, showing or hiding the window), which the caller handles.
  */
 fun AppState.perform(shortcut: Shortcut): Boolean {
-    val playback = playback.value
+    // What the player shows: the place in the song and the volume of the device being driven, while one is.
+    val playback = shownPlayback.value
     when (shortcut) {
         Shortcut.PlayPause -> togglePlayback()
         Shortcut.Next -> next()
@@ -30,7 +31,7 @@ fun AppState.perform(shortcut: Shortcut): Boolean {
         }
         Shortcut.Shuffle -> toggleShuffle()
         Shortcut.Repeat -> cycleRepeat()
-        Shortcut.Like -> queue.state.value.current?.let(::toggleLike)
+        Shortcut.Like -> shownQueue.value.current?.let(::toggleLike)
         Shortcut.ClearAllButCurrent -> clearAllButCurrent()
         is Shortcut.Go -> navigate(shortcut.destination)
         Shortcut.Search, Shortcut.QuickSearch, Shortcut.PasteLink, Shortcut.Help, Shortcut.ToggleWindow, Shortcut.Dismiss -> return false

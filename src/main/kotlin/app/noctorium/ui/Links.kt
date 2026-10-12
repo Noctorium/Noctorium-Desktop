@@ -103,7 +103,7 @@ internal fun clipboardText(): String? = runCatching {
 @Composable
 internal fun LinkScreen(state: AppState) {
     val link by state.linkState.collectAsState()
-    val playback by state.playback.collectAsState()
+    val playback by state.shownPlayback.collectAsState()
     var text by remember { mutableStateOf(link.link?.url.orEmpty()) }
     // A link can arrive without going through the box -- Ctrl+V from anywhere -- and the box then shows it,
     // rather than sitting empty above a song it apparently had nothing to do with.
@@ -169,7 +169,7 @@ internal fun LinkScreen(state: AppState) {
                     InfoBar(
                         Icons.Default.ContentPaste,
                         "There is a link on your clipboard: " + (findMusicLink(copied)?.url ?: copied),
-                        action = { Button({ submit(copied) }) { Text("Play it") } },
+                        action = { Button({ submit(copied) }) { Text(whereItPlays("Play it", state)) } },
                     )
                     return@item
                 }
@@ -194,7 +194,7 @@ internal fun LinkScreen(state: AppState) {
                         Button({ submit(copied) }) {
                             Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Play it")
+                            Text(whereItPlays("Play it", state))
                         }
                     }
                 }
@@ -330,7 +330,7 @@ private fun LinkTrackCard(track: Track, playing: Boolean, state: AppState) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!playing) {
                         Button({ state.play(track) }) {
-                            Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Play")
+                            Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(whereItPlays("Play", state))
                         }
                     }
                     OutlinedButton({ state.addToQueue(track) }) {
@@ -357,7 +357,7 @@ private fun PlaylistActions(tracks: List<Track>, state: AppState) {
         Text(pluralTracks(tracks.size), fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.weight(1f))
         Button({ tracks.firstOrNull()?.let { state.play(it, PlaybackOrigin.PLAYLIST, tracks) } }) {
-            Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Play all")
+            Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(whereItPlays("Play all", state))
         }
         OutlinedButton({ tracks.forEach(state::addToQueue) }) {
             Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Queue all")
@@ -464,7 +464,7 @@ internal fun DownloadsScreen(state: AppState) {
                 }
                 if (downloads.entries.isNotEmpty()) {
                     Button({ state.playDownloads() }) {
-                        Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Play all")
+                        Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(whereItPlays("Play all", state))
                     }
                 }
             }

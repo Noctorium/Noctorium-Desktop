@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ClearAll
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Tune
@@ -141,8 +142,12 @@ internal fun queueColumnsThatFit(chosen: List<QueueColumn>, widthDp: Float): Lis
     return columns
 }
 
-/** The status bar's left half: what the stream is, as the player says, or why it cannot say. */
-internal fun statusBarFormat(playback: PlaybackState, onSpotify: Boolean): String = when {
+/**
+ * The status bar's left half: what the stream is, as the player says, or why it cannot say -- which, while the song
+ * plays on another device ([elsewhere], that device's name), is that it is there: this computer has no stream of it.
+ */
+internal fun statusBarFormat(playback: PlaybackState, onSpotify: Boolean, elsewhere: String? = null): String = when {
+    elsewhere != null -> "Playing on $elsewhere"
     onSpotify -> "Playing in Spotify's own app"
     playback.status == PlaybackStatus.RESOLVING -> "Finding the song…"
     playback.track == null -> "Stopped"
@@ -280,9 +285,12 @@ private fun QueueTablePanel(queue: QueueState, state: AppState, modifier: Modifi
     }
     var chosen by remember { mutableStateOf("queue") }
     val tab = tabs.firstOrNull { it.key == chosen } ?: tabs.first()
+    // Another device's queue, while this computer is its remote control: its songs play there when chosen, and the
+    // actions over the table -- this computer's own queue's -- wait until the music is back.
+    val remote = state.connect.collectAsState().value.target
     val page: @Composable () -> Unit = {
         Column(Modifier.fillMaxSize()) {
-            if (tab.key == "queue") QueueTableActions(queue, state)
+            if (tab.key == "queue" && remote == null) QueueTableActions(queue, state)
             QueueTable(tab, state, Modifier.weight(1f).fillMaxWidth())
         }
     }
@@ -528,7 +536,10 @@ internal fun cellText(song: Track, index: Int, column: QueueColumn): String = wh
 @Composable
 private fun InfoBar(track: Track, playback: PlaybackState, state: AppState, arrange: () -> Unit, modifier: Modifier) {
     val preferences = state.settings.collectAsState().value.preferences
-    val visualiser = visualiserShown(preferences.visualiser, state.audioAnalysisKind)
+    // The visualiser measures the sound this computer makes, and makes none while the song plays on another device:
+    // it gives its place to saying where the song is, rather than drawing a silence as though it were music.
+    val elsewhere = state.connect.collectAsState().value.target?.name
+    val visualiser = if (elsewhere != null) VisualiserStyle.OFF else visualiserShown(preferences.visualiser, state.audioAnalysisKind)
     val skinned = skinned()
     val inside: @Composable () -> Unit = {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -575,11 +586,31 @@ private fun InfoBar(track: Track, playback: PlaybackState, state: AppState, arra
                             Spacer(Modifier.width(6.dp))
                         }
                         ProviderBadge(track.provider, compact = true)
+                        DevicesButton(state, Modifier.size(30.dp), iconSize = 17.dp, quiet = ink(.6f))
                     }
                 }
                 if (visualiser != VisualiserStyle.OFF && meter >= 96.dp) {
                     Spacer(Modifier.width(16.dp))
                     AudioVisualiser(visualiser, state, Modifier.width(meter).height(if (skinned) 64.dp else 76.dp))
+                }
+                if (elsewhere != null && meter >= 96.dp) {
+                    Spacer(Modifier.width(16.dp))
+                    Row(
+                        Modifier.width(meter).clickable { state.navigate(app.noctorium.core.Destination.CONNECT) },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        Icon(Icons.Default.Devices, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Playing on $elsewhere",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = if (skinned) 12.sp else 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
@@ -599,7 +630,7 @@ private fun InfoBar(track: Track, playback: PlaybackState, state: AppState, arra
 @Composable
 private fun StatusBar(queue: QueueState, playback: PlaybackState, state: AppState) {
     val onSpotify = playsOnSpotify(playback.track, state.settings.collectAsState().value.spotify)
-    val left = statusBarFormat(playback, onSpotify)
+    val left = statusBarFormat(playback, onSpotify, elsewhere = state.connect.collectAsState().value.target?.name)
     val right = statusBarTimes(queue, playback.positionMs)
     val skin = skin()
     when (skin) {

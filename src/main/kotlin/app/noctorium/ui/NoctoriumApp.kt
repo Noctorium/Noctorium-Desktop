@@ -193,8 +193,10 @@ fun NoctoriumApp(
     desktop: DesktopHooks = DesktopHooks(),
 ) {
     val ui by appState.ui.collectAsState()
-    val queue by appState.queue.state.collectAsState()
-    val playback by appState.playback.collectAsState()
+    // What the player shows, which is not always what plays here: while this computer is the remote control of
+    // another device, it is that device's song, queue and place in it, and every bar and Now playing drive it.
+    val queue by appState.shownQueue.collectAsState()
+    val playback by appState.shownPlayback.collectAsState()
     val preferences = appState.settings.collectAsState().value.preferences
 
     DisposableEffect(appState) {
@@ -1171,7 +1173,7 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, state:
             }
             if (playlist.tracks.isNotEmpty()) {
                 Button({ state.playLocalPlaylist(playlist) }) {
-                    Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(7.dp)); Text("Play all")
+                    Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(7.dp)); Text(whereItPlays("Play all", state))
                 }
                 val downloads by state.downloadState.collectAsState()
                 // Counted over what may be kept: a Bandcamp song in the list is not one more to download.
@@ -1520,7 +1522,7 @@ internal fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: Ap
             }
             if (playlist.tracks.isNotEmpty()) {
                 Button({ state.playPlaylist(playlist) }) {
-                    Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(7.dp)); Text("Play all")
+                    Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(7.dp)); Text(whereItPlays("Play all", state))
                 }
                 val downloads by state.downloadState.collectAsState()
                 // None for a Bandcamp album or artist, whose songs are bought rather than downloaded.
@@ -2390,8 +2392,31 @@ private fun BarArtistLine(current: Track?, playback: PlaybackState, state: AppSt
     }
 }
 
+/**
+ * The player bar in the layout chosen, with Connect's strip along it while the music is on another device or another
+ * device is driving this one: on the edge the bar sits on, under it at the foot of the window and over it at the top.
+ * [queue] and [playback] are what the player shows -- the other device's, while this computer is its remote control.
+ */
 @Composable
 internal fun PlayerBar(queue: QueueState, playback: PlaybackState, state: AppState) {
+    val connect by state.connect.collectAsState()
+    if (connectStripText(connect) == null) {
+        PlayerBarLayout(queue, playback, state)
+        return
+    }
+    val preferences = state.settings.collectAsState().value.preferences
+    val atTop = preferences.playerBarPosition == PlayerBarPosition.TOP
+    // A band across a bar that takes a strip of the window; a pill under one that floats, and inside a pane of glass.
+    val pill = preferences.playerBarStyle.floats || (LocalInGlass.current && !skinned())
+    Column(Modifier.fillMaxWidth()) {
+        if (atTop) ConnectStrip(state, pill)
+        PlayerBarLayout(queue, playback, state)
+        if (!atTop) ConnectStrip(state, pill)
+    }
+}
+
+@Composable
+private fun PlayerBarLayout(queue: QueueState, playback: PlaybackState, state: AppState) {
     when (state.settings.collectAsState().value.preferences.playerBarStyle) {
         PlayerBarStyle.INLINE -> return InlinePlayerBar(queue, playback, state)
         PlayerBarStyle.CENTERED -> return CenteredPlayerBar(queue, playback, state)
@@ -2909,6 +2934,9 @@ internal fun HeroFooter(track: Track, playback: PlaybackState, state: AppState, 
         ?.lastOrNull { line -> (line.startTimeMs ?: Long.MAX_VALUE) <= playback.positionMs }
         ?.text
         ?.takeIf { it.isNotBlank() }
+    // Where the song is playing, while it is not here: said where the album would be, in the accent, unless a line
+    // is being sung.
+    val elsewhere = state.connect.collectAsState().value.target?.let { "Playing on ${it.name}" }?.takeIf { activeLine == null }
 
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         LikeButton(track, state, size = 34.dp)
@@ -2918,12 +2946,13 @@ internal fun HeroFooter(track: Track, playback: PlaybackState, state: AppState, 
         }
         Box(Modifier.weight(1f).padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
             Text(
-                activeLine ?: track.album?.title ?: "",
+                elsewhere ?: activeLine ?: track.album?.title ?: "",
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                color = ink(if (activeLine != null) .92f else .45f),
+                color = if (elsewhere != null) MaterialTheme.colorScheme.primary else ink(if (activeLine != null) .92f else .45f),
                 fontSize = 14.sp,
-                fontWeight = if (activeLine != null) FontWeight.Medium else FontWeight.Normal,
+                fontWeight = if (activeLine != null || elsewhere != null) FontWeight.Medium else FontWeight.Normal,
+                modifier = if (elsewhere != null) Modifier.clickable { state.navigate(Destination.CONNECT) } else Modifier,
             )
         }
         // Beside the badge, which says Spotify either way: this says it is Spotify's own app making the sound.
@@ -2932,6 +2961,8 @@ internal fun HeroFooter(track: Track, playback: PlaybackState, state: AppState, 
             Spacer(Modifier.width(6.dp))
         }
         ProviderBadge(track.provider, compact = true)
+        // The Connect page, from the screen that is most about the song: lit while it plays on another device.
+        DevicesButton(state, Modifier.size(34.dp), iconSize = 18.dp, quiet = ink(.6f))
         if (look.layout.hasPanel) {
             IconButton({ state.updateNowPlaying { copy(panelHidden = !panelHidden) } }, Modifier.size(34.dp)) {
                 Icon(
@@ -3096,7 +3127,8 @@ private fun NowPlayingPanel(
 @Composable
 private fun LyricsPanel(track: Track, state: AppState, large: Boolean = false) {
     val lyrics by state.lyrics.collectAsState()
-    val playback by state.playback.collectAsState()
+    // The place in the song the player shows, so the lines keep time with a song playing on another device too.
+    val playback by state.shownPlayback.collectAsState()
     val selectedOutcome = lyrics.outcomes.firstOrNull { it.provider == lyrics.selectedProvider }
     val selectedResult = selectedOutcome?.result
     val sourceListState = rememberLazyListState()
@@ -3426,6 +3458,9 @@ private fun LyricsNotFound(outcomes: List<LyricsProviderOutcome>, errorMessage: 
 private fun UpNextPanel(queue: QueueState, state: AppState) {
     val settings by state.settings.collectAsState()
     var savedAs by remember { mutableStateOf<String?>(null) }
+    // Another device's queue while this computer is its remote control: playing a song from it, taking one out
+    // and shuffle reach that device, and what only this computer's own queue can do is left off.
+    val remote = state.connect.collectAsState().value.target
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
@@ -3434,7 +3469,7 @@ private fun UpNextPanel(queue: QueueState, state: AppState) {
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    queue.context?.originType?.name?.lowercase()?.replaceFirstChar(Char::uppercase) ?: "Queue",
+                    remote?.let { "On ${it.name}" } ?: queue.context?.originType?.name?.lowercase()?.replaceFirstChar(Char::uppercase) ?: "Queue",
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.SemiBold,
@@ -3448,11 +3483,13 @@ private fun UpNextPanel(queue: QueueState, state: AppState) {
             }
             // Pills rather than icon buttons, so the two destructive-ish actions read clearly.
             QueueActionPill("Shuffle", Icons.Default.Shuffle, queue.shuffleEnabled, state::toggleShuffle)
-            // Autoplay's switch where its songs are: lit while it lines songs up after the queue.
-            val autoplay = settings.preferences.autoplay
-            QueueActionPill("Autoplay", Icons.Default.AllInclusive, autoplay) { state.setAutoplay(!autoplay) }
-            QueueActionPill("Clear", Icons.Default.Close, false, state::clearQueue)
-            if (queue.tracks.isNotEmpty()) QueueActionsMenu(queue, state) { savedAs = it }
+            if (remote == null) {
+                // Autoplay's switch where its songs are: lit while it lines songs up after the queue.
+                val autoplay = settings.preferences.autoplay
+                QueueActionPill("Autoplay", Icons.Default.AllInclusive, autoplay) { state.setAutoplay(!autoplay) }
+                QueueActionPill("Clear", Icons.Default.Close, false, state::clearQueue)
+                if (queue.tracks.isNotEmpty()) QueueActionsMenu(queue, state) { savedAs = it }
+            }
         }
         savedAs?.let { name ->
             Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -3471,11 +3508,13 @@ private fun UpNextPanel(queue: QueueState, state: AppState) {
                 QueueRow(track, index, index == queue.currentIndex, state)
             }
             val preferences = settings.preferences
-            autoplaySection(
-                autoplayShown(queue, preferences.autoplay, preferences.autoplayFrom, settings.spotify),
-                state,
-                compact = true,
-            )
+            if (remote == null) {
+                autoplaySection(
+                    autoplayShown(queue, preferences.autoplay, preferences.autoplayFrom, settings.spotify),
+                    state,
+                    compact = true,
+                )
+            }
         }
     }
 }
@@ -3607,18 +3646,25 @@ internal fun QueueScreen(queue: QueueState, state: AppState) {
     // library where the playlist went.
     var savedAs by remember { mutableStateOf<String?>(null) }
     val list = rememberLazyListState()
+    // While this computer is another device's remote control, this is that device's queue: playing a song from it,
+    // moving one and taking one out, shuffle and repeat reach it there. Clearing, saving it, autoplay and stopping
+    // after a song are this computer's own queue's, so they wait until the music is back.
+    val remote = state.connect.collectAsState().value.target
     Column(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column {
                 ScreenTitle("Queue", 32.sp)
                 Text(
-                    if (queue.tracks.isEmpty()) "Nothing queued" else "${pluralTracks(queue.tracks.size)} • ${queue.currentIndex + 1} playing",
+                    listOfNotNull(
+                        remote?.let { "On ${it.name}" },
+                        if (queue.tracks.isEmpty()) "Nothing queued" else "${pluralTracks(queue.tracks.size)} • ${queue.currentIndex + 1} playing",
+                    ).joinToString(" • "),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                 )
             }
             Spacer(Modifier.weight(1f))
-            if (queue.tracks.isNotEmpty()) {
+            if (queue.tracks.isNotEmpty() && remote == null) {
                 // Beside Clear, for the queue as the song playing alone: see AppState.clearAllButCurrent.
                 TextButton(state::clearAllButCurrent, enabled = canClearAllButCurrent(queue)) { Icon(Icons.Default.PlaylistRemove, null); Spacer(Modifier.width(6.dp)); Text("Clear all but this song") }
                 TextButton(state::clearQueue) { Icon(Icons.Default.ClearAll, null); Spacer(Modifier.width(6.dp)); Text("Clear") }
@@ -3663,18 +3709,20 @@ internal fun QueueScreen(queue: QueueState, state: AppState) {
             )
             // Autoplay's switch beside the queue's other two: on, songs like the last one follow the queue; off,
             // the music stops where the queue does. The same switch as Settings › Playback and queue.
-            val autoplay = settings.preferences.autoplay
-            AssistChip(
-                onClick = { state.setAutoplay(!autoplay) },
-                label = { Text(if (autoplay) "Autoplay on" else "Autoplay off") },
-                leadingIcon = { Icon(Icons.Default.AllInclusive, null, Modifier.size(18.dp)) },
-                colors = AssistChipDefaults.assistChipColors(
-                    containerColor = if (autoplay) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                    labelColor = if (autoplay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    leadingIconContentColor = if (autoplay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-            )
-            StopAfterChip(queue, state)
+            if (remote == null) {
+                val autoplay = settings.preferences.autoplay
+                AssistChip(
+                    onClick = { state.setAutoplay(!autoplay) },
+                    label = { Text(if (autoplay) "Autoplay on" else "Autoplay off") },
+                    leadingIcon = { Icon(Icons.Default.AllInclusive, null, Modifier.size(18.dp)) },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (autoplay) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                        labelColor = if (autoplay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        leadingIconContentColor = if (autoplay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+                StopAfterChip(queue, state)
+            }
         }
         Spacer(Modifier.height(18.dp))
         if (queue.tracks.isEmpty()) {
@@ -3685,11 +3733,13 @@ internal fun QueueScreen(queue: QueueState, state: AppState) {
                     QueueTrackRow(track, index, queue, state)
                 }
                 val preferences = settings.preferences
-                autoplaySection(
-                    autoplayShown(queue, preferences.autoplay, preferences.autoplayFrom, settings.spotify),
-                    state,
-                    compact = false,
-                )
+                if (remote == null) {
+                    autoplaySection(
+                        autoplayShown(queue, preferences.autoplay, preferences.autoplayFrom, settings.spotify),
+                        state,
+                        compact = false,
+                    )
+                }
             }
         }
     }

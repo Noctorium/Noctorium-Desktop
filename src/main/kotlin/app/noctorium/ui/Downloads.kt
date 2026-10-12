@@ -167,7 +167,7 @@ internal fun OfflineDownloadsCard(downloads: DownloadsState, state: AppState) {
                 OutlinedButton({ state.playDownloads() }) {
                     Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Play")
+                    Text(whereItPlays("Play", state))
                 }
                 Spacer(Modifier.width(8.dp))
                 TextButton({ expanded = !expanded }) { Text(if (expanded) "Hide" else "Show") }

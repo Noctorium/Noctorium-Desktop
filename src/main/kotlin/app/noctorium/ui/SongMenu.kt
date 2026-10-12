@@ -85,19 +85,23 @@ private fun SongMenuItems(track: Track, state: AppState, close: () -> Unit, addT
     val ui by state.ui.collectAsState()
     val queue by state.queue.state.collectAsState()
     val stopAfter by state.stopAfterCurrent.collectAsState()
+    // While this computer is another device's remote control, the queue these add to is that device's, and the
+    // menu says so: Play next and Add to queue go there.
+    val driven = state.connect.collectAsState().value.target?.name
     val likedNow = likes.isLiked(track)
     val pinned = ui.pinnedTracks.any { it.queueKey == track.queueKey }
     DropdownMenuItem(
-        text = { Text("Play next") },
+        text = { Text(drivenLabel("Play next", driven)) },
         leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null) },
         onClick = { state.playNext(track); close() },
     )
     DropdownMenuItem(
-        text = { Text("Add to queue") },
+        text = { Text(drivenLabel("Add to queue", driven)) },
         leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) },
         onClick = { state.addToQueue(track); close() },
     )
-    if (queue.current?.queueKey == track.queueKey) {
+    // Stop after this song is this computer's own player's, so it is not offered for a song playing elsewhere.
+    if (driven == null && queue.current?.queueKey == track.queueKey) {
         DropdownMenuItem(
             text = { Text("Stop after this song") },
             leadingIcon = { if (stopAfter) MenuCheck(true) else Icon(Icons.Default.StopCircle, null) },

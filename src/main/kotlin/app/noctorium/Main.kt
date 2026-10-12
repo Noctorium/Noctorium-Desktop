@@ -74,7 +74,9 @@ fun main(args: Array<String>) {
         // still playing after the window has gone.
         val appState = remember { desktopAppState() }
         val settings by appState.settings.collectAsState()
-        val playback by appState.playback.collectAsState()
+        // The song the player shows, for the tray: the driven device's while this computer is its remote control, since
+        // the tray's Play, Next and Previous drive that device then.
+        val playback by appState.shownPlayback.collectAsState()
         val desktop = settings.preferences.desktop
 
         val trayAvailable = remember { DesktopTray.supported && !GraphicsEnvironment.isHeadless() }
