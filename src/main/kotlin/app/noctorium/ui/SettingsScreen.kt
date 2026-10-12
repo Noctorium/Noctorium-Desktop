@@ -428,7 +428,8 @@ private fun tileText(page: SettingsPage, settings: SettingsState, state: AppStat
                 },
             )
         }
-        SettingsPage.PROFILE -> TileText(preferences.profileName, "Your local Noctorium profile")
+        // The history is on the profile's page, so the tile says so: it is where somebody looks for what they played.
+        SettingsPage.PROFILE -> TileText(preferences.profileName, "Your local profile and history")
         SettingsPage.THEME -> TileText(page.title, "${preferences.theme.displayName} · accent: ${preferences.accent.displayName.lowercase()}")
         SettingsPage.TEXT -> TileText(page.title, "${preferences.font.displayName} typeface · ${preferences.textSize.displayName.lowercase()} size")
         SettingsPage.PLAYER_BAR -> TileText(

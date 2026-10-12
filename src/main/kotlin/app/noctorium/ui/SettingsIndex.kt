@@ -118,6 +118,19 @@ internal object SettingsIndex {
                 "Profile name", "The name this computer's Noctorium goes by. It stays on this computer.",
                 "display name", "username", "user name", "nickname", "my name", "local profile", anchor = null,
             )
+            setting(
+                "History", "Every song you have listened to on this computer, by day, to play again. It stays on this computer.",
+                "recently played", "listening history", "play history", "played songs", "song history", "what did i listen to",
+                "what was that song", "last played", "previously played", "listened to",
+            )
+            setting(
+                "Keep a history of what I play", "A song goes in once you have heard half a minute of it. Off adds nothing more.",
+                "history", "pause history", "stop history", "turn off history", "private", "privacy", "incognito",
+            )
+            setting(
+                "Clear history", "Forgets every song in the history on this computer, after asking.",
+                "delete history", "erase history", "forget", "remove history", "wipe",
+            )
         }
 
         page(SettingsPage.THEME) {
