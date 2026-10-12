@@ -25,7 +25,7 @@ fun AppState.perform(shortcut: Shortcut): Boolean {
         is Shortcut.Volume -> setVolume((playback.volume + shortcut.delta).coerceIn(0f, 1f))
         Shortcut.Mute -> toggleMute()
         is Shortcut.Boost -> {
-            val level = settings.value.preferences.volumeBoostPercent
+            val level = VolumeBoost.clamp(settings.value.preferences.volumeBoostPercent)
             setVolumeBoostPercent(VolumeBoost.clamp(level + shortcut.deltaPercent))
         }
         Shortcut.Shuffle -> toggleShuffle()

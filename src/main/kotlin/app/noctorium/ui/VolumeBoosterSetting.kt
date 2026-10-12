@@ -37,15 +37,16 @@ import app.noctorium.ui.skins.TextButton
 @Composable
 internal fun VolumeBoosterCard(preferences: NoctoriumPreferences, state: AppState) {
     val playback by state.playback.collectAsState()
-    val level = preferences.volumeBoostPercent
+    val level = VolumeBoost.clamp(preferences.volumeBoostPercent)
     var dragging by remember(level) { mutableFloatStateOf(level.toFloat()) }
     val shown = VolumeBoost.snap(dragging)
     SettingsPanelCard {
         CardHeading(Icons.AutoMirrored.Filled.VolumeUp, "Volume booster")
         Spacer(Modifier.height(6.dp))
         Text(
-            "Louder than full volume, up to ten times, for a song mastered quietly or a laptop's small speakers. " +
-                "A limiter keeps the loudest moments from breaking up. 100% is off.",
+            "Louder than full volume, for a song mastered quietly or a laptop's small speakers. It uses up the volume's " +
+                "room first, then rounds the loudest moments off so the rest can come up: a quiet song gets up to ten " +
+                "times louder, one already mastered loud gets denser rather than broken. 100% is off.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp,
         )
@@ -54,7 +55,8 @@ internal fun VolumeBoosterCard(preferences: NoctoriumPreferences, state: AppStat
             Slider(
                 value = dragging,
                 onValueChange = { dragging = VolumeBoost.snap(it).toFloat() },
-                onValueChangeFinished = { if (shown != level) state.setVolumeBoostPercent(shown) },
+                // Read as it is let go of: a click on the track lets go before the level it chose is drawn (see BoostSlider).
+                onValueChangeFinished = { VolumeBoost.snap(dragging).let { chosen -> if (chosen != level) state.setVolumeBoostPercent(chosen) } },
                 valueRange = VolumeBoost.OFF_PERCENT.toFloat()..VolumeBoost.MAX_PERCENT.toFloat(),
                 enabled = playback.volumeBoostAvailable,
                 modifier = Modifier.weight(1f),
