@@ -186,6 +186,10 @@ internal fun VolumePopover(playback: PlaybackState, state: AppState, onSpotify: 
  * The booster's own slider, from 100% to 1000% in tens, with the level beside its name and a warning once it is
  * past twice the amplitude. Written when it is let go of: every write is a settings save and a new gain for the
  * player, and a drag is dozens of them.
+ *
+ * What is written is read from the slider as it is let go of, not from what was last drawn. A click on the track
+ * moves the slider and lets go of it in one go, before anything is drawn again, so what was last drawn was still
+ * the old level: the slider showed the new one and the player kept the old, until the same spot was clicked again.
  */
 @Composable
 internal fun BoostSlider(boost: Int, commit: (Int) -> Unit) {
@@ -205,7 +209,7 @@ internal fun BoostSlider(boost: Int, commit: (Int) -> Unit) {
         Slider(
             value = dragging,
             onValueChange = { dragging = VolumeBoost.snap(it).toFloat() },
-            onValueChangeFinished = { if (shown != boost) commit(shown) },
+            onValueChangeFinished = { VolumeBoost.snap(dragging).let { chosen -> if (chosen != boost) commit(chosen) } },
             valueRange = VolumeBoost.OFF_PERCENT.toFloat()..VolumeBoost.MAX_PERCENT.toFloat(),
         )
         if (VolumeBoost.isLoud(shown)) {
