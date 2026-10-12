@@ -338,6 +338,7 @@ fun NoctoriumApp(
           LocalDensity provides Density(density.density, density.fontScale * preferences.textSize.scale),
           LocalMotion provides preferences.animations,
           LocalIconSet provides preferences.iconSet.onDesktop(),
+          LocalServiceBadgeStyle provides preferences.serviceBadgeStyle,
           LocalGlobalShortcuts provides desktop.globalShortcuts,
       ) {
         if (shortcutsOpen) ShortcutsSheet(shortcuts) { shortcutsOpen = false }
@@ -2131,35 +2132,6 @@ internal fun AddToPlaylistDialog(
         },
         confirmButton = { Button({ creating = true }) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("New playlist") } },
         dismissButton = { OutlinedButton(dismiss) { Text("Cancel") } },
-    )
-}
-
-@Composable
-internal fun ProviderBadge(provider: ProviderType, compact: Boolean = false) {
-    val background = when (provider) {
-        ProviderType.YOUTUBE_MUSIC -> Color(0xFF8B2AB8)
-        ProviderType.YOUTUBE_VIDEO -> Color(0xFFB32C35)
-        ProviderType.SOUNDCLOUD -> Color(0xFFC45A16)
-        ProviderType.SPOTIFY -> Color(0xFF1DB954)
-        ProviderType.BANDCAMP -> Color(0xFF408294)
-        ProviderType.VK -> Color(0xFF0077FF)
-        ProviderType.LOCAL -> Color(0xFF4F46E5)
-    }
-    val label = when (provider) {
-        ProviderType.YOUTUBE_MUSIC -> if (compact) "YTM" else "YT MUSIC"
-        ProviderType.YOUTUBE_VIDEO -> if (compact) "YT" else "YOUTUBE"
-        ProviderType.SOUNDCLOUD -> if (compact) "SC" else "SOUNDCLOUD"
-        ProviderType.SPOTIFY -> if (compact) "SP" else "SPOTIFY"
-        ProviderType.BANDCAMP -> if (compact) "BC" else "BANDCAMP"
-        ProviderType.VK -> if (compact) "VK" else "VK MUSIC"
-        ProviderType.LOCAL -> if (compact) "LOCAL" else "LOCAL"
-    }
-    Text(
-        label,
-        color = Color.White,
-        fontSize = 9.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.clip(skinCorners(RoundedCornerShape(6.dp))).background(background.copy(alpha = .9f)).padding(horizontal = if (compact) 6.dp else 7.dp, vertical = 4.dp),
     )
 }
 

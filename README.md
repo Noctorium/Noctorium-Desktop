@@ -72,3 +72,9 @@ set, as Noctorium has always drawn), Outlined, Rounded, Sharp and Two-tone — u
 **Line**, drawn from [Lucide](https://lucide.dev)'s shapes (lucide-react 1.50.0) under the ISC licence, with the
 icons Lucide took from [Feather](https://feathericons.com) under the MIT licence. Both notices are reproduced in
 `src/main/kotlin/app/noctorium/ui/icons/LineIcons.kt`, where the shapes are kept.
+
+The badges that say which service a song comes from carry each service's mark, from
+[Simple Icons](https://simpleicons.org) (simple-icons 16.35.0, CC0 1.0), unless they are set back to letters
+beside the icon set. The marks are trademarks of the services they stand for, drawn only to say which service a
+song is from; music on the computer has Material Icons' folder (Apache License 2.0). The shapes are kept in
+Noctorium-Base, `core/src/main/kotlin/app/noctorium/domain/ServiceMarks.kt`, which the phone draws them from too.

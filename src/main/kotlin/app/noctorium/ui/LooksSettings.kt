@@ -39,10 +39,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.noctorium.core.AppState
+import app.noctorium.domain.ProviderType
 import app.noctorium.settings.HomePlay
 import app.noctorium.settings.IconSet
 import app.noctorium.settings.NoctoriumPreferences
 import app.noctorium.settings.QueueColumn
+import app.noctorium.settings.ServiceBadgeStyle
 import app.noctorium.settings.VisualiserStyle
 import app.noctorium.ui.icons.DESKTOP_ICON_SETS
 import app.noctorium.ui.icons.Icon
@@ -97,6 +99,8 @@ internal fun IconSetCard(preferences: NoctoriumPreferences, state: AppState) {
         )
         Spacer(Modifier.height(12.dp))
         IconSetPicker(chosen, state::setIconSet)
+        Spacer(Modifier.height(16.dp))
+        ServiceBadgeStylePicker(preferences.serviceBadgeStyle, state::setServiceBadgeStyle)
     }
 }
 
@@ -148,6 +152,85 @@ private fun IconSample(set: IconSet, size: Int) {
             ICON_SAMPLES.take(if (size > 16) 8 else 10).forEach { icon ->
                 Icon(icon, null, Modifier.size(size.dp), tint = MaterialTheme.colorScheme.onSurface)
             }
+        }
+    }
+}
+
+// --- Service badges ---
+
+/** What the badges' choice is called, on the card and in the search. */
+internal const val SERVICE_BADGE_STYLE = "Service badge style"
+
+/**
+ * How the badges that say where a song comes from are drawn: each choice shown by every service's badge drawn its
+ * way, so it is made by looking, as the icon set's is. Beside the icon set because a mark is an icon, though the
+ * marks are the services' own and stay as they are whatever set the buttons are in.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ServiceBadgeStylePicker(selected: ServiceBadgeStyle, choose: (ServiceBadgeStyle) -> Unit) = SettingAnchor(SERVICE_BADGE_STYLE) {
+    if (skinned()) {
+        Column {
+            Text("$SERVICE_BADGE_STYLE:", fontSize = 12.sp)
+            Spacer(Modifier.height(5.dp))
+            ServiceBadgeStyle.entries.forEach { style ->
+                PreviewedOption(style.displayName, style.description, style == selected, { choose(style) }) { BadgeSample(style) }
+            }
+            Spacer(Modifier.height(4.dp))
+            ServiceBadgeNote()
+        }
+        return@SettingAnchor
+    }
+    Column {
+        Text(SERVICE_BADGE_STYLE, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ServiceBadgeStyle.entries.forEach { style ->
+                val active = style == selected
+                Surface(
+                    onClick = { choose(style) },
+                    shape = skinShape(RoundedCornerShape(12.dp)),
+                    color = if (active) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .55f) else ink(.04f),
+                    border = BorderStroke(if (active) 2.dp else 1.dp, if (active) MaterialTheme.colorScheme.primary else ink(.1f)),
+                    modifier = Modifier.width(300.dp).fillMaxRowHeight(),
+                ) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                        Text(
+                            style.displayName,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        BadgeSample(style)
+                        Spacer(Modifier.height(8.dp))
+                        Text(style.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 13.sp)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        ServiceBadgeNote()
+    }
+}
+
+/** Where the badges are, and whose the marks are. */
+@Composable
+private fun ServiceBadgeNote() {
+    Text(
+        "The badge on a cover, in a list or beside a song's name that says which service the song is from. The marks " +
+            "are Simple Icons' (CC0), and each is its service's trademark, there only to say which service that is.",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 11.sp,
+    )
+}
+
+/** Every service's badge as [style] draws it, whatever the badges in the rest of the window are. */
+@Composable
+private fun BadgeSample(style: ServiceBadgeStyle) {
+    CompositionLocalProvider(LocalServiceBadgeStyle provides style) {
+        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+            ProviderType.entries.forEach { provider -> ProviderBadge(provider, compact = true) }
         }
     }
 }

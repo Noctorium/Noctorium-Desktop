@@ -153,6 +153,19 @@ class SettingsIndexTest {
     }
 
     @Test
+    fun `the badges' marks are found by what people call them, and YTM still finds YouTube Music first`() {
+        listOf("logo", "service icons", "badge style", "marks").forEach { query ->
+            assertEquals(SERVICE_BADGE_STYLE, first(query).entry.title, query)
+        }
+        listOf("ytm", "icons", "badges", "letters").forEach { query ->
+            assertTrue(SettingsIndex.search(query).any { it.setting.entry.title == SERVICE_BADGE_STYLE }, "\"$query\" does not find the badges")
+        }
+        assertEquals("YouTube Music account", first("ytm").entry.title)
+        assertEquals("Icons", first("icons").entry.title)
+        assertEquals(SettingsPage.THEME, first("logo").page)
+    }
+
+    @Test
     fun `the Connect page is found from Settings, and opens itself rather than a page of Settings`() {
         val devices = first("devices")
         assertEquals("Devices on this network", devices.entry.title)

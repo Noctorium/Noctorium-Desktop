@@ -152,6 +152,13 @@ internal object SettingsIndex {
                 "icon set", "icon theme", "icon style", "glyphs", "symbols", "outlined", "rounded", "sharp", "two-tone",
                 "line icons", "thin icons", "monochrome", "lucide", "breeze",
             )
+            // YTM is in the description rather than the other words, so that it finds this after the YouTube Music
+            // account, which is what somebody typing it is more likely to be after.
+            setting(
+                SERVICE_BADGE_STYLE, "Each service's own mark on the badges that say where a song comes from, or the letters, YTM, SC or SP, as before.",
+                "logo", "logos", "service logos", "service icons", "brand icons", "provider icons", "badge", "badges",
+                "marks", "letters", "abbreviations", "youtube logo", "spotify logo", "soundcloud logo", "simple icons",
+            )
         }
         page(SettingsPage.TEXT) {
             setting("Text", "How big everything is written, and in what typeface.", "type", "writing", "font")
