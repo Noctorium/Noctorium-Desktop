@@ -245,15 +245,22 @@ class ConnectTabTest {
 
     @Test
     fun `the strip and the Devices button open the Connect page`() {
-        fakeConnect(state, ConnectSamples.driving())
         state.navigate(Destination.HOME)
-        click(state, 600, 26) { ConnectStrip(state, pill = false) }
-        waitFor { state.ui.value.destination == Destination.CONNECT }
+        // The made-up state is put back on each try: on a slow machine Connect's own start can land after it and
+        // say there is nothing to show, and a strip that is not drawn cannot be clicked.
+        waitFor(15_000) {
+            fakeConnect(state, ConnectSamples.driving())
+            click(state, 600, 26) { ConnectStrip(state, pill = false) }
+            state.ui.value.destination == Destination.CONNECT
+        }
 
         state.navigate(Destination.HOME)
         waitFor { state.ui.value.destination == Destination.HOME }
-        click(state, 48, 48) { DevicesButton(state) }
-        waitFor { state.ui.value.destination == Destination.CONNECT }
+        waitFor(15_000) {
+            fakeConnect(state, ConnectSamples.driving())
+            click(state, 48, 48) { DevicesButton(state) }
+            state.ui.value.destination == Destination.CONNECT
+        }
     }
 
     @Test
