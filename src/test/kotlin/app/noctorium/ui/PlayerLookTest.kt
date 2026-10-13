@@ -63,6 +63,24 @@ class PlayerLookTest {
         assertFalse(PlayerButton.SHUFFLE in playerBarButtons(PlayerBarStyle.TOOLBAR, narrow = false, setOf(PlayerButton.SHUFFLE)))
     }
 
+    @Test
+    fun `Toolbar 2 draws every button but Stop, which waits to be asked for, and gives up the ways elsewhere first`() {
+        val everything = PlayerButton.entries.toSet() - PlayerButton.STOP
+        assertEquals(everything, playerBarButtons(PlayerBarStyle.TOOLBAR_2, narrow = false, emptySet()))
+        // Narrower, lyrics and the queue go, both only ways to other pages.
+        assertEquals(everything - PlayerButton.LYRICS - PlayerButton.QUEUE, playerBarButtons(PlayerBarStyle.TOOLBAR_2, narrow = true, emptySet()))
+        // Tight, the toggles, the timer and the speed too -- the timer kept while it counts down.
+        assertEquals(
+            setOf(PlayerButton.LIKE, PlayerButton.VOLUME, PlayerButton.DEVICES, PlayerButton.SLEEP_TIMER),
+            playerBarButtons(PlayerBarStyle.TOOLBAR_2, narrow = true, emptySet(), setOf(PlayerButton.SLEEP_TIMER), tight = true),
+        )
+        // Stop asked for is there; anything put away is not.
+        val asked = DesktopPreferences().withPlayerButton(PlayerButton.STOP, shown = true).withPlayerButton(PlayerButton.LIKE, shown = false)
+        val drawn = playerBarButtons(PlayerBarStyle.TOOLBAR_2, narrow = false, asked, emptySet())
+        assertTrue(PlayerButton.STOP in drawn)
+        assertFalse(PlayerButton.LIKE in drawn)
+    }
+
     // --- The queue's table ---
 
     private fun song(n: Int, album: String? = "An album", duration: Long? = 200_000) = Track(

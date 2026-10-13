@@ -184,9 +184,9 @@ internal object SettingsIndex {
         page(SettingsPage.PLAYER_BAR) {
             setting("Player bar", "The bar with the controls on it: its layout, where it sits and its buttons.", "controls", "now playing bar", "toolbar", "bottom bar")
             setting(
-                "Player bar layout", "Inline, Stacked, Centred, Slim, Spotlight, Floating, the Island, Display, Taskbar, Toolbar and more.",
+                "Player bar layout", "Inline, Stacked, Centred, Slim, Spotlight, Floating, the Island, Display, Taskbar, Toolbar, Toolbar 2 and more.",
                 "player style", "bar style", "controls layout", "toolbar", "island", "floating", "taskbar", "compact",
-                "classic player", "audacious", "winamp", "flat buttons", "stop button",
+                "classic player", "audacious", "winamp", "flat buttons", "stop button", "toolbar 2", "more buttons",
             )
             setting("Show the clock", "The time in the Taskbar layout's tray.", "clock", "time", "tray clock")
             setting(

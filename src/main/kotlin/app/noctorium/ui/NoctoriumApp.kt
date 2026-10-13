@@ -2381,6 +2381,7 @@ private fun PlayerBarLayout(queue: QueueState, playback: PlaybackState, state: A
         PlayerBarStyle.DISPLAY -> return DisplayPlayerBar(queue, playback, state)
         PlayerBarStyle.TASKBAR -> return TaskbarPlayerBar(queue, playback, state)
         PlayerBarStyle.TOOLBAR -> return ToolbarPlayerBar(queue, playback, state)
+        PlayerBarStyle.TOOLBAR_2 -> return ToolbarPlayerBar(queue, playback, state, PlayerBarStyle.TOOLBAR_2)
         // Stacked is the one written out below, and was the only layout before there was a choice.
         PlayerBarStyle.STACKED -> Unit
     }

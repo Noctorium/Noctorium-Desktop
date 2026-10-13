@@ -17,7 +17,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -85,12 +89,17 @@ import app.noctorium.ui.skins.towards
  * It sits at the top or the foot of the window as the position setting says. Narrower, the song keeps only its
  * cover and repeat and shuffle go, and narrowest the song and the add button go as well; the transport, the seek bar,
  * the time and the volume always stay.
+ *
+ * As [PlayerBarStyle.TOOLBAR_2] it is the same toolbar asked for without the add button and with play and pause one
+ * button again, and with more along its far end: like, lyrics and the queue, then repeat and shuffle, then the sleep
+ * timer, Connect, the speed and the volume. What gives way as it narrows is [playerBarButtons]' to say.
  */
 @Composable
-internal fun ToolbarPlayerBar(queue: QueueState, playback: PlaybackState, state: AppState) {
+internal fun ToolbarPlayerBar(queue: QueueState, playback: PlaybackState, state: AppState, style: PlayerBarStyle = PlayerBarStyle.TOOLBAR) {
     val preferences = state.settings.collectAsState().value.preferences
     val current = queue.current
     val skinned = skin() != ThemeSkin.STANDARD
+    val more = style == PlayerBarStyle.TOOLBAR_2
     var adding by remember { mutableStateOf(false) }
     if (adding && current != null) {
         val library by state.library.collectAsState()
@@ -111,19 +120,30 @@ internal fun ToolbarPlayerBar(queue: QueueState, playback: PlaybackState, state:
                 val tight = maxWidth < 680.dp
                 // Narrower again, the song and the add button go too, so the seek bar keeps room to be one.
                 val cramped = maxWidth < 540.dp
-                val shown = playerBarButtons(PlayerBarStyle.TOOLBAR, narrow, preferences.desktop, playerButtonsInUse(state), tight)
+                val shown = playerBarButtons(style, narrow, preferences.desktop, playerButtonsInUse(state), tight)
                 Row(
                     // Room at the far end for the boost the speaker wears.
                     Modifier.fillMaxSize().padding(start = if (skinned) 4.dp else 10.dp, end = if (skinned) 12.dp else 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(1.dp),
                 ) {
-                    if (!cramped) {
+                    if (!cramped && !more) {
                         ToolbarButton(Icons.Default.Add, "Add to playlist", button, glyph, enabled = current != null) { adding = true }
                         ToolbarSeparator()
                     }
                     ToolbarButton(Icons.Default.SkipPrevious, "Previous track", button, glyph, onClick = state::previous)
-                    if (playback.status == PlaybackStatus.RESOLVING) {
+                    if (more && playback.status != PlaybackStatus.RESOLVING) {
+                        // One button that says what it will do, as the other bars' play button does.
+                        val playing = playback.status == PlaybackStatus.PLAYING
+                        ToolbarButton(
+                            if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            if (playing) "Pause" else "Play",
+                            button,
+                            glyph,
+                            enabled = current != null,
+                            onClick = state::togglePlayback,
+                        )
+                    } else if (playback.status == PlaybackStatus.RESOLVING) {
                         // Pressing it gives up on a song that is taking too long, as every bar's play button does.
                         ToolbarButton(
                             Icons.Default.PlayArrow,
@@ -144,15 +164,17 @@ internal fun ToolbarPlayerBar(queue: QueueState, playback: PlaybackState, state:
                         ) { if (playback.status != PlaybackStatus.PLAYING) state.togglePlayback() }
                     }
                     // Pause again carries on, as a desktop player's pause button did.
-                    ToolbarButton(
-                        Icons.Default.Pause,
-                        "Pause",
-                        button,
-                        glyph,
-                        enabled = loaded,
-                        lit = playback.status == PlaybackStatus.PAUSED,
-                        onClick = state::togglePlayback,
-                    )
+                    if (!more) {
+                        ToolbarButton(
+                            Icons.Default.Pause,
+                            "Pause",
+                            button,
+                            glyph,
+                            enabled = loaded,
+                            lit = playback.status == PlaybackStatus.PAUSED,
+                            onClick = state::togglePlayback,
+                        )
+                    }
                     if (PlayerButton.STOP in shown) {
                         ToolbarButton(Icons.Default.Stop, "Stop", button, glyph, enabled = current != null, onClick = state::stop)
                     }
@@ -173,6 +195,16 @@ internal fun ToolbarPlayerBar(queue: QueueState, playback: PlaybackState, state:
                         timesAfter = true,
                     )
                     ToolbarSeparator()
+                    if (more && (PlayerButton.LIKE in shown || PlayerButton.LYRICS in shown || PlayerButton.QUEUE in shown)) {
+                        if (PlayerButton.LIKE in shown) ToolbarLike(current, state, button, glyph)
+                        if (PlayerButton.LYRICS in shown) {
+                            ToolbarButton(Icons.Default.Lyrics, "Lyrics", button, glyph) { state.navigate(Destination.NOW_PLAYING) }
+                        }
+                        if (PlayerButton.QUEUE in shown) {
+                            ToolbarButton(Icons.AutoMirrored.Filled.QueueMusic, "Queue", button, glyph) { state.navigate(Destination.QUEUE) }
+                        }
+                        ToolbarSeparator()
+                    }
                     if (PlayerButton.REPEAT in shown) {
                         ToolbarButton(
                             if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
@@ -226,6 +258,36 @@ private fun ToolbarButton(
     IconButton(onClick, Modifier.size(size), enabled = enabled) {
         picture?.invoke() ?: Icon(icon, description, Modifier.size(glyph), tint = if (lit) MaterialTheme.colorScheme.primary else LocalContentColor.current)
     }
+}
+
+/**
+ * The heart, as one of the toolbar's own buttons rather than the round one the other bars have: lit while the song is
+ * liked, as the toolbar's toggles are, and held in under a Windows skin. The like itself is [LikeButton]'s, written to
+ * the service; greyed where the song's service cannot be liked from here, or with nothing playing.
+ */
+@Composable
+private fun ToolbarLike(track: Track?, state: AppState, size: Dp, glyph: Dp) {
+    val likes by state.likes.collectAsState()
+    val liked = track != null && likes.isLiked(track)
+    val busy = track != null && likes.isBusy(track)
+    val supported = track != null && likes.supports(track)
+    ToolbarButton(
+        if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+        when {
+            track == null -> "Like"
+            supported -> likeLabel(track.provider, liked)
+            else -> likeUnavailable(track.provider)
+        },
+        size,
+        glyph,
+        enabled = supported && !busy,
+        lit = liked,
+        picture = if (busy) {
+            { CircularProgressIndicator(Modifier.size(glyph * .8f), strokeWidth = 2.dp, color = LocalContentColor.current) }
+        } else {
+            null
+        },
+    ) { track?.let(state::toggleLike) }
 }
 
 /** The line between two groups of the toolbar's buttons: 98's etched ridge, XP's pair of lines, a faint rule otherwise. */

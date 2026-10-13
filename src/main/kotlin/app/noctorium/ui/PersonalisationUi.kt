@@ -186,6 +186,12 @@ internal fun playerBarButtons(
             drawn.retainAll(TOOLBAR_BUTTONS + (inUse intersect setOf(PlayerButton.SLEEP_TIMER, PlayerButton.DEVICES, PlayerButton.SPEED)))
             if (tight) drawn -= setOf(PlayerButton.SHUFFLE, PlayerButton.REPEAT)
         }
+        // Every button the bar has, as Toolbar 2 was asked for with more of them. Narrower, lyrics and the queue go,
+        // both only ways to other pages; narrower again, the toggles and the timer and speed, unless under way.
+        PlayerBarStyle.TOOLBAR_2 -> {
+            if (narrow || tight) drawn -= setOf(PlayerButton.LYRICS, PlayerButton.QUEUE)
+            if (tight) drawn -= setOf(PlayerButton.SHUFFLE, PlayerButton.REPEAT, PlayerButton.SLEEP_TIMER, PlayerButton.SPEED) - inUse
+        }
     }
     // A button showing something under way stays, put away or not: a sleep timer counting down, or the music
     // playing on another device, is not something to lose sight of because its button was hidden.

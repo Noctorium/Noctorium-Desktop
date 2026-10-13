@@ -76,6 +76,36 @@ class PlayerLookRenderCheck {
         playback(playing)
     }
 
+    /** Toolbar 2 -- one play and pause, and more buttons -- in every theme, across a wide window and two narrower ones. */
+    @Test
+    fun `Toolbar 2 draws in every theme`() {
+        val root = root ?: return
+        keepingFiles {
+            val state = desktopAppState()
+            try {
+                prepare(state)
+                state.setPlayerBarStyle(PlayerBarStyle.TOOLBAR_2)
+                themes.forEach { theme ->
+                    state.setTheme(theme)
+                    val tour = WindowTour(state, File(root, "looks/${theme.name.lowercase()}"))
+                    try {
+                        listOf(1280, 860, 640).forEach { width ->
+                            tour.openWithSound(state, width, 640)
+                            tour.fillPlaying()
+                            tour.go(Destination.HOME)
+                            tour.capture("toolbar-2-$width", crop = Rect.makeXYWH(0f, 640f - 90f, width.toFloat(), 90f))
+                        }
+                    } finally {
+                        tour.close()
+                    }
+                }
+            } finally {
+                restore(state)
+                state.close()
+            }
+        }
+    }
+
     @Test
     fun `the new look draws in every theme`() {
         val root = root ?: return

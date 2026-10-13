@@ -1311,6 +1311,30 @@ internal fun PlayerBarPicture(style: PlayerBarStyle, selected: Boolean, modifier
                 bar(w * .78f, cy, w * .06f, alpha = .45f)
                 tools(w * .955f, cy, 3)
             }
+            PlayerBarStyle.TOOLBAR_2 -> {
+                val top = strip(h * .15f)
+                val cy = top + h * .075f
+                val side = h * .05f
+                fun button(x: Float, lit: Boolean = false) = drawRoundRect(
+                    if (lit) accent.copy(alpha = if (selected) .95f else .75f) else writing.copy(alpha = .45f),
+                    Offset(x - side / 2, cy - side / 2),
+                    Size(side, side),
+                    CornerRadius(side * .2f),
+                )
+                // Three flat buttons, play and pause one of them in the accent, then the song and a shorter slider,
+                // and a longer row of buttons after it than the Toolbar's: there are more of them.
+                repeat(3) { i -> button(w * .045f + i * w * .052f, lit = i == 1) }
+                cover(w * .22f, cy, h * .07f)
+                bar(w * .22f + h * .1f, cy, w * .09f, alpha = .5f)
+                val grooveLeft = w * .37f
+                val grooveLength = w * .2f
+                bar(grooveLeft, cy, grooveLength, alpha = .2f, thick = stroke * .8f)
+                bar(grooveLeft, cy, grooveLength * .4f, alpha = 1f, thick = stroke * .8f, colour = accent)
+                drawCircle(if (lightPage) Color.White else writing.copy(alpha = .3f), h * .028f, Offset(grooveLeft + grooveLength * .4f, cy))
+                drawCircle(accent, h * .028f, Offset(grooveLeft + grooveLength * .4f, cy), style = Stroke(h * .01f))
+                bar(w * .59f, cy, w * .05f, alpha = .45f)
+                repeat(7) { i -> button(w * .68f + i * w * .043f) }
+            }
         }
     }
 }
