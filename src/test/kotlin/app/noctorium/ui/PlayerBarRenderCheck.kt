@@ -204,7 +204,8 @@ class PlayerBarRenderCheck {
             listOf(ThemePreset.NOCTORIUM_NIGHT, ThemePreset.NOCTORIUM_DAY).forEach { theme ->
                 state.setTheme(theme)
                 state.setPlayerBarStyle(PlayerBarStyle.ISLAND)
-                val scene = ImageComposeScene(720, 300, Density(1f)) {
+                // Tall enough for every row of the picker: the Toolbars are on the third.
+                val scene = ImageComposeScene(720, 430, Density(1f)) {
                     val preferences = state.settings.collectAsState().value.preferences
                     MaterialTheme(colorScheme = noctoriumColorScheme(preferences.themeColours(), Color(preferences.resolvedAccent(null)))) {
                         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceContainer) {
