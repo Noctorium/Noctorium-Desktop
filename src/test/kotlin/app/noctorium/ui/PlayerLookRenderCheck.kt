@@ -76,6 +76,45 @@ class PlayerLookRenderCheck {
         playback(playing)
     }
 
+    /**
+     * The Playlist layout's Lyrics tab, opened, in Night, 98 and XP. The lyrics are whatever the sources find for the
+     * made-up song, which is nothing: the tab's own place and its "not found" are what is drawn.
+     */
+    @Test
+    fun `the Playlist layout's Lyrics tab draws`() {
+        val root = root ?: return
+        keepingFiles {
+            val state = desktopAppState()
+            try {
+                prepare(state)
+                listOf(ThemePreset.NOCTORIUM_NIGHT, ThemePreset.WINDOWS_98, ThemePreset.WINDOWS_XP).forEach { theme ->
+                    state.setTheme(theme)
+                    val tour = WindowTour(state, File(root, "looks/${theme.name.lowercase()}"))
+                    try {
+                        tour.openWithSound(state)
+                        tour.fillPlaying()
+                        tour.go(Destination.NOW_PLAYING)
+                        tour.capture("playlist-tabs", frames = 16)
+                        tour.click(lyricsTab.getValue(theme.skin))
+                        tour.capture("playlist-lyrics-tab", frames = 40)
+                    } finally {
+                        tour.close()
+                    }
+                }
+            } finally {
+                restore(state)
+                state.close()
+            }
+        }
+    }
+
+    /** Where the Lyrics tab is drawn in a 1280 by 800 window, read off the "playlist-tabs" pictures. */
+    private val lyricsTab = mapOf(
+        app.noctorium.settings.ThemeSkin.STANDARD to Offset(633f, 47f),
+        app.noctorium.settings.ThemeSkin.WINDOWS_98 to Offset(510f, 46f),
+        app.noctorium.settings.ThemeSkin.WINDOWS_XP to Offset(599f, 49f),
+    )
+
     /** Toolbar 2 -- one play and pause, and more buttons -- in every theme, across a wide window and two narrower ones. */
     @Test
     fun `Toolbar 2 draws in every theme`() {

@@ -3079,7 +3079,7 @@ private fun NowPlayingPanel(
 }
 
 @Composable
-private fun LyricsPanel(track: Track, state: AppState, large: Boolean = false) {
+internal fun LyricsPanel(track: Track, state: AppState, large: Boolean = false) {
     val lyrics by state.lyrics.collectAsState()
     // The place in the song the player shows, so the lines keep time with a song playing on another device too.
     val playback by state.shownPlayback.collectAsState()

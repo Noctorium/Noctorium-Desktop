@@ -164,6 +164,9 @@ internal fun statusBarTimes(queue: QueueState, positionMs: Long): String {
 /** One of the table's tabs: the songs it lists, what its name says, and what choosing one of them does. */
 private data class TableTab(val key: String, val label: String, val tracks: List<Track>, val playing: Int, val play: (Int) -> Unit)
 
+/** The tab that holds the song's lyrics rather than a table of songs. */
+private const val LYRICS_TAB = "lyrics"
+
 // --- The layout ---
 
 @Composable
@@ -179,7 +182,7 @@ internal fun PlaylistNowPlaying(queue: QueueState, track: Track, playback: Playb
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
                 if (panel) CoverPanel(track, playback, Modifier.width(panelWidth).fillMaxHeight())
                 Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                    QueueTablePanel(queue, state, Modifier.weight(1f).fillMaxWidth())
+                    QueueTablePanel(queue, track, state, Modifier.weight(1f).fillMaxWidth())
                     InfoBar(track, playback, state, arrange, Modifier.fillMaxWidth())
                 }
             }
@@ -262,16 +265,21 @@ private fun PanelHeading(text: String) {
 }
 
 /**
- * The table under its tabs: the queue, the playlist the queue came from while it is open in the library, and
- * autoplay's songs once some are lined up. Above the queue's own table, what can be done to the queue: stop after
- * this song, clear all but this song, and clear.
+ * The table under its tabs: the queue, the song's lyrics, the playlist the queue came from while it is open in the
+ * library, and autoplay's songs once some are lined up. Above the queue's own table, what can be done to the queue:
+ * stop after this song, clear all but this song, and clear.
+ *
+ * Lyrics come second, after the queue and before the two that come and go, so the tab is always in the same place.
+ * It is the lyrics the now playing screen's other layouts have, sources and all, for [track] -- the song shown,
+ * which keeps time with a song playing on another device too.
  */
 @Composable
-private fun QueueTablePanel(queue: QueueState, state: AppState, modifier: Modifier) {
+private fun QueueTablePanel(queue: QueueState, track: Track, state: AppState, modifier: Modifier) {
     val library by state.library.collectAsState()
     val current = queue.current
     val tabs = buildList {
         add(TableTab("queue", "Queue (${queue.tracks.size})", queue.tracks, queue.currentIndex) { state.jumpToQueueItem(it) })
+        add(TableTab(LYRICS_TAB, "Lyrics", emptyList(), -1) {})
         // The playlist the song came from, while it is open: the library's own, or one on a service.
         val local = library.openLocalPlaylist?.takeIf { list -> current != null && list.tracks.any { it.queueKey == current.queueKey } }
         val remote = library.openPlaylist?.takeIf { list -> current != null && list.tracks.any { it.queueKey == current.queueKey } }
@@ -290,8 +298,12 @@ private fun QueueTablePanel(queue: QueueState, state: AppState, modifier: Modifi
     val remote = state.connect.collectAsState().value.target
     val page: @Composable () -> Unit = {
         Column(Modifier.fillMaxSize()) {
-            if (tab.key == "queue" && remote == null) QueueTableActions(queue, state)
-            QueueTable(tab, state, Modifier.weight(1f).fillMaxWidth())
+            if (tab.key == LYRICS_TAB) {
+                Box(Modifier.weight(1f).fillMaxWidth()) { LyricsPanel(track, state) }
+            } else {
+                if (tab.key == "queue" && remote == null) QueueTableActions(queue, state)
+                QueueTable(tab, state, Modifier.weight(1f).fillMaxWidth())
+            }
         }
     }
     if (skinned()) {
