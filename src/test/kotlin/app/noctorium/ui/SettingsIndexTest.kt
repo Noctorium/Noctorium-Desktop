@@ -185,7 +185,7 @@ class SettingsIndexTest {
         assertEquals("Who is controlling whom", first("controlled from").entry.title)
         // Its settings are where they were: naming this computer, and whether it can be found.
         assertEquals("Name this device", first("device name").entry.title)
-        assertEquals("Let my other devices find this one", first("discoverable").entry.title)
+        assertEquals("Noctorium Connect on or off", first("discoverable").entry.title)
 
         var opened: Pair<SettingsPage, String?>? = null
         var went: app.noctorium.core.Destination? = null

@@ -309,7 +309,7 @@ internal fun ConnectSettingsRows(state: AppState) = SettingAnchor("Noctorium Con
                 state::setConnectEnabled,
             )
             Spacer(Modifier.width(10.dp))
-            Text("Let my other devices find this one", fontSize = 12.sp)
+            Text("Noctorium Connect: find my other devices, and let them find this one", fontSize = 12.sp)
         }
         // The devices, where the music is and moving it between them are the Connect page's, a click from here.
         Spacer(Modifier.height(6.dp))

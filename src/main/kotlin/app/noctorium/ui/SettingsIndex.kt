@@ -109,8 +109,9 @@ internal object SettingsIndex {
                 anchor = "Noctorium Connect", onlyWhen = "once you are signed in",
             )
             setting(
-                "Let my other devices find this one", "Whether this computer shows up for Connect on your other devices.",
-                "discoverable", "visible", "hide this device", anchor = "Noctorium Connect", onlyWhen = "once you are signed in",
+                "Noctorium Connect on or off", "Whether this computer finds your other devices and shows up on theirs. Off stops Connect altogether.",
+                "discoverable", "visible", "hide this device", "turn off connect", "disable connect", "enable connect", "connect switch",
+                anchor = "Noctorium Connect", onlyWhen = "once you are signed in",
             )
         }
         page(SettingsPage.PROFILE) {

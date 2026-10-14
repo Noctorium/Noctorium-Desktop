@@ -223,6 +223,22 @@ class ConnectTabTest {
         assertEquals(CheckKind.SWITCHED_OFF, connectChecks(ConnectState(), enabledHere = false)[0].kind)
     }
 
+    @Test
+    fun `the switch says what Connect does on and off, and that off ends a remote control under way`() {
+        assertTrue(connectSwitchLine(enabled = false, ConnectState()).startsWith("Off:"))
+        assertEquals("This computer finds your other devices, and they can find it.", connectSwitchLine(enabled = true, ConnectState()))
+        assertTrue("ends the remote control" in connectSwitchLine(enabled = true, ConnectSamples.driving()))
+    }
+
+    @Test
+    fun `the switch at the top of the page turns Connect off and on`() {
+        assertTrue(state.settings.value.preferences.connect.enabled)
+        state.setConnectEnabled(false)
+        assertFalse(state.settings.value.preferences.connect.enabled)
+        state.setConnectEnabled(true)
+        assertTrue(state.settings.value.preferences.connect.enabled)
+    }
+
     // --- The player is the remote ---
 
     @Test

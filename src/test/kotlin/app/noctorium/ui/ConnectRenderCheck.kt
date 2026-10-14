@@ -117,6 +117,10 @@ class ConnectRenderCheck {
         tour.capture("tab-nothing-found")
         show(tour, state, ConnectSamples.three())
         tour.capture("tab-three-devices")
+        // Switched off at the top of the page, and on again.
+        state.setConnectEnabled(false)
+        tour.capture("tab-off")
+        state.setConnectEnabled(true)
         show(tour, state, ConnectSamples.three().copy(message = "Laptop did not answer. Its firewall may be keeping Noctorium out on this network."))
         tour.capture("tab-refused")
         driving(tour, state)
@@ -184,6 +188,10 @@ class ConnectRenderCheck {
         tour.capture("tab-nothing-found")
         show(tour, state, ConnectSamples.three())
         tour.capture("tab-three-devices")
+        // Switched off at the top of the page, and on again.
+        state.setConnectEnabled(false)
+        tour.capture("tab-off")
+        state.setConnectEnabled(true)
         driving(tour, state)
         tour.capture("tab-driving", frames = 12)
         tour.go(Destination.NOW_PLAYING)

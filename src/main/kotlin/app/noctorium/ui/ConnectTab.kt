@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -85,6 +86,7 @@ import app.noctorium.ui.skins.ScreenTitle
 import app.noctorium.ui.skins.SectionTitle
 import app.noctorium.ui.skins.SkinCover
 import app.noctorium.ui.skins.Surface
+import app.noctorium.ui.skins.Switch
 import app.noctorium.ui.skins.Text
 import app.noctorium.ui.skins.TextButton
 import app.noctorium.ui.skins.scrollingPage
@@ -350,7 +352,7 @@ internal fun connectChecks(connect: ConnectState, enabledHere: Boolean): List<Co
         !enabledHere -> add(
             ConnectCheck(
                 "Connect is switched off on this computer",
-                "Switch on “Let my other devices find this one”, and the others can find it and be found from it.",
+                "Switch Noctorium Connect on at the top of this page, and the others can find it and be found from it.",
                 false,
                 CheckKind.SWITCHED_OFF,
             ),
@@ -470,6 +472,16 @@ internal fun ConnectPage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
             )
+            Spacer(Modifier.height(if (classic) 14.dp else 20.dp))
+            ConnectSwitch(connect, enabledHere, state)
+            if (!enabledHere) {
+                // Off is a choice, not a fault: a quiet page that says so, rather than the list of what to check.
+                Spacer(Modifier.height(if (classic) 14.dp else 20.dp))
+                ConnectOff()
+                Spacer(Modifier.height(if (classic) 14.dp else 24.dp))
+                ThisDeviceFooter(connect, enabledHere = false, state)
+                return@Column
+            }
             connectNews(connect)?.let { news ->
                 Spacer(Modifier.height(14.dp))
                 ConnectNotice(news, state::dismissConnectMessage)
@@ -510,6 +522,66 @@ internal fun ConnectPage(
             Spacer(Modifier.height(if (classic) 14.dp else 24.dp))
             ThisDeviceFooter(connect, enabledHere, state)
         }
+    }
+}
+
+/** What the switch at the top of the page says Connect does, on or off. */
+internal fun connectSwitchLine(enabled: Boolean, connect: ConnectState): String = when {
+    !enabled -> "Off: this computer is not looking for your other devices, and they cannot see it."
+    connect.target != null || connect.controlledBy != null ->
+        "This computer finds your other devices, and they can find it. Switching it off ends the remote control."
+    else -> "This computer finds your other devices, and they can find it."
+}
+
+/**
+ * Connect on or off, at the top of its own page, where somebody looking for the switch looks. Off stops it outright --
+ * nothing is said on the network or listened for -- and the remote control with it, either way round; the music
+ * itself plays on wherever it is.
+ */
+@Composable
+private fun ConnectSwitch(connect: ConnectState, enabledHere: Boolean, state: AppState) {
+    val content: @Composable ColumnScope.() -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.Hub,
+                null,
+                Modifier.size(20.dp),
+                tint = if (enabledHere) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Noctorium Connect", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(connectSwitchLine(enabledHere, connect), fontSize = 12.sp, color = ink(.62f))
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(enabledHere, state::setConnectEnabled)
+        }
+    }
+    if (skinned()) {
+        GroupBox(Modifier.fillMaxWidth(), content = content)
+        return
+    }
+    Surface(shape = RoundedCornerShape(16.dp), color = ink(.045f), border = BorderStroke(1.dp, ink(.07f)), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), content = content)
+    }
+}
+
+/** The page while Connect is off: what that means, with the switch above to turn it back on. */
+@Composable
+private fun ConnectOff() {
+    Column(Modifier.fillMaxWidth().padding(vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(Icons.Default.PowerSettingsNew, null, Modifier.size(40.dp), tint = ink(.4f))
+        Spacer(Modifier.height(12.dp))
+        Text("Noctorium Connect is off", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "This computer plays only its own music, and your phone and other computers do not see it. " +
+                "Switch Connect on above to find them again.",
+            color = ink(.62f),
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 520.dp),
+        )
     }
 }
 
