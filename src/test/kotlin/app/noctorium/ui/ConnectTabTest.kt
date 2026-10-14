@@ -232,6 +232,8 @@ class ConnectTabTest {
 
     @Test
     fun `the switch at the top of the page turns Connect off and on`() {
+        // From on, whatever an earlier test in the shared settings left it at.
+        state.setConnectEnabled(true)
         assertTrue(state.settings.value.preferences.connect.enabled)
         state.setConnectEnabled(false)
         assertFalse(state.settings.value.preferences.connect.enabled)
