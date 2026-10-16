@@ -359,11 +359,16 @@ internal object SettingsIndex {
         }
         page(SettingsPage.SCROBBLING) {
             setting(
-                "Scrobbling", "Tell Last.fm or ListenBrainz what you listen to.", "last.fm", "lastfm", "listenbrainz", "scrobble", "listening history",
-                "statistics", anchor = null,
+                "Scrobbling", "Tell Last.fm, Libre.fm or ListenBrainz what you listen to.", "last.fm", "lastfm", "libre.fm", "listenbrainz",
+                "scrobble", "listening history", "statistics", anchor = null,
             )
             setting(
-                "Last.fm", "Connect Last.fm, with Noctorium's application keys or your own.", "lastfm", "api key", "shared secret", anchor = null,
+                "Last.fm", "Connect Last.fm, with Noctorium's application keys or your own. No browser? Copy the link into one.",
+                "lastfm", "api key", "shared secret", "copy link", "browser did not open", anchor = null,
+            )
+            setting(
+                "Libre.fm", "Connect Libre.fm, the free scrobbling service, in your browser as Last.fm is.",
+                "librefm", "libre", "gnu fm", "free scrobbling", anchor = null,
             )
             setting("ListenBrainz", "Connect ListenBrainz with your user token.", "listen brainz", "token", anchor = null)
         }

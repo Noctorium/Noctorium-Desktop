@@ -38,6 +38,20 @@ class SettingsPagesRenderCheck {
         try {
             render(folder, "startup.png", state) { settings -> StartupSettingsPanel(settings.preferences, state) }
             render(folder, "spotify.png", state, height = 900) { settings -> SpotifySettingsPanel(settings, state) }
+            // Scrobbling with Last.fm waiting to be allowed -- its page to copy or open again, for when no browser
+            // opened -- and Libre.fm connected beside it; then nothing connected.
+            val waiting = app.noctorium.settings.ScrobbleState(
+                lastFm = app.noctorium.settings.ScrobbleServiceState(
+                    app.noctorium.settings.ScrobbleConnectionStatus.AWAITING_APPROVAL,
+                    approvalUrl = "https://www.last.fm/api/auth/?api_key=394c9c370aa8da3149db90cd4d9261a0&token=sample-token-for-the-picture",
+                ),
+                libreFm = app.noctorium.settings.ScrobbleServiceState(app.noctorium.settings.ScrobbleConnectionStatus.CONNECTED, "sample-listener", "Ready to scrobble"),
+                lastFmConfigured = true,
+            )
+            render(folder, "scrobbling-waiting.png", state, height = 1100) { settings -> ScrobblingSettingsPanel(settings.copy(scrobbling = waiting), state) }
+            render(folder, "scrobbling-none.png", state, height = 1000) { settings ->
+                ScrobblingSettingsPanel(settings.copy(scrobbling = app.noctorium.settings.ScrobbleState(lastFmConfigured = true)), state)
+            }
             state.setTheme(ThemePreset.CRIMSON_SCARLET)
             render(folder, "lyrics-scarlet.png", state) { settings -> LyricsSettingsPanel(settings.preferences, state) }
         } finally {

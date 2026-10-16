@@ -470,10 +470,13 @@ private fun tileText(page: SettingsPage, settings: SettingsState, state: AppStat
         SettingsPage.BANDCAMP -> TileText(page.title, bandcampSummary(preferences.bandcampUsername, settings.bandcamp), preferences.bandcampUsername.isNotBlank())
         SettingsPage.VK -> TileText(page.title, vkSummary(settings.vk), settings.vk.connected)
         SettingsPage.SCROBBLING -> {
-            val connected = listOf(settings.scrobbling.lastFm, settings.scrobbling.listenBrainz)
-                .filter { it.status == ScrobbleConnectionStatus.CONNECTED }
-                .mapNotNull { it.username }
-            TileText(page.title, if (connected.isEmpty()) "Connect Last.fm or ListenBrainz" else "Connected: ${connected.joinToString()}", connected.isNotEmpty())
+            // The services by name, now that there are three: the same name signed in to two of them said nothing.
+            val connected = listOf(
+                "Last.fm" to settings.scrobbling.lastFm,
+                "Libre.fm" to settings.scrobbling.libreFm,
+                "ListenBrainz" to settings.scrobbling.listenBrainz,
+            ).filter { (_, service) -> service.status == ScrobbleConnectionStatus.CONNECTED }.map { it.first }
+            TileText(page.title, if (connected.isEmpty()) "Connect Last.fm, Libre.fm or ListenBrainz" else "Connected: ${connected.joinToString()}", connected.isNotEmpty())
         }
         SettingsPage.DISCORD -> {
             // Read from the live setting. This once read the field that only exists to carry a choice over

@@ -15,9 +15,20 @@ import java.nio.file.Path
  */
 class DesktopBridge : SystemBridge {
 
+    /**
+     * Opens [url] in the browser, and throws when nothing did, so that whoever asked can say so and offer the link.
+     *
+     * On Linux the desktop's own openers are asked first, `xdg-open` before the rest (see [LinuxLinks]): Java's way
+     * goes through GNOME's libraries, and under KDE, Wayland or the Flatpak it so often opened nothing -- signing in
+     * to Last.fm opened no browser at all. Java's is still tried after them, and is the way on Windows and the Mac.
+     */
     override fun openUrl(url: String) {
         require(url.startsWith("https://")) { "Only secure links can be opened" }
-        check(Desktop.isDesktopSupported()) { "Opening links is not supported on this system" }
+        val os = System.getProperty("os.name").orEmpty()
+        val linux = !os.startsWith("Windows", ignoreCase = true) && !os.startsWith("Mac", ignoreCase = true)
+        if (linux && LinuxLinks.open(url)) return
+        val desktop = Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)
+        check(desktop) { "No browser opened on this computer. Copy the link and open it yourself." }
         Desktop.getDesktop().browse(URI(url))
     }
 

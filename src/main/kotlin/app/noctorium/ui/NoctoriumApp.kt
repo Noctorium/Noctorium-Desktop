@@ -121,6 +121,7 @@ import app.noctorium.spotify.isSpotifyArtist
 import app.noctorium.playlists.LocalPlaylist
 import app.noctorium.playlists.PlaylistShareLink
 import app.noctorium.settings.*
+import app.noctorium.scrobble.AudioscrobblerSite
 import app.noctorium.platform.LaunchAtLogin
 import app.noctorium.platform.StartupMode
 // The skin's controls, in Material's place: each is Material's own under the standard skin.
@@ -5610,18 +5611,8 @@ internal fun ScrobblingSettingsPanel(settings: SettingsState, state: AppState) {
                 Spacer(Modifier.height(15.dp))
                 when (scrobbling.lastFm.status) {
                     ScrobbleConnectionStatus.CONNECTED -> OutlinedButton(state::disconnectLastFm) { Icon(Icons.Default.LinkOff, null); Spacer(Modifier.width(7.dp)); Text("Disconnect") }
-                    ScrobbleConnectionStatus.AWAITING_APPROVAL -> Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Waiting for your approval in the browser…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                            Button(state::finishLastFmLogin) { Icon(Icons.Default.Check, null); Spacer(Modifier.width(7.dp)); Text("I approved Noctorium") }
-                            OutlinedButton(state::beginLastFmLogin) { Text("Reopen browser") }
-                        }
-                    }
+                    ScrobbleConnectionStatus.AWAITING_APPROVAL ->
+                        ScrobblerWaiting(AudioscrobblerSite.LAST_FM, scrobbling.lastFm, state::finishLastFmLogin, state)
                     ScrobbleConnectionStatus.CONNECTING -> Button({}, enabled = false) { CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)); Text("Connecting…") }
                     else -> {
                         Button(state::beginLastFmLogin, enabled = scrobbling.lastFmConfigured) {
@@ -5673,9 +5664,31 @@ internal fun ScrobblingSettingsPanel(settings: SettingsState, state: AppState) {
         }
         item {
             SettingsPanelCard {
+                ScrobbleServiceHeader("Libre.fm", scrobbling.libreFm)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Libre.fm, the free scrobbling service. Noctorium opens it in your browser for approval, as it does Last.fm, " +
+                        "and finishes sign-in by itself once you allow it. Your Libre.fm password is never entered into Noctorium.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.height(15.dp))
+                when (scrobbling.libreFm.status) {
+                    ScrobbleConnectionStatus.CONNECTED -> OutlinedButton(state::disconnectLibreFm) { Icon(Icons.Default.LinkOff, null); Spacer(Modifier.width(7.dp)); Text("Disconnect") }
+                    ScrobbleConnectionStatus.AWAITING_APPROVAL ->
+                        ScrobblerWaiting(AudioscrobblerSite.LIBRE_FM, scrobbling.libreFm, state::finishLibreFmLogin, state)
+                    ScrobbleConnectionStatus.CONNECTING -> Button({}, enabled = false) { CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)); Text("Connecting…") }
+                    else -> Button(state::beginLibreFmLogin) {
+                        Icon(Icons.Default.OpenInBrowser, null); Spacer(Modifier.width(7.dp)); Text("Connect Libre.fm")
+                    }
+                }
+            }
+        }
+        item {
+            SettingsPanelCard {
                 ScrobbleServiceHeader("ListenBrainz", scrobbling.listenBrainz)
                 Spacer(Modifier.height(8.dp))
-                Text("Paste the user token from your ListenBrainz settings. It is encrypted for your Windows account before being saved.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text("Paste the user token from your ListenBrainz settings. It is encrypted for your account on this computer before being saved.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 Spacer(Modifier.height(14.dp))
                 if (scrobbling.listenBrainz.status == ScrobbleConnectionStatus.CONNECTED) {
                     OutlinedButton(state::disconnectListenBrainz) { Icon(Icons.Default.LinkOff, null); Spacer(Modifier.width(7.dp)); Text("Disconnect") }
@@ -5703,6 +5716,37 @@ internal fun ScrobblingSettingsPanel(settings: SettingsState, state: AppState) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Info, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp)); Text("Tracks count after half their duration or 4 minutes, whichever comes first. Tracks 30 seconds or shorter are ignored.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+/**
+ * A sign-in to [site] waiting for Noctorium to be allowed: the page it is allowed on, as words that can be selected,
+ * and the ways to it -- open it again, or copy it into a browser when none opened, as on Linux one did not -- with the
+ * button for having allowed it. Allowing it in any browser finishes the sign-in here by itself.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ScrobblerWaiting(site: AudioscrobblerSite, service: ScrobbleServiceState, finish: () -> Unit, state: AppState) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(8.dp))
+            Text("Waiting for you to allow Noctorium on ${site.displayName}…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        }
+        service.approvalUrl?.let { page ->
+            Spacer(Modifier.height(8.dp))
+            SelectionContainer {
+                Text(page, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .8f), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(finish) { Icon(Icons.Default.Check, null); Spacer(Modifier.width(7.dp)); Text("I approved Noctorium") }
+            service.approvalUrl?.let { page ->
+                OutlinedButton({ state.copyScrobblerSignInLink(site) }) { Icon(Icons.Default.ContentCopy, null); Spacer(Modifier.width(7.dp)); Text("Copy link") }
+                OutlinedButton({ state.openExternalUrl(page) }) { Icon(Icons.Default.OpenInBrowser, null); Spacer(Modifier.width(7.dp)); Text("Open again") }
             }
         }
     }
