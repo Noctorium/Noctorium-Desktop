@@ -336,7 +336,7 @@ internal object SettingsIndex {
         page(SettingsPage.SPOTIFY) {
             setting(
                 "Spotify", "Your Spotify playlists, Liked Songs and search; with Premium, playing on Spotify itself.",
-                "spotify", "sp", "sign in", "connect spotify", "premium", "client id", "spotify app", anchor = null,
+                "spotify", "sp", "sign in", "connect spotify", "premium", "client id", "spotify app", "beta", anchor = null,
             )
             setting(
                 "Play Spotify songs on Spotify", "With Premium, Spotify's songs play in your Spotify app, on the device you choose.",
@@ -347,21 +347,21 @@ internal object SettingsIndex {
         page(SettingsPage.BANDCAMP) {
             setting(
                 "Bandcamp", "Albums, artists and songs from Bandcamp, with nothing to sign in to; your collection with your name.",
-                "bandcamp", "bc", "collection", "wishlist", "bandcamp name", anchor = null,
+                "bandcamp", "bc", "collection", "wishlist", "bandcamp name", "beta", anchor = null,
             )
             setting("Genres on Home", "Each genre picked adds a row of its best-sellers to Home.", "bandcamp genres", "genres", "best sellers", anchor = null)
         }
         page(SettingsPage.VK) {
             setting(
                 "VK Music", "Your music and playlists from VK, through your vk.ru session.", "vk", "vkontakte", "vk.com", "vk.ru", "sign in", "cookies",
-                anchor = null,
+                "beta", anchor = null,
             )
         }
         page(SettingsPage.APPLE_MUSIC) {
             setting(
                 "Apple Music", "Apple Music's catalogue with no account; your library and Home's rows once you sign in on Apple's page.",
                 "apple", "itunes", "music.apple.com", "am", "sign in", "apple account", "apple id", "media-user-token",
-                "token", "cookie", "storefront", anchor = null,
+                "token", "cookie", "storefront", "beta", anchor = null,
             )
             setting(
                 APPLE_DEVELOPER_TOKEN, "Reads Apple Music with a token made from a MusicKit key of your own, instead of the web player's.",
@@ -371,7 +371,7 @@ internal object SettingsIndex {
         page(SettingsPage.DEEZER) {
             setting(
                 "Deezer", "Deezer's catalogue and charts with nothing to sign in to, and your library from your public profile.",
-                "deezer", "dz", "charts", anchor = null,
+                "deezer", "dz", "charts", "beta", anchor = null,
             )
             setting(
                 "Your Deezer profile", "The profile whose public playlists, loved tracks and albums the library shows: its link or its number.",
@@ -381,7 +381,7 @@ internal object SettingsIndex {
         page(SettingsPage.TIDAL) {
             setting(
                 "Tidal", "Tidal's catalogue, your collection and your mixes, through a free Tidal app of your own.",
-                "tidal", "td", "connect tidal", "sign in", "mixes", anchor = null,
+                "tidal", "td", "connect tidal", "sign in", "mixes", "beta", anchor = null,
             )
             // Named for what is typed into it, so that a search for a client id finds the service that cannot go
             // without one before those where one is optional.

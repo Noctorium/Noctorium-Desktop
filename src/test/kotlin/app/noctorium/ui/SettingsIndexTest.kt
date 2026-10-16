@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Density
 import app.noctorium.core.AppState
 import app.noctorium.desktopAppState
+import app.noctorium.domain.inBeta
 import app.noctorium.settings.AccentPreset
 import app.noctorium.settings.PlayerBarStyle
 import app.noctorium.settings.SettingMatchKind
@@ -195,6 +196,12 @@ class SettingsIndexTest {
         assertTrue(clientId.any { it.setting.page == SettingsPage.SPOTIFY }, "\"client id\" no longer finds Spotify's own app")
         assertEquals(SettingsPage.TIDAL, first("client secret").page)
         assertEquals(SettingsPage.TIDAL, first("developer.tidal.com").page)
+    }
+
+    @Test
+    fun `beta finds every service whose page warns that it is in beta, and nothing else`() {
+        val found = SettingsIndex.search("beta").map { it.setting.page }.toSet()
+        assertEquals(SettingsPage.entries.filter { it.service?.inBeta == true }.toSet(), found)
     }
 
     @Test

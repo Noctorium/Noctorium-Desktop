@@ -1,10 +1,13 @@
 package app.noctorium.ui
 
+import androidx.compose.ui.text.font.FontWeight
 import app.noctorium.domain.Artist
+import app.noctorium.domain.BETA_WARNING
 import app.noctorium.domain.Playlist
 import app.noctorium.domain.ProviderType
 import app.noctorium.domain.ServiceMarks
 import app.noctorium.domain.Track
+import app.noctorium.domain.betaWarning
 import app.noctorium.settings.AppleMusicConnectionState
 import app.noctorium.settings.DeezerConnectionState
 import app.noctorium.settings.TidalConnectionState
@@ -16,8 +19,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The desktop's decisions about Apple Music, Deezer and Tidal: what each new page and tile says in each state, and how
- * the three are drawn and told apart wherever songs are listed. Every name here is made up.
+ * The desktop's decisions about Apple Music, Deezer and Tidal, and the beta warning: which pages carry it, what each
+ * new page and tile says in each state, and how the three are drawn and told apart wherever songs are listed. Every
+ * name here is made up.
  */
 class NewServicesUiTest {
 
@@ -28,6 +32,41 @@ class NewServicesUiTest {
         artists = listOf(Artist("a", "Sample Artist", provider)),
         sourceUrl = "https://example.invalid/$id",
     )
+
+    // --- The beta warning ---
+
+    @Test
+    fun `the beta warning is on the page of every service in beta, and on no other`() {
+        val warned = SettingsPage.entries.filter { it.service?.betaWarning != null }
+        assertEquals(
+            listOf(SettingsPage.SPOTIFY, SettingsPage.BANDCAMP, SettingsPage.VK, SettingsPage.APPLE_MUSIC, SettingsPage.DEEZER, SettingsPage.TIDAL),
+            warned,
+        )
+        // YouTube Music, YouTube and SoundCloud have pages that sign in, and say nothing of the kind.
+        listOf(SettingsPage.YOUTUBE, SettingsPage.SOUNDCLOUD).forEach { page ->
+            assertNotNull(page.service, "$page is a service's page")
+            assertNull(page.service?.betaWarning, "$page warns")
+        }
+        warned.forEach { page -> assertEquals(BETA_WARNING, page.service?.betaWarning) }
+    }
+
+    @Test
+    fun `every service the core says is in beta has a page to say so on`() {
+        ProviderType.entries.filter { it.betaWarning != null }.forEach { provider ->
+            assertTrue(SettingsPage.entries.any { it.service == provider }, "$provider is in beta and has no page in Settings")
+        }
+    }
+
+    @Test
+    fun `the warning says what it is about first, in bold, and every word of it`() {
+        val text = betaWarningText(BETA_WARNING)
+        assertEquals(BETA_WARNING, text.text)
+        val bold = text.spanStyles.single { it.item.fontWeight == FontWeight.SemiBold }
+        assertEquals("In beta:", text.text.substring(bold.start, bold.end))
+        // Without a colon there is nothing to pick out, and it is written as it is.
+        assertEquals("Use it with care.", betaWarningText("Use it with care.").text)
+        assertTrue(betaWarningText("Use it with care.").spanStyles.isEmpty())
+    }
 
     // --- The tiles and pages ---
 

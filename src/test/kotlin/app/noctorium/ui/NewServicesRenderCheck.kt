@@ -23,9 +23,10 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Draws Apple Music's, Deezer's and Tidal's pages in Settings to pictures, off screen, in each of their states, in
- * Night, 98 and XP; then the whole window at each of those pages and at the list of Settings with the new tiles. Off
- * unless a folder is named, like [PlayerBarRenderCheck]; the pictures go to `new-services/` under it:
+ * Draws Apple Music's, Deezer's and Tidal's pages in Settings to pictures, off screen, in each of their states, and the
+ * beta warning above every service's page that has it -- Spotify's, Bandcamp's and VK's as well -- in Night, 98 and
+ * XP; then the whole window at each of those pages and at the list of Settings with the new tiles. Off unless a folder
+ * is named, like [PlayerBarRenderCheck]; the pictures go to `new-services/` under it:
  *
  *     ./gradlew :test --tests "*NewServicesRenderCheck*" -Dnoctorium.renderBars=build/bars --no-configuration-cache
  *
@@ -107,16 +108,21 @@ class NewServicesRenderCheck {
                 ),
             ),
         ),
+        Triple("spotify", SettingsPage.SPOTIFY, base),
+        Triple("bandcamp", SettingsPage.BANDCAMP, base),
+        Triple("vk", SettingsPage.VK, base),
+        // And one that does not warn, to see the warning is not there.
+        Triple("soundcloud", SettingsPage.SOUNDCLOUD, base),
     )
 
     @Test
-    fun `the new pages draw, in Night, 98 and XP`() {
+    fun `the new pages and the beta warning draw, in Night, 98 and XP`() {
         val root = System.getProperty("noctorium.renderBars")?.let { File(it, "new-services") } ?: return
         val state = desktopAppState()
         try {
             state.setAnimations(false)
             val base = state.settings.value.copy(message = null)
-            // Day as well here, for the pages on a light theme.
+            // Day as well here, for the warning's colour on a light page.
             (themes + ThemePreset.NOCTORIUM_DAY).forEach { theme ->
                 val folder = File(root, theme.name.lowercase()).also { it.mkdirs() }
                 pages(base).forEach { (name, page, settings) ->
@@ -131,7 +137,7 @@ class NewServicesRenderCheck {
     }
 
     @Test
-    fun `the whole window at each new page, and the list of Settings with the new tiles`() {
+    fun `the whole window at each service's page in beta, and the list of Settings with the new tiles`() {
         val root = System.getProperty("noctorium.renderBars")?.let { File(it, "new-services") } ?: return
         val state = desktopAppState()
         try {
@@ -155,7 +161,7 @@ class NewServicesRenderCheck {
                     tour.ui { it.copy(destination = Destination.SETTINGS) }
                     tour.capture("settings-home", frames = 10)
                     tour.open()
-                    listOf("APPLE_MUSIC", "DEEZER", "TIDAL").forEach { page ->
+                    listOf("SPOTIFY", "BANDCAMP", "VK", "APPLE_MUSIC", "DEEZER", "TIDAL").forEach { page ->
                         tour.settingsPage(page)
                         tour.capture("settings-${page.lowercase()}")
                     }

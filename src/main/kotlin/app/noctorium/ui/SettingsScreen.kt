@@ -1,5 +1,6 @@
 package app.noctorium.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
@@ -50,6 +52,7 @@ import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.WarningAmber
 import app.noctorium.ui.icons.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -64,13 +67,18 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.noctorium.core.AppState
 import app.noctorium.core.Destination
 import app.noctorium.domain.ProviderType
+import app.noctorium.domain.betaWarning
 import app.noctorium.playback.PlaybackToolInstaller
 import app.noctorium.settings.AccountConnectionStatus
 import app.noctorium.settings.ScrobbleConnectionStatus
@@ -145,6 +153,20 @@ internal enum class SettingsPage(val title: String, val section: SettingsSection
 
     /** Where it lives, as the search shows it: "Look › Player bar". */
     val path: String get() = "${section.title} › $title"
+
+    /** The music service this page signs in to or sets up, for the pages that are one service's; null for the rest. */
+    val service: ProviderType?
+        get() = when (this) {
+            YOUTUBE -> ProviderType.YOUTUBE_MUSIC
+            SOUNDCLOUD -> ProviderType.SOUNDCLOUD
+            SPOTIFY -> ProviderType.SPOTIFY
+            BANDCAMP -> ProviderType.BANDCAMP
+            VK -> ProviderType.VK
+            APPLE_MUSIC -> ProviderType.APPLE_MUSIC
+            DEEZER -> ProviderType.DEEZER
+            TIDAL -> ProviderType.TIDAL
+            else -> null
+        }
 }
 
 /** A page something elsewhere has asked for and the setting on it to show -- or, with no page, a search to show. */
@@ -225,9 +247,78 @@ internal fun SettingsScreen(state: AppState) {
     }
 }
 
-/** What each page is: the panel that draws it. */
+/**
+ * What each page is: the panel that draws it, under the beta warning for a service still in beta.
+ *
+ * The warning goes here, above the panel and outside its scrolling, rather than into each service's page: every
+ * page of a service in beta then says it the same way and in the same place, and goes on saying it while the page
+ * under it is scrolled to the sign-in -- and a service's page cannot be added without it.
+ */
 @Composable
 internal fun SettingsPageContent(page: SettingsPage, settings: SettingsState, state: AppState) {
+    val warning = page.service?.betaWarning
+    if (warning == null) {
+        SettingsPagePanel(page, settings, state)
+        return
+    }
+    Column(Modifier.fillMaxSize()) {
+        BetaNotice(warning)
+        Spacer(Modifier.height(if (skinned()) 8.dp else 12.dp))
+        Box(Modifier.weight(1f)) { SettingsPagePanel(page, settings, state) }
+    }
+}
+
+/**
+ * The warning above the sign-in or setup of a service in beta: [warning] is the core's own words
+ * ([ProviderType.betaWarning]), which every player shows. A notice on the page rather than a dialog to be clicked
+ * away, since what it says stays true for as long as the service is used.
+ *
+ * In the colour the pages already give what to keep in mind -- Material's tertiary, on a wash of it -- with the
+ * warning sign. Under a Windows skin it is the information bar, whose pale yellow was that desktop's own colour
+ * for a warning, with the sign in a dark amber that reads on it.
+ */
+@Composable
+internal fun BetaNotice(warning: String) {
+    if (skinned()) {
+        Box(Modifier.widthIn(max = 720.dp)) { InfoBar(Icons.Default.WarningAmber, warning, CLASSIC_WARNING_SIGN) }
+        return
+    }
+    val tint = MaterialTheme.colorScheme.tertiary
+    Surface(
+        color = tint.copy(alpha = .12f),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, tint.copy(alpha = .5f)),
+        modifier = Modifier.widthIn(max = 720.dp),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.WarningAmber, null, Modifier.size(20.dp), tint = tint)
+            Spacer(Modifier.width(11.dp))
+            SelectionContainer(Modifier.weight(1f)) { Text(betaWarningText(warning), fontSize = 12.sp) }
+        }
+    }
+}
+
+/** The warning sign on a Windows skin's pale yellow information bar: amber dark enough to be seen on it. */
+private val CLASSIC_WARNING_SIGN = Color(0xFF9A6400)
+
+/**
+ * [warning] with the words before its first colon -- "In beta" -- in bold, so the notice says what it is about
+ * before it says the rest. Written as it is when there is no colon to go by.
+ */
+internal fun betaWarningText(warning: String): AnnotatedString = buildAnnotatedString {
+    val head = warning.substringBefore(": ", missingDelimiterValue = "")
+    if (head.isEmpty()) {
+        append(warning)
+        return@buildAnnotatedString
+    }
+    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append("$head:") }
+    append(" ")
+    append(warning.substringAfter(": "))
+}
+
+/** What each page's panel is, under the warning when there is one. */
+@Composable
+private fun SettingsPagePanel(page: SettingsPage, settings: SettingsState, state: AppState) {
     when (page) {
         SettingsPage.ACCOUNT -> NoctoriumAccountPanel(state)
         SettingsPage.PROFILE -> ProfileSettingsPanel(settings.preferences, state)
