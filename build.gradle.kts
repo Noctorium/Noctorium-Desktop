@@ -543,6 +543,68 @@ listOf(
     tasks.matching { it.name == name }.configureEach { dependsOn(fetchPlaybackTools) }
 }
 
+/*
+ * The .msi skips what Noctorium's own installs already skip, whoever starts it and whenever.
+ *
+ * The installers and the in-app updater hand msiexec MSIFASTINSTALL=7: no System Restore point, and no
+ * costing but the files'. An upgrade, though, is two installs -- before the new version goes in, the old one
+ * is removed, and Windows Installer runs that removal from the old version's own package, with nothing from
+ * the command line. So upgrading 0.9.0 to 0.10.1 on the computer this was measured on still made a restore
+ * point, named "Removed Noctorium" -- a Volume Shadow Copy snapshot, in the middle of the 22.6 seconds the
+ * upgrade took from start to finish. Written into the package's own Property table, the setting goes
+ * wherever the package goes: into the removal of this version when the next one replaces it, and into an
+ * install somebody starts by opening the .msi. The setup .exe has its own copy of the .msi inside it, made
+ * before this runs, and is the same as ever.
+ */
+tasks.matching { it.name == "packageMsi" }.configureEach {
+    val packages = layout.buildDirectory.dir("compose/binaries/main/msi")
+    doLast {
+        val script = File(temporaryDir, "fast-install.ps1")
+        script.writeText(
+            """
+            |${'$'}ErrorActionPreference = 'Stop'
+            |${'$'}installer = New-Object -ComObject WindowsInstaller.Installer
+            |function Call(${'$'}on, ${'$'}name, ${'$'}arguments) { ${'$'}on.GetType().InvokeMember(${'$'}name, 'InvokeMethod', ${'$'}null, ${'$'}on, ${'$'}arguments) }
+            |# A database stays open, and cannot be opened again, until every handle on it has gone.
+            |function Release(${'$'}handle) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject(${'$'}handle) }
+            |function Run(${'$'}db, ${'$'}sql) {
+            |    ${'$'}view = Call ${'$'}db 'OpenView' @(${'$'}sql)
+            |    Call ${'$'}view 'Execute' ${'$'}null | Out-Null
+            |    Call ${'$'}view 'Close' ${'$'}null | Out-Null
+            |    Release ${'$'}view
+            |}
+            |function Rows(${'$'}db, ${'$'}sql) {
+            |    ${'$'}view = Call ${'$'}db 'OpenView' @(${'$'}sql)
+            |    Call ${'$'}view 'Execute' ${'$'}null | Out-Null
+            |    while (${'$'}null -ne (${'$'}row = Call ${'$'}view 'Fetch' ${'$'}null)) { ${'$'}row.GetType().InvokeMember('StringData', 'GetProperty', ${'$'}null, ${'$'}row, @(1)); Release ${'$'}row }
+            |    Call ${'$'}view 'Close' ${'$'}null | Out-Null
+            |    Release ${'$'}view
+            |}
+            |${'$'}msi = ${'$'}args[0]
+            |${'$'}db = Call ${'$'}installer 'OpenDatabase' @(${'$'}msi, 1)
+            |Run ${'$'}db "DELETE FROM Property WHERE Property = 'MSIFASTINSTALL'"
+            |Run ${'$'}db "INSERT INTO Property (Property, Value) VALUES ('MSIFASTINSTALL', '7')"
+            |Call ${'$'}db 'Commit' ${'$'}null | Out-Null
+            |Release ${'$'}db
+            |[GC]::Collect(); [GC]::WaitForPendingFinalizers()
+            |${'$'}check = Call ${'$'}installer 'OpenDatabase' @(${'$'}msi, 0)
+            |${'$'}value = Rows ${'$'}check "SELECT Value FROM Property WHERE Property = 'MSIFASTINSTALL'"
+            |if (${'$'}value -ne '7') { throw "MSIFASTINSTALL is '${'$'}value' in ${'$'}msi" }
+            """.trimMargin(),
+        )
+        val powershell = File(System.getenv("SystemRoot") ?: "C:/Windows", "System32/WindowsPowerShell/v1.0/powershell.exe")
+        packages.get().asFile.listFiles { file -> file.extension == "msi" }.orEmpty().forEach { msi ->
+            val process = ProcessBuilder(
+                powershell.absolutePath, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                "-File", script.absolutePath, msi.absolutePath,
+            ).redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            check(process.waitFor() == 0) { "Could not write MSIFASTINSTALL into ${msi.name}: $output" }
+            println("${msi.name}: MSIFASTINSTALL=7 in its Property table")
+        }
+    }
+}
+
 /**
  * The Mac's icon, an .icns, made from the 512 pixel png the Linux packages use.
  *
