@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.History
@@ -39,9 +40,11 @@ import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.SystemUpdateAlt
@@ -127,6 +130,9 @@ internal enum class SettingsPage(val title: String, val section: SettingsSection
     SPOTIFY("Spotify library", SettingsSection.SERVICES),
     BANDCAMP("Bandcamp", SettingsSection.SERVICES),
     VK("VK Music", SettingsSection.SERVICES),
+    APPLE_MUSIC("Apple Music", SettingsSection.SERVICES),
+    DEEZER("Deezer", SettingsSection.SERVICES),
+    TIDAL("Tidal", SettingsSection.SERVICES),
     SCROBBLING("Scrobbling", SettingsSection.SERVICES),
     DISCORD("Discord Rich Presence", SettingsSection.SERVICES),
     STARTUP("Startup and tray", SettingsSection.DEVICE),
@@ -244,6 +250,9 @@ internal fun SettingsPageContent(page: SettingsPage, settings: SettingsState, st
         SettingsPage.SPOTIFY -> SpotifySettingsPanel(settings, state)
         SettingsPage.BANDCAMP -> BandcampSettingsPanel(settings, state)
         SettingsPage.VK -> VkSettingsPanel(settings, state)
+        SettingsPage.APPLE_MUSIC -> AppleMusicSettingsPanel(settings, state)
+        SettingsPage.DEEZER -> DeezerSettingsPanel(settings, state)
+        SettingsPage.TIDAL -> TidalSettingsPanel(settings, state)
         SettingsPage.SCROBBLING -> ScrobblingSettingsPanel(settings, state)
         SettingsPage.DISCORD -> DiscordSettingsPanel(settings.preferences, state)
         SettingsPage.STARTUP -> StartupSettingsPanel(settings.preferences, state)
@@ -400,6 +409,9 @@ internal fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.SPOTIFY -> Icons.Default.LibraryMusic
     SettingsPage.BANDCAMP -> Icons.Default.Album
     SettingsPage.VK -> Icons.Default.Headphones
+    SettingsPage.APPLE_MUSIC -> Icons.Default.MusicNote
+    SettingsPage.DEEZER -> Icons.Default.GraphicEq
+    SettingsPage.TIDAL -> Icons.Default.Radio
     SettingsPage.SCROBBLING -> Icons.Default.History
     SettingsPage.DISCORD -> Icons.Default.SportsEsports
     SettingsPage.STARTUP -> Icons.Default.PowerSettingsNew
@@ -469,6 +481,9 @@ private fun tileText(page: SettingsPage, settings: SettingsState, state: AppStat
         SettingsPage.SPOTIFY -> TileText(page.title, spotifySummary(settings.spotify), settings.spotify.connected)
         SettingsPage.BANDCAMP -> TileText(page.title, bandcampSummary(preferences.bandcampUsername, settings.bandcamp), preferences.bandcampUsername.isNotBlank())
         SettingsPage.VK -> TileText(page.title, vkSummary(settings.vk), settings.vk.connected)
+        SettingsPage.APPLE_MUSIC -> TileText(page.title, appleMusicSummary(settings.appleMusic), settings.appleMusic.connected)
+        SettingsPage.DEEZER -> TileText(page.title, deezerSummary(settings.deezer), settings.deezer.found)
+        SettingsPage.TIDAL -> TileText(page.title, tidalSummary(settings.tidal), settings.tidal.connected)
         SettingsPage.SCROBBLING -> {
             // The services by name, now that there are three: the same name signed in to two of them said nothing.
             val connected = listOf(

@@ -213,7 +213,8 @@ internal fun ShortcutsSettingsPanel(preferences: NoctoriumPreferences, state: Ap
             Text(
                 (quick?.let { "${chordLabel(it)} brings a search bar up over everything in Noctorium. " } ?: "A search bar over everything in Noctorium. ") +
                     "Start or end what you type with a bang to search one service: !ytm YouTube Music, !sc SoundCloud, !sp Spotify, " +
-                    "!bc Bandcamp, !vk VK, !all every one. The arrows choose, Enter plays, Shift+Enter adds to the queue, " +
+                    "!bc Bandcamp, !vk VK, !am Apple Music, !dz Deezer, !td Tidal, !all every one. The arrows choose, Enter " +
+                    "plays, Shift+Enter adds to the queue, " +
                     "${if (isMacPlatform) "⌘" else "Ctrl"}+Enter opens the Search page and Escape closes it. As a global shortcut it opens " +
                     "in a small window of its own, even with Noctorium in the tray, and gives you back to where you were when it closes.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

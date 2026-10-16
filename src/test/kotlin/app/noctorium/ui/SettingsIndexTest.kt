@@ -174,6 +174,30 @@ class SettingsIndexTest {
     }
 
     @Test
+    fun `Apple Music, Deezer and Tidal are found by name, and what each needs by what it is called`() {
+        assertEquals(SettingsPage.APPLE_MUSIC, first("apple music").page)
+        assertEquals(SettingsPage.APPLE_MUSIC, first("itunes").page)
+        assertEquals(SettingsPage.APPLE_MUSIC, first("media-user-token").page)
+        assertEquals(SettingsPage.DEEZER, first("deezer").page)
+        assertEquals("Your Deezer profile", first("deezer profile").entry.title)
+        assertEquals(SettingsPage.TIDAL, first("tidal").page)
+
+        // Apple's developer token, folded away on its page, is found and opened at its fold.
+        val token = first("developer token")
+        assertEquals(SettingsPage.APPLE_MUSIC, token.page)
+        assertEquals(APPLE_DEVELOPER_TOKEN, token.anchor)
+        assertEquals(SettingsPage.APPLE_MUSIC, first("musickit").page)
+
+        // A client id finds Tidal's first, the service that cannot go without one -- and Spotify's still.
+        val clientId = SettingsIndex.search("client id")
+        assertEquals(SettingsPage.TIDAL, clientId.first().setting.page)
+        assertEquals("Your Tidal app", clientId.first().setting.anchor)
+        assertTrue(clientId.any { it.setting.page == SettingsPage.SPOTIFY }, "\"client id\" no longer finds Spotify's own app")
+        assertEquals(SettingsPage.TIDAL, first("client secret").page)
+        assertEquals(SettingsPage.TIDAL, first("developer.tidal.com").page)
+    }
+
+    @Test
     fun `the Connect page is found from Settings, and opens itself rather than a page of Settings`() {
         val devices = first("devices")
         assertEquals("Devices on this network", devices.entry.title)

@@ -1,17 +1,20 @@
 package app.noctorium.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -21,6 +24,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.noctorium.domain.ProviderType
+import app.noctorium.domain.ServiceMarks
 import app.noctorium.settings.ServiceBadgeStyle
 import app.noctorium.ui.icons.Icon
 import app.noctorium.ui.icons.markVector
@@ -68,9 +72,13 @@ private val MARK_AT_LEAST = 14.sp
 @Composable
 internal fun ProviderBadge(provider: ProviderType, compact: Boolean = false) {
     val label = provider.badgeLabel(compact)
+    val corners = skinCorners(RoundedCornerShape(6.dp))
+    val edge = provider.badgeEdge(darkPage = MaterialTheme.colorScheme.background.luminance() < .2f)
     val chip = Modifier
-        .clip(skinCorners(RoundedCornerShape(6.dp)))
+        .clip(corners)
         .background(provider.badgeColour().copy(alpha = .9f))
+        // Drawn over the chip's own edge rather than outside it, so the badge is the same size with it as without.
+        .then(if (edge != null) Modifier.border(1.dp, edge, corners) else Modifier)
     if (LocalServiceBadgeStyle.current == ServiceBadgeStyle.LETTERS) {
         BadgeLetters(label, chip.padding(horizontal = if (compact) 6.dp else 7.dp, vertical = 4.dp))
         return
@@ -130,8 +138,19 @@ internal fun ProviderType.badgeColour(): Color = when (this) {
     ProviderType.SPOTIFY -> Color(0xFF1DB954)
     ProviderType.BANDCAMP -> Color(0xFF408294)
     ProviderType.VK -> Color(0xFF0077FF)
+    ProviderType.APPLE_MUSIC -> Color(0xFFFA243C)
+    ProviderType.DEEZER -> Color(0xFFA238FF)
+    ProviderType.TIDAL -> Color(0xFF000000)
     ProviderType.LOCAL -> Color(0xFF4F46E5)
 }
+
+/**
+ * A hairline round the chip, for the one service whose colour is the page's own: Tidal's black, on a page as dark
+ * as Night's, is a white mark floating on nothing, and the edge is what makes it a badge again. Null for every
+ * other service, and for Tidal on a light page, where its black stands out by itself.
+ */
+internal fun ProviderType.badgeEdge(darkPage: Boolean): Color? =
+    if (this == ProviderType.TIDAL && darkPage) Color.White.copy(alpha = .38f) else null
 
 /** What the badge says in letters: the short name on a [compact] one, the name in full on the other. */
 internal fun ProviderType.badgeLabel(compact: Boolean): String = when (this) {
@@ -141,5 +160,9 @@ internal fun ProviderType.badgeLabel(compact: Boolean): String = when (this) {
     ProviderType.SPOTIFY -> if (compact) "SP" else "SPOTIFY"
     ProviderType.BANDCAMP -> if (compact) "BC" else "BANDCAMP"
     ProviderType.VK -> if (compact) "VK" else "VK MUSIC"
+    // The services that came after the letters were settled have theirs from the core, beside their marks.
+    ProviderType.APPLE_MUSIC -> if (compact) ServiceMarks.letters(this) else "APPLE MUSIC"
+    ProviderType.DEEZER -> if (compact) ServiceMarks.letters(this) else "DEEZER"
+    ProviderType.TIDAL -> if (compact) ServiceMarks.letters(this) else "TIDAL"
     ProviderType.LOCAL -> "LOCAL"
 }

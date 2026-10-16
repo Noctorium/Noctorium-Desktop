@@ -274,6 +274,9 @@ internal fun homeContent(ui: AppUiState, hidden: Set<HomePart>): HomeContent {
         ProviderFilter.BANDCAMP -> HomePart.BANDCAMP !in hidden
         ProviderFilter.SPOTIFY -> HomePart.SPOTIFY !in hidden
         ProviderFilter.VK -> HomePart.VK !in hidden
+        ProviderFilter.DEEZER -> HomePart.DEEZER !in hidden
+        ProviderFilter.TIDAL -> HomePart.TIDAL !in hidden
+        ProviderFilter.APPLE_MUSIC -> HomePart.APPLE_MUSIC !in hidden
     }
     return HomeContent(
         greeting = HomePart.GREETING !in hidden,

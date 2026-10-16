@@ -59,7 +59,7 @@ class ServiceBadgeRenderCheck {
         val folder = System.getProperty("noctorium.renderBars")?.let { File(it, "service-badges") }?.also { it.mkdirs() } ?: return
         themes.forEach { theme ->
             listOf(1, 2, 3).forEach { scale ->
-                draw(folder, "badges-${theme.name.lowercase()}-${scale}x.png", theme, 680, 330, scale) { Sheet() }
+                draw(folder, "badges-${theme.name.lowercase()}-${scale}x.png", theme, 680, 470, scale) { Sheet() }
             }
             // The screen's own pixels, four times over: whether a mark is crisp and centred at the size it is seen.
             magnified(File(folder, "badges-${theme.name.lowercase()}-1x.png"), File(folder, "badges-${theme.name.lowercase()}-1x-pixels.png"))
@@ -78,10 +78,13 @@ class ServiceBadgeRenderCheck {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ServiceBadgeStyle.entries.forEach { style ->
                 listOf(true, false).forEach { compact ->
-                    Labelled("${style.displayName}${if (compact) "" else ", in full"}") {
-                        CompositionLocalProvider(LocalServiceBadgeStyle provides style) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                (if (compact) ProviderType.entries else ProviderType.entries.take(4)).forEach { ProviderBadge(it, compact) }
+                    // Every service in a row when compact; in full they take two.
+                    (if (compact) listOf(ProviderType.entries) else ProviderType.entries.chunked(5)).forEachIndexed { line, services ->
+                        Labelled(if (line > 0) "" else "${style.displayName}${if (compact) "" else ", in full"}") {
+                            CompositionLocalProvider(LocalServiceBadgeStyle provides style) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    services.forEach { ProviderBadge(it, compact) }
+                                }
                             }
                         }
                     }
@@ -93,6 +96,17 @@ class ServiceBadgeRenderCheck {
                         CompositionLocalProvider(LocalServiceBadgeStyle provides style) {
                             Cover(ProviderType.YOUTUBE_MUSIC)
                             ListRow(ProviderType.SOUNDCLOUD)
+                        }
+                    }
+                }
+            }
+            // Tidal's black on a cover and in a row on the page itself, where Night's black is the page too.
+            Labelled("") {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    ServiceBadgeStyle.entries.forEach { style ->
+                        CompositionLocalProvider(LocalServiceBadgeStyle provides style) {
+                            Cover(ProviderType.TIDAL)
+                            ListRow(ProviderType.TIDAL)
                         }
                     }
                 }

@@ -8,12 +8,16 @@ import app.noctorium.playback.QueueState
 import app.noctorium.playback.RepeatMode
 import app.noctorium.settings.AutoplaySource
 import app.noctorium.settings.DEFAULT_HYBRID_SEARCH
+import app.noctorium.settings.HYBRID_SEARCH_SERVICES
 import app.noctorium.settings.NoctoriumPreferences
 import app.noctorium.settings.SpotifyConnectionState
+import app.noctorium.settings.TidalConnectionState
 import app.noctorium.settings.VkConnectionState
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /** The desktop's decisions about how listening goes on: the speed, the fade, autoplay under the queue, search. */
 class PlaybackQueueUiTest {
@@ -118,9 +122,49 @@ class PlaybackQueueUiTest {
 
     @Test
     fun `Hybrid search's services are the core's, with YouTube's videos named as videos`() {
-        assertEquals(DEFAULT_HYBRID_SEARCH.toList(), HYBRID_SEARCH_SERVICES)
+        // Every one the core can ask is there to be chosen, the three that are only ever matched included -- even
+        // though a fresh install leaves them out.
+        assertTrue(HYBRID_SEARCH_SERVICES.containsAll(DEFAULT_HYBRID_SEARCH))
+        listOf(ProviderType.APPLE_MUSIC, ProviderType.DEEZER, ProviderType.TIDAL).forEach { service ->
+            assertTrue(service in HYBRID_SEARCH_SERVICES, "$service cannot be chosen for Hybrid search")
+            assertFalse(service in DEFAULT_HYBRID_SEARCH, "$service is asked by a fresh install")
+        }
         assertEquals("YouTube videos", hybridServiceName(ProviderType.YOUTUBE_VIDEO))
         assertEquals("SoundCloud", hybridServiceName(ProviderType.SOUNDCLOUD))
+        assertEquals("Apple Music", hybridServiceName(ProviderType.APPLE_MUSIC))
+    }
+
+    @Test
+    fun `Tidal is named among the services a Hybrid search asks only once it can be read`() {
+        val chosen = setOf(ProviderType.DEEZER, ProviderType.TIDAL, ProviderType.APPLE_MUSIC)
+        // Deezer and Apple Music answer with nobody signed in; Tidal has nothing to say without an app to read through.
+        assertEquals(
+            "Apple Music and Deezer results appear together.",
+            searchHint(SearchMode.HYBRID, SpotifyConnectionState(), VkConnectionState(), chosen, TidalConnectionState()),
+        )
+        assertEquals(
+            "Apple Music and Deezer results appear together.",
+            searchHint(SearchMode.HYBRID, SpotifyConnectionState(), VkConnectionState(), chosen, TidalConnectionState(configured = true, ownApp = true)),
+        )
+        assertEquals(
+            "Apple Music, Deezer and Tidal results appear together.",
+            searchHint(SearchMode.HYBRID, SpotifyConnectionState(), VkConnectionState(), chosen, TidalConnectionState(configured = true, readsCatalogue = true)),
+        )
+    }
+
+    @Test
+    fun `searching Tidal on its own says what it needs first`() {
+        val none = searchHint(SearchMode.TIDAL, SpotifyConnectionState(), VkConnectionState(), tidal = TidalConnectionState())
+        assertTrue(none.startsWith("Tidal needs a free Tidal app"), none)
+        val app = searchHint(SearchMode.TIDAL, SpotifyConnectionState(), VkConnectionState(), tidal = TidalConnectionState(configured = true, ownApp = true))
+        assertTrue(app.startsWith("Connect Tidal"), app)
+        assertEquals(
+            "Only Tidal results will appear.",
+            searchHint(SearchMode.TIDAL, SpotifyConnectionState(), VkConnectionState(), tidal = TidalConnectionState(configured = true, readsCatalogue = true, connected = true)),
+        )
+        // Deezer and Apple Music need nothing.
+        assertEquals("Only Deezer results will appear.", searchHint(SearchMode.DEEZER, SpotifyConnectionState(), VkConnectionState()))
+        assertEquals("Only Apple Music results will appear.", searchHint(SearchMode.APPLE_MUSIC, SpotifyConnectionState(), VkConnectionState()))
     }
 
     @Test

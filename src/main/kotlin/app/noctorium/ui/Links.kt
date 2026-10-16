@@ -135,8 +135,8 @@ internal fun LinkScreen(state: AppState) {
         item {
             ScreenTitle("Paste a link", 32.sp)
             Text(
-                "A song, an album or a playlist from YouTube Music, YouTube, SoundCloud or Bandcamp. It plays as " +
-                    "soon as it is pasted.",
+                "A song, an album or a playlist from YouTube Music, YouTube, SoundCloud, Bandcamp, Spotify, VK, Apple " +
+                    "Music, Deezer or Tidal. It plays as soon as it is pasted.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
             )

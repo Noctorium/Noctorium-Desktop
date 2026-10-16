@@ -116,8 +116,6 @@ import app.noctorium.auth.isSoundCloudSignedIn
 import app.noctorium.auth.permalinkFromBrowserUrl
 import app.noctorium.auth.adoptCookieFile
 import app.noctorium.auth.writeCookieFile
-import app.noctorium.bandcamp.BandcampMusicProvider
-import app.noctorium.spotify.isSpotifyArtist
 import app.noctorium.playlists.LocalPlaylist
 import app.noctorium.playlists.PlaylistShareLink
 import app.noctorium.settings.*
@@ -815,10 +813,22 @@ private fun PlaylistRowSection(
 }
 
 /**
- * Whether a playlist stands for an artist -- everything they have put out -- rather than for one release or
- * list, which is how Bandcamp and Spotify both open an artist. Each service's own core says which are.
+ * What a card says under its name: "Artist" for an artist, "Album" and whose for an album, and whose a playlist is
+ * for anything else -- so a shelf of search results, where one service's albums sit beside another's playlists,
+ * says which is which.
+ *
+ * Which is an artist and which an album is the core's to say ([isArtistPage], [isAlbumPage]), the same way for
+ * every service that opens them as playlists. For a Bandcamp artist the owner is where they are from, when Bandcamp
+ * says -- "Artist · Bristol" -- and the services that call their artists' owner "Artist" are not said twice.
  */
-internal fun Playlist.isArtist(): Boolean = BandcampMusicProvider.isArtist(this) || isSpotifyArtist()
+internal fun Playlist.cardLine(): String? {
+    val owner = ownerName?.takeIf { it.isNotBlank() }
+    return when {
+        isArtistPage() -> listOfNotNull("Artist", owner?.takeUnless { it.equals("Artist", ignoreCase = true) }).joinToString(" · ")
+        isAlbumPage() -> listOfNotNull("Album", owner).joinToString(" · ")
+        else -> owner
+    }
+}
 
 /**
  * One playlist, album or artist on a shelf: its cover and its name, opening its page when clicked.
@@ -828,11 +838,9 @@ internal fun Playlist.isArtist(): Boolean = BandcampMusicProvider.isArtist(this)
  */
 @Composable
 private fun PlaylistCard(playlist: Playlist, width: Dp, state: AppState) {
-    val artist = playlist.isArtist()
+    val artist = playlist.isArtistPage()
     if (skinned()) {
-        val owner = playlist.ownerName?.takeIf { it.isNotBlank() }
-        val line = if (artist) listOfNotNull("Artist", owner?.takeUnless { it.equals("Artist", ignoreCase = true) }).joinToString(" · ") else owner
-        SkinPlaylistCard(playlist, width, artist, line) {
+        SkinPlaylistCard(playlist, width, artist, playlist.cardLine()) {
             state.openPlaylist(playlist)
             state.navigate(Destination.LIBRARY)
         }
@@ -869,10 +877,7 @@ private fun PlaylistCard(playlist: Playlist, width: Dp, state: AppState) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        // For a Bandcamp artist the owner is where they are from, when Bandcamp says: "Artist · Bristol".
-        // Spotify's artists come with "Artist" there already, which is not said twice.
-        val owner = playlist.ownerName?.takeIf { it.isNotBlank() }
-        (if (artist) listOfNotNull("Artist", owner?.takeUnless { it.equals("Artist", ignoreCase = true) }).joinToString(" · ") else owner)?.let {
+        playlist.cardLine()?.let {
             Text(
                 it,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1627,7 +1632,8 @@ private fun ServicePlaylistActions(playlist: Playlist, state: AppState) {
         ProviderType.SOUNDCLOUD -> SoundCloudPlaylistActions(playlist, state)
         ProviderType.YOUTUBE_MUSIC, ProviderType.YOUTUBE_VIDEO -> YouTubePlaylistActions(playlist, state)
         // Read-only here: nothing of theirs is renamed, deleted or made public from Noctorium.
-        ProviderType.SPOTIFY, ProviderType.BANDCAMP, ProviderType.VK, ProviderType.LOCAL -> Unit
+        ProviderType.SPOTIFY, ProviderType.BANDCAMP, ProviderType.VK, ProviderType.APPLE_MUSIC, ProviderType.DEEZER,
+        ProviderType.TIDAL, ProviderType.LOCAL -> Unit
     }
 }
 
@@ -1737,7 +1743,7 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
             leadingIcon = { Icon(Icons.Default.Search, null) },
             // A bang -- !sc, !ytm -- sends this one search to its service, and says so beside the words.
             prefix = ui.searchBang?.let { bang -> { Row(verticalAlignment = Alignment.CenterVertically) { BangChipView(BangChip(bang.typed, serviceName(bang.mode), bang.mode), compact = true); Spacer(Modifier.width(8.dp)) } } },
-            placeholder = { Text("Artists, songs, albums and playlists, or !ytm, !sc, !sp, !bc, !vk for one service") },
+            placeholder = { Text("Artists, songs, albums and playlists, or !ytm, !sc, !sp, !bc, !vk, !am, !dz, !td for one service") },
             singleLine = true,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth().widthIn(max = 860.dp).focusRequester(box).tracksTyping(),
@@ -1750,14 +1756,18 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
             ui.searchLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
             ui.searchQuery.isBlank() -> EmptyScreen(
                 "Search ${ui.searchMode.displayName}",
-                searchHint(ui.searchMode, settings.spotify, settings.vk, settings.preferences.hybridSearch),
+                searchHint(ui.searchMode, settings.spotify, settings.vk, settings.preferences.hybridSearch, settings.tidal),
             )
             ui.errorMessage != null -> PlaybackError(ui.errorMessage.orEmpty())
             // Spotify answers a search with nothing at all when nobody is signed in, which would otherwise
-            // read as Spotify having nothing by that name.
+            // read as Spotify having nothing by that name -- and Tidal the same while there is no way to read it.
             ui.searchMode == SearchMode.SPOTIFY && !settings.spotify.connected -> EmptyScreen(
                 "Spotify is not connected",
-                searchHint(ui.searchMode, settings.spotify, settings.vk, settings.preferences.hybridSearch),
+                searchHint(ui.searchMode, settings.spotify, settings.vk, settings.preferences.hybridSearch, settings.tidal),
+            )
+            ui.searchMode == SearchMode.TIDAL && !settings.tidal.readsCatalogue -> EmptyScreen(
+                "Tidal is not set up",
+                searchHint(ui.searchMode, settings.spotify, settings.vk, settings.preferences.hybridSearch, settings.tidal),
             )
             else -> SearchResultsList(ui.searchResults, state)
         }
@@ -1771,9 +1781,6 @@ internal fun servicesLine(names: List<String>): String = when (names.size) {
     else -> names.dropLast(1).joinToString() + " and " + names.last()
 }
 
-/** Every service a Hybrid search can ask, in the order the choice of them is shown. The core's own list. */
-internal val HYBRID_SEARCH_SERVICES: List<ProviderType> = DEFAULT_HYBRID_SEARCH.toList()
-
 /** A service as Hybrid search names it: YouTube's videos by what they are, to tell them from YouTube Music. */
 internal fun hybridServiceName(provider: ProviderType): String =
     if (provider == ProviderType.YOUTUBE_VIDEO) "YouTube videos" else provider.displayName
@@ -1782,22 +1789,26 @@ internal fun hybridServiceName(provider: ProviderType): String =
  * What the search page says before anything is typed: which services a search asks, or what one of them
  * needs first.
  *
- * Mixed search asks the services chosen for it in Settings, and of those, Spotify only when its songs play
- * on Spotify -- matched, each would be a slower copy of the YouTube Music result beside it -- and VK only for
- * an account signed in to it. Those are the core's rules; this says them, so the line names exactly the
- * services that will answer.
+ * Mixed search asks the services chosen for it in Settings ([HYBRID_SEARCH_SERVICES] is the core's list of those
+ * that can be), and of those, Spotify only when its songs play on Spotify -- matched, each would be a slower copy
+ * of the YouTube Music result beside it -- and VK only for an account signed in to it. Those are the core's rules.
+ * Tidal is asked whenever it is chosen, but has nothing to say until it can be read -- somebody signed in, or a
+ * Tidal app's secret given -- so it is left out of the line until then. This says all that, so the line names
+ * exactly the services that will answer.
  */
 internal fun searchHint(
     mode: SearchMode,
     spotify: SpotifyConnectionState,
     vk: VkConnectionState,
     hybrid: Set<ProviderType> = DEFAULT_HYBRID_SEARCH,
+    tidal: TidalConnectionState = TidalConnectionState(),
 ): String = when {
     mode == SearchMode.HYBRID -> {
         val answering = HYBRID_SEARCH_SERVICES.filter { service ->
             service in hybrid &&
                 (service != ProviderType.SPOTIFY || spotify.playsOnSpotify) &&
-                (service != ProviderType.VK || vk.connected)
+                (service != ProviderType.VK || vk.connected) &&
+                (service != ProviderType.TIDAL || tidal.readsCatalogue)
         }
         if (answering.isEmpty()) {
             "None of the services chosen for Hybrid search can answer yet. Choose them under Settings › Customization."
@@ -1807,6 +1818,10 @@ internal fun searchHint(
     }
     mode == SearchMode.SPOTIFY && !spotify.connected -> "Connect Spotify under Settings › Spotify library to search it."
     mode == SearchMode.VK && !vk.connected -> "Sign in to VK under Settings › VK Music to search it."
+    mode == SearchMode.TIDAL && !tidal.configured ->
+        "Tidal needs a free Tidal app of your own before it can be searched. Set one up under Settings › Tidal."
+    mode == SearchMode.TIDAL && !tidal.readsCatalogue ->
+        "Connect Tidal under Settings › Tidal to search it, or add your Tidal app's secret there."
     else -> "Only ${mode.displayName} results will appear."
 }
 
@@ -1900,10 +1915,15 @@ internal fun likeLabel(provider: ProviderType, liked: Boolean): String = when (p
 /**
  * Why a heart cannot be pressed: usually a sign-in still to make, but Bandcamp has no likes to make, and
  * telling somebody to sign in to a service with nothing to sign in to would send them looking for it.
+ *
+ * Apple Music, Deezer and Tidal are read and never written to, signed in or not, so a sign-in would change
+ * nothing: what can be liked is the YouTube Music recording one of their songs is matched to, once it plays.
  */
 internal fun likeUnavailable(provider: ProviderType): String = when (provider) {
     ProviderType.BANDCAMP -> "Bandcamp has no likes; its wishlist is kept on Bandcamp"
     ProviderType.LOCAL -> "Files on this computer cannot be liked"
+    ProviderType.APPLE_MUSIC, ProviderType.DEEZER, ProviderType.TIDAL ->
+        "${provider.displayName} songs can't be liked from Noctorium yet; once one plays, its YouTube Music match can be"
     else -> "Sign in to ${provider.displayName} to like tracks"
 }
 
@@ -4403,8 +4423,9 @@ internal fun BrowsingSettingsCard(preferences: NoctoriumPreferences, state: AppS
         ) { service, on -> state.setHybridSearchService(service, on) }
         Spacer(Modifier.height(6.dp))
         Text(
-            "At least one always stays. Spotify answers only while its songs play on Spotify, and VK Music once " +
-                "you are signed in to it.",
+            "At least one always stays. Spotify answers only while its songs play on Spotify, VK Music once you are " +
+                "signed in to it, and Tidal once it is set up. Apple Music, Deezer and Tidal are off at first: their " +
+                "songs are matched on YouTube Music to play, so they mostly repeat its results more slowly.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 11.sp,
         )
@@ -6326,12 +6347,12 @@ private fun LoadingSection() {
  * Whether a playlist on this service can hold the given track: services do not take each other's music.
  *
  * A Spotify track is refused everywhere, in both directions. Its id means nothing to YouTube, and Noctorium
- * never writes to Spotify at all — so neither service could be asked to store it. Bandcamp and VK tracks are
- * the same: no other service can hold them. A Noctorium playlist takes all of them happily, which is where a
- * mixed collection belongs.
+ * never writes to Spotify at all — so neither service could be asked to store it. Apple Music, Deezer and Tidal
+ * tracks are Spotify's kind ([isReference]), and Bandcamp and VK tracks the same for their own reasons: no other
+ * service can hold them. A Noctorium playlist takes all of them happily, which is where a mixed collection belongs.
  */
 internal fun ProviderType.acceptsTrack(track: Track): Boolean = when {
-    track.provider == ProviderType.SPOTIFY || track.provider == ProviderType.BANDCAMP || track.provider == ProviderType.VK -> false
+    track.provider.isReference || track.provider == ProviderType.BANDCAMP || track.provider == ProviderType.VK -> false
     this == ProviderType.SOUNDCLOUD -> track.provider == ProviderType.SOUNDCLOUD
     this == ProviderType.YOUTUBE_MUSIC || this == ProviderType.YOUTUBE_VIDEO ->
         track.provider != ProviderType.SOUNDCLOUD

@@ -7,6 +7,7 @@ import app.noctorium.domain.Artist
 import app.noctorium.domain.Playlist
 import app.noctorium.domain.ProviderType
 import app.noctorium.domain.Track
+import app.noctorium.domain.isArtistPage
 import app.noctorium.settings.HomePart
 import app.noctorium.settings.SpotifyConnectionState
 import app.noctorium.settings.VkConnectionState
@@ -163,12 +164,12 @@ class SpotifyVkUiTest {
 
     @Test
     fun `artists from Bandcamp and Spotify are told apart from their albums`() {
-        assertTrue(Playlist("band:1", "Sample Band", ProviderType.BANDCAMP).isArtist())
-        assertTrue(Playlist("artist:0sampleartist00000000", "Sample Artist", ProviderType.SPOTIFY, ownerName = "Artist").isArtist())
-        assertFalse(Playlist("album:1:2", "Sample Album", ProviderType.BANDCAMP).isArtist())
-        assertFalse(Playlist("album:0samplealbum000000000", "Sample Album", ProviderType.SPOTIFY).isArtist())
+        assertTrue(Playlist("band:1", "Sample Band", ProviderType.BANDCAMP).isArtistPage())
+        assertTrue(Playlist("artist:0sampleartist00000000", "Sample Artist", ProviderType.SPOTIFY, ownerName = "Artist").isArtistPage())
+        assertFalse(Playlist("album:1:2", "Sample Album", ProviderType.BANDCAMP).isArtistPage())
+        assertFalse(Playlist("album:0samplealbum000000000", "Sample Album", ProviderType.SPOTIFY).isArtistPage())
         // Somebody else's id that happens to start the same way is no artist of Spotify's.
-        assertFalse(Playlist("artist:x", "Sample", ProviderType.YOUTUBE_MUSIC).isArtist())
+        assertFalse(Playlist("artist:x", "Sample", ProviderType.YOUTUBE_MUSIC).isArtistPage())
     }
 
     // --- Home ---
@@ -176,7 +177,10 @@ class SpotifyVkUiTest {
     @Test
     fun `Spotify and VK are among the parts of Home that are a service's rows`() {
         assertEquals(
-            setOf(HomePart.YOUTUBE_MUSIC, HomePart.SOUNDCLOUD, HomePart.BANDCAMP, HomePart.SPOTIFY, HomePart.VK),
+            setOf(
+                HomePart.YOUTUBE_MUSIC, HomePart.SOUNDCLOUD, HomePart.BANDCAMP, HomePart.SPOTIFY, HomePart.VK,
+                HomePart.DEEZER, HomePart.TIDAL, HomePart.APPLE_MUSIC,
+            ),
             SERVICE_HOME_PARTS,
         )
     }

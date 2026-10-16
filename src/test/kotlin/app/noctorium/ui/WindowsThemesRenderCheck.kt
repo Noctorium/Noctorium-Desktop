@@ -79,8 +79,8 @@ class WindowsThemesRenderCheck {
             tour.capture("link")
             // The pages of Settings the tour leaves out, which are mostly each service's account.
             listOf(
-                "ACCOUNT", "PROFILE", "YOUTUBE", "SOUNDCLOUD", "SPOTIFY", "BANDCAMP", "VK", "SCROBBLING", "DISCORD",
-                "UPDATES", "PLAYBACK_TOOLS", "DIAGNOSTICS",
+                "ACCOUNT", "PROFILE", "YOUTUBE", "SOUNDCLOUD", "SPOTIFY", "BANDCAMP", "VK", "APPLE_MUSIC", "DEEZER", "TIDAL",
+                "SCROBBLING", "DISCORD", "UPDATES", "PLAYBACK_TOOLS", "DIAGNOSTICS",
             ).forEach { page ->
                 tour.settingsPage(page)
                 tour.capture("settings-${page.lowercase()}")
