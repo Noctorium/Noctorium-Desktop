@@ -30,7 +30,69 @@ internal fun ProviderType.markVector(): ImageVector = synchronized(built) {
             viewportWidth = ServiceMarks.VIEWPORT,
             viewportHeight = ServiceMarks.VIEWPORT,
         ).apply {
-            addPath(pathData = addPathNodes(ServiceMarks.path(this@markVector)), fill = SolidColor(Color.Black))
+            addPath(pathData = addPathNodes(markPath(this@markVector)), fill = SolidColor(Color.Black))
         }.build()
     }
+}
+
+/** [provider]'s mark as the text it is drawn from: Base's, with its arcs' flags written out. See [separatedArcFlags]. */
+internal fun markPath(provider: ProviderType): String = separatedArcFlags(ServiceMarks.path(provider))
+
+/**
+ * [path] with every arc's two flags standing apart from what follows them.
+ *
+ * SVG lets the flags -- one digit each -- run straight into the next number, and Simple Icons writes them that way to
+ * save room: Apple Music's mark has `a9.23 9.23 0 00-.24-2.19`. Compose's path parser reads `00` as one number, so
+ * every figure after the first arc lands one place along and the mark comes out a scribble twice the size of its
+ * square. Written out with a space between each of an arc's figures it reads the same in every parser. Nothing else
+ * about the path changes.
+ */
+internal fun separatedArcFlags(path: String): String {
+    val out = StringBuilder(path.length + 64)
+    var command = ' '
+    // Which of the current command's figures comes next, counted from its letter: an arc's are rx, ry, the rotation,
+    // the two flags, then x and y, over again for each arc the letter is followed by.
+    var figure = 0
+    var at = 0
+    while (at < path.length) {
+        val char = path[at]
+        when {
+            char.isLetter() -> {
+                command = char
+                figure = 0
+                out.append(char)
+                at++
+            }
+            char == ',' || char.isWhitespace() -> at++
+            else -> {
+                val flag = (command == 'a' || command == 'A') && (figure % 7 == 3 || figure % 7 == 4)
+                val end = if (flag) at + 1 else numberEnd(path, at)
+                if (out.isNotEmpty() && !out.last().isLetter()) out.append(' ')
+                out.append(path, at, end)
+                figure++
+                at = end
+            }
+        }
+    }
+    return out.toString()
+}
+
+/** Where the number starting at [start] in [path] ends: its sign, its digits, one point, and an exponent. */
+private fun numberEnd(path: String, start: Int): Int {
+    var at = start
+    if (at < path.length && (path[at] == '-' || path[at] == '+')) at++
+    var point = false
+    while (at < path.length) {
+        val char = path[at]
+        when {
+            char.isDigit() -> at++
+            char == '.' && !point -> { point = true; at++ }
+            (char == 'e' || char == 'E') && at > start -> {
+                at++
+                if (at < path.length && (path[at] == '-' || path[at] == '+')) at++
+            }
+            else -> break
+        }
+    }
+    return at
 }

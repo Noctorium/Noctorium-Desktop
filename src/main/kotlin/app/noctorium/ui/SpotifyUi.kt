@@ -591,7 +591,7 @@ private fun PremiumTag() {
 
 /** A numbered instruction, for the one part of Noctorium that asks somebody to go and do something else. */
 @Composable
-private fun SetupStep(number: Int, text: String) {
+internal fun SetupStep(number: Int, text: String) {
     Row(Modifier.padding(vertical = 4.dp)) {
         Text(
             "$number.",

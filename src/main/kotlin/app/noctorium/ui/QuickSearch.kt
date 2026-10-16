@@ -188,7 +188,7 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
     val where = chip?.service ?: serviceName(ui.searchMode)
     val footer = when {
         note != null -> note!!
-        text.isBlank() -> "Start or end with !ytm, !sc, !sp, !bc, !vk or !all to search one service."
+        text.isBlank() -> "Start or end with !ytm, !sc, !sp, !bc, !vk, !am, !dz, !td or !all to search one service."
         else -> "↑↓ choose  ·  Enter play  ·  Shift+Enter add to queue  ·  $command+Enter all results  ·  Esc close"
     }
 

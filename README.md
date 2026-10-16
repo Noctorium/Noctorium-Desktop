@@ -6,7 +6,7 @@ services, an embedded Chromium for the SoundCloud sign-in window. Everything tha
 [Noctorium-Base](https://github.com/Noctorium/Noctorium-Base), which this repository includes as `core`.
 
 > Noctorium is an independent third-party client. It is not affiliated with Google, YouTube, SoundCloud,
-> Spotify, Last.fm, ListenBrainz or Discord.
+> Spotify, Bandcamp, VK, Apple, Deezer, Tidal, Last.fm, ListenBrainz or Discord.
 
 ## Getting the code
 
@@ -33,7 +33,8 @@ on Linux, and a folder left by an earlier name of the application is adopted on 
 ## Keyboard shortcuts
 
 Every shortcut can be changed in Settings, under Keyboard shortcuts; `?` lists them, and Ctrl+F (⌘F on a Mac)
-brings up the quick search bar, which takes `!ytm`, `!sc`, `!sp`, `!bc`, `!vk` and `!all` at the start or the end.
+brings up the quick search bar, which takes `!ytm`, `!sc`, `!sp`, `!bc`, `!vk`, `!am`, `!dz`, `!td` and `!all` at the
+start or the end.
 Global shortcuts — from any program — are off until switched on there, and are registered with the system's own
 hot-key service, never a keyboard hook: `RegisterHotKey` on Windows, Carbon's `RegisterEventHotKey` on a Mac,
 `XGrabKey` under X11, and on Wayland the desktop portal's GlobalShortcuts, where the desktop offers it (KDE Plasma,

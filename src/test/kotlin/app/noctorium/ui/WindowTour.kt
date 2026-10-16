@@ -160,6 +160,12 @@ internal class WindowTour(private val state: AppState, private val folder: File)
         flow.value = change(flow.value)
     }
 
+    /** What Settings says about the accounts, for a page in a state nobody here signs in to reach. */
+    fun settings(change: (app.noctorium.settings.SettingsState) -> app.noctorium.settings.SettingsState) {
+        val flow = state.privateFlow<app.noctorium.settings.SettingsState>("mutableSettings")
+        flow.value = change(flow.value)
+    }
+
     fun library(change: (LibraryState) -> LibraryState) {
         val flow = state.privateFlow<LibraryState>("mutableLibrary")
         flow.value = change(flow.value)

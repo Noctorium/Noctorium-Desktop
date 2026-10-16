@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Density
 import app.noctorium.core.AppState
 import app.noctorium.desktopAppState
+import app.noctorium.domain.inBeta
 import app.noctorium.settings.AccentPreset
 import app.noctorium.settings.PlayerBarStyle
 import app.noctorium.settings.SettingMatchKind
@@ -171,6 +172,36 @@ class SettingsIndexTest {
         assertEquals("YouTube Music account", first("ytm").entry.title)
         assertEquals("Icons", first("icons").entry.title)
         assertEquals(SettingsPage.THEME, first("logo").page)
+    }
+
+    @Test
+    fun `Apple Music, Deezer and Tidal are found by name, and what each needs by what it is called`() {
+        assertEquals(SettingsPage.APPLE_MUSIC, first("apple music").page)
+        assertEquals(SettingsPage.APPLE_MUSIC, first("itunes").page)
+        assertEquals(SettingsPage.APPLE_MUSIC, first("media-user-token").page)
+        assertEquals(SettingsPage.DEEZER, first("deezer").page)
+        assertEquals("Your Deezer profile", first("deezer profile").entry.title)
+        assertEquals(SettingsPage.TIDAL, first("tidal").page)
+
+        // Apple's developer token, folded away on its page, is found and opened at its fold.
+        val token = first("developer token")
+        assertEquals(SettingsPage.APPLE_MUSIC, token.page)
+        assertEquals(APPLE_DEVELOPER_TOKEN, token.anchor)
+        assertEquals(SettingsPage.APPLE_MUSIC, first("musickit").page)
+
+        // A client id finds Tidal's first, the service that cannot go without one -- and Spotify's still.
+        val clientId = SettingsIndex.search("client id")
+        assertEquals(SettingsPage.TIDAL, clientId.first().setting.page)
+        assertEquals("Your Tidal app", clientId.first().setting.anchor)
+        assertTrue(clientId.any { it.setting.page == SettingsPage.SPOTIFY }, "\"client id\" no longer finds Spotify's own app")
+        assertEquals(SettingsPage.TIDAL, first("client secret").page)
+        assertEquals(SettingsPage.TIDAL, first("developer.tidal.com").page)
+    }
+
+    @Test
+    fun `beta finds every service whose page warns that it is in beta, and nothing else`() {
+        val found = SettingsIndex.search("beta").map { it.setting.page }.toSet()
+        assertEquals(SettingsPage.entries.filter { it.service?.inBeta == true }.toSet(), found)
     }
 
     @Test
