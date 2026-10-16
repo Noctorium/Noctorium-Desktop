@@ -96,12 +96,17 @@ internal val SPOTIFY_GREEN = Color(0xFF1DB954)
 internal fun playsOnSpotify(track: Track?, spotify: SpotifyConnectionState): Boolean =
     track?.provider == ProviderType.SPOTIFY && spotify.playsOnSpotify
 
-/** The line under Spotify on the Settings list. */
-internal fun spotifySummary(spotify: SpotifyConnectionState): String {
+/**
+ * The line under Spotify on the Settings list. With nobody signed in, what there is of Spotify without a sign-in
+ * -- the public playlists followed and the [imported] playlists of its data download -- where there is any, since
+ * "connect" would otherwise read as though Spotify gave this listener nothing at all.
+ */
+internal fun spotifySummary(spotify: SpotifyConnectionState, imported: Int = 0): String {
     val name = spotify.accountName.takeIf(String::isNotBlank)
     return when {
         spotify.connecting -> "Waiting for Spotify…"
-        !spotify.connected -> "Connect any account, or Premium to play on Spotify"
+        !spotify.connected -> spotifyWithoutSignInLine(spotify.publicPlaylists.size, imported)
+            ?: "Connect any account, or Premium to play on Spotify"
         spotify.playsOnSpotify -> listOfNotNull(name, "Premium · songs play on Spotify").joinToString(" · ")
         spotify.canPlay -> listOfNotNull(name, "Premium · songs matched on YouTube Music").joinToString(" · ")
         name != null -> "Reading $name's library"
@@ -187,12 +192,15 @@ internal fun OnSpotifyMark() {
 // --- The Settings page ---
 
 /**
- * Spotify, set up: the two sign-ins, where Spotify songs play, and a Spotify app of the listener's own.
+ * Spotify, set up: the two sign-ins, where Spotify songs play, the two ways in that need no sign-in, and a Spotify
+ * app of the listener's own.
  *
  * Says plainly what each sign-in is, because "connect Spotify" would otherwise reasonably be read as "play
  * from Spotify" -- which only the Premium one does, and even then by Spotify's own app, never by Noctorium.
- * A Spotify app of the listener's own is still offered, folded away at the bottom, for somebody who would
- * rather sign in through that.
+ * Under the sign-in come public playlists followed by their links and the import of Spotify's data download
+ * ([SpotifyPublicPlaylistsCard], [SpotifyImportCard]), for the listener whose sign-in Spotify refuses, each with
+ * what it cannot do beside it. A Spotify app of the listener's own is still offered, folded away at the bottom,
+ * for somebody who would rather sign in through that.
  */
 @Composable
 internal fun SpotifySettingsPanel(settings: SettingsState, state: AppState) {
@@ -249,6 +257,10 @@ internal fun SpotifySettingsPanel(settings: SettingsState, state: AppState) {
                     "be found is reported rather than swapped for another.",
             )
             AccountFact("With Premium, Spotify plays the song in your own Spotify app. Noctorium never decodes Spotify's audio.")
+            AccountFact(
+                "No sign-in is needed to follow public playlists by their links, or to import your own playlists and " +
+                    "Liked Songs from Spotify's data download. Both are further down this page.",
+            )
         }
 
         SettingsPanelCard {
@@ -311,6 +323,9 @@ internal fun SpotifySettingsPanel(settings: SettingsState, state: AppState) {
         }
 
         if (spotify.connected) SpotifyPlaybackCard(spotify, state)
+
+        SpotifyPublicPlaylistsCard(spotify, state)
+        SpotifyImportCard(spotify, state)
 
         SettingsPanelCard {
             Row(

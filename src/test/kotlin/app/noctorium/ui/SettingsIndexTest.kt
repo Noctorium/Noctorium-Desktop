@@ -199,6 +199,24 @@ class SettingsIndexTest {
     }
 
     @Test
+    fun `what a listener without a working Spotify sign-in types finds Spotify's two ways in without one`() {
+        listOf("spotify public playlist", "public playlist", "follow playlist", "without premium", "keep in library").forEach { query ->
+            assertEquals(SPOTIFY_PUBLIC_PLAYLISTS, first(query).anchor, query)
+        }
+        listOf("import spotify", "spotify data", "my_spotify_data", "liked songs", "download your data", "account data").forEach { query ->
+            assertEquals(SPOTIFY_DATA_IMPORT, first(query).anchor, query)
+        }
+        listOf("spotify public playlist", "import spotify", "spotify data", "liked songs", "without premium", "my_spotify_data").forEach { query ->
+            assertEquals(SettingsPage.SPOTIFY, first(query).page, query)
+        }
+        // Both, for somebody who only knows Premium is what they lack; and Spotify's own page still first for its name.
+        val noPremium = SettingsIndex.search("without premium").map { it.setting.anchor }
+        assertTrue(SPOTIFY_DATA_IMPORT in noPremium, "\"without premium\" does not find the import")
+        assertEquals(SettingsPage.SPOTIFY, first("spotify").page)
+        assertEquals(null, first("spotify").anchor)
+    }
+
+    @Test
     fun `beta finds every service whose page warns that it is in beta, and nothing else`() {
         val found = SettingsIndex.search("beta").map { it.setting.page }.toSet()
         assertEquals(SettingsPage.entries.filter { it.service?.inBeta == true }.toSet(), found)

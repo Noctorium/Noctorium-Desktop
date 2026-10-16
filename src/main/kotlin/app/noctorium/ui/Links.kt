@@ -80,6 +80,7 @@ import app.noctorium.domain.placeholderTrack
 import app.noctorium.domain.pluralTracks
 import app.noctorium.downloads.DownloadStage
 import app.noctorium.playback.PlaybackState
+import app.noctorium.settings.SpotifyConnectionState
 import kotlinx.coroutines.delay
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
@@ -104,6 +105,8 @@ internal fun clipboardText(): String? = runCatching {
 internal fun LinkScreen(state: AppState) {
     val link by state.linkState.collectAsState()
     val playback by state.shownPlayback.collectAsState()
+    // Spotify's, for a public playlist that can be kept in the library: whether it is being, or already is.
+    val spotify = state.settings.collectAsState().value.spotify
     var text by remember { mutableStateOf(link.link?.url.orEmpty()) }
     // A link can arrive without going through the box -- Ctrl+V from anywhere -- and the box then shows it,
     // rather than sitting empty above a song it apparently had nothing to do with.
@@ -200,7 +203,7 @@ internal fun LinkScreen(state: AppState) {
                 }
             }
         }
-        linkOutcome(link, playback, state)
+        linkOutcome(link, playback, spotify, state)
         item {
             Text(
                 "Anywhere in Noctorium, Ctrl+V plays the link on your clipboard.",
@@ -249,8 +252,16 @@ internal fun LinkField(
     }
 }
 
-/** What came of the last link: working on it, what went wrong, or what it turned out to be. */
-private fun androidx.compose.foundation.lazy.LazyListScope.linkOutcome(link: LinkState, playback: PlaybackState, state: AppState) {
+/**
+ * What came of the last link: working on it, what went wrong, or what it turned out to be -- and, for a public
+ * Spotify playlist, the offer to keep it in the library ([KeepInLibraryOffer]), above its songs.
+ */
+internal fun androidx.compose.foundation.lazy.LazyListScope.linkOutcome(
+    link: LinkState,
+    playback: PlaybackState,
+    spotify: SpotifyConnectionState,
+    state: AppState,
+) {
     when (link.status) {
         LinkStatus.IDLE -> Unit
         LinkStatus.OPENING -> item {
@@ -276,6 +287,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.linkOutcome(link: Lin
                 item { Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
             }
             if (link.link?.kind == LinkKind.PLAYLIST) {
+                if (keepOffer(link, spotify) != null) {
+                    item(key = "keep") { KeepInLibraryOffer(link, spotify, state) }
+                }
                 item { PlaylistActions(link.tracks, state) }
                 itemsIndexed(link.tracks, key = { index, track -> "${track.queueKey}:$index" }) { index, track ->
                     LinkTrackRow(track, playback.track?.queueKey == track.queueKey) {

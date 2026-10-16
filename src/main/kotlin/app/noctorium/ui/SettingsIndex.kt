@@ -343,6 +343,23 @@ internal object SettingsIndex {
                 "spotify connect", "play on spotify", "spotify device", "premium playback",
                 onlyWhen = "once Spotify is connected",
             )
+            // The two ways in for the listener whose sign-in Spotify refuses, found by what that listener would type.
+            setting(
+                SPOTIFY_PUBLIC_PLAYLISTS, "Follows public Spotify playlists by their links, in step with Spotify and with no sign-in. Only their first 100 songs.",
+                "spotify public playlist", "public playlist", "follow playlist", "follow a playlist", "playlist link", "spotify link",
+                "without premium", "no premium", "free spotify", "without signing in", "no sign in", "first 100 songs", "keep in library",
+            )
+            setting(
+                SPOTIFY_DATA_IMPORT, "Imports your Spotify playlists and Liked Songs from the data download Spotify emails you, with no sign-in.",
+                "import spotify", "spotify import", "spotify data", "download your data", "my_spotify_data", "account data",
+                "liked songs", "spotify liked songs", "private playlists", "without premium", "no premium", "free spotify",
+                "zip", "json", "export from spotify",
+            )
+            // By name as well, so "liked songs" finds it before the shortcut that likes the song playing.
+            setting(
+                "Import your Liked Songs and playlists from Spotify", "Spotify's data download, imported as playlists of Noctorium's own, with no sign-in.",
+                "spotify liked songs", "spotify playlists", "spotify importer", anchor = SPOTIFY_DATA_IMPORT,
+            )
         }
         page(SettingsPage.BANDCAMP) {
             setting(

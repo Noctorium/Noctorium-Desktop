@@ -299,7 +299,7 @@ internal fun BetaNotice(warning: String) {
 }
 
 /** The warning sign on a Windows skin's pale yellow information bar: amber dark enough to be seen on it. */
-private val CLASSIC_WARNING_SIGN = Color(0xFF9A6400)
+internal val CLASSIC_WARNING_SIGN = Color(0xFF9A6400)
 
 /**
  * [warning] with the words before its first colon -- "In beta" -- in bold, so the notice says what it is about
@@ -569,7 +569,11 @@ private fun tileText(page: SettingsPage, settings: SettingsState, state: AppStat
             accountSummary(preferences.soundCloudCookies, settings.soundCloudAccount),
             settings.soundCloudAccount.status == AccountConnectionStatus.CONNECTED,
         )
-        SettingsPage.SPOTIFY -> TileText(page.title, spotifySummary(settings.spotify), settings.spotify.connected)
+        SettingsPage.SPOTIFY -> {
+            // What its data download made, which lives with the playlists made here rather than in the settings.
+            val library by state.library.collectAsState()
+            TileText(page.title, spotifySummary(settings.spotify, spotifyImportedCount(library.localPlaylists)), settings.spotify.connected)
+        }
         SettingsPage.BANDCAMP -> TileText(page.title, bandcampSummary(preferences.bandcampUsername, settings.bandcamp), preferences.bandcampUsername.isNotBlank())
         SettingsPage.VK -> TileText(page.title, vkSummary(settings.vk), settings.vk.connected)
         SettingsPage.APPLE_MUSIC -> TileText(page.title, appleMusicSummary(settings.appleMusic), settings.appleMusic.connected)

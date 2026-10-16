@@ -1029,7 +1029,7 @@ private fun LibraryList(library: LibraryState, state: AppState, newPlaylist: () 
             Column(Modifier.weight(1f)) {
                 ScreenTitle("Your library", 34.sp)
                 Text(
-                    "Playlists you made here, and playlists from the accounts you connected.",
+                    "Playlists you made or imported here, and playlists from your accounts and the links you follow.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                 )
@@ -1065,7 +1065,7 @@ private fun LibraryList(library: LibraryState, state: AppState, newPlaylist: () 
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                "From your accounts",
+                "From your accounts and links",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -1125,6 +1125,20 @@ private fun LibraryNotice(message: String, problem: Boolean, dismiss: () -> Unit
     }
 }
 
+/**
+ * What is said under a playlist of Noctorium's own: how many tracks, and where it came from -- made here, or made by
+ * an import of Spotify's data download, which is a copy of a Spotify playlist and should not claim to be the
+ * listener's handiwork here.
+ */
+internal fun localPlaylistLine(playlist: LocalPlaylist): String {
+    val made = when (playlist.importedFrom?.source) {
+        null -> "made in Noctorium"
+        app.noctorium.playlists.PlaylistImport.SPOTIFY_DATA -> "imported from Spotify"
+        else -> "imported"
+    }
+    return "${playlist.trackCount} ${if (playlist.trackCount == 1) "track" else "tracks"} • $made"
+}
+
 @Composable
 private fun LocalPlaylistRow(playlist: LocalPlaylist, state: AppState, open: () -> Unit) {
     ListRow(onClick = open, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(13.dp)) {
@@ -1138,7 +1152,7 @@ private fun LocalPlaylistRow(playlist: LocalPlaylist, state: AppState, open: () 
             Column(Modifier.weight(1f)) {
                 Text(playlist.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    "${playlist.trackCount} ${if (playlist.trackCount == 1) "track" else "tracks"} • made in Noctorium",
+                    localPlaylistLine(playlist),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
                 )
@@ -1183,7 +1197,7 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, notice
             Column(Modifier.weight(1f)) {
                 ScreenTitle(playlist.title, 27.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    "${playlist.trackCount} ${if (playlist.trackCount == 1) "track" else "tracks"} • made in Noctorium",
+                    localPlaylistLine(playlist),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                 )
@@ -5588,13 +5602,25 @@ internal fun accountSummary(source: CookieSource, connection: AccountConnectionS
     else -> "Using ${source.describe()}"
 }
 
-private fun pickCookieFile(): String? {
-    val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Choose your exported cookies.txt", java.awt.FileDialog.LOAD)
-    dialog.file = "*.txt"
+private fun pickCookieFile(): String? = chooseFile("Choose your exported cookies.txt", "*.txt")?.absolutePath
+
+/**
+ * A file chosen in the system's own Open dialog, with [title] over it, or null when it was closed without one.
+ *
+ * The system's dialog rather than Swing's, so it is the one somebody knows on Windows, macOS and Linux alike. What it
+ * offers is narrowed two ways, because the systems differ: Windows takes [pattern] -- "*.zip;*.json" -- in the name
+ * box as its filter and ignores any other, while macOS and Linux leave the pattern be and offer only the files
+ * [accepts] lets through, and every folder. Without [accepts] they offer everything, as the cookies' picker always has.
+ */
+internal fun chooseFile(title: String, pattern: String, accepts: ((String) -> Boolean)? = null): java.io.File? {
+    val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
+    dialog.file = pattern
+    // A folder is always let through, so the dialog can still be walked into one.
+    if (accepts != null) dialog.setFilenameFilter { folder, name -> java.io.File(folder, name).isDirectory || accepts(name) }
     dialog.isVisible = true
     val directory = dialog.directory ?: return null
     val name = dialog.file ?: return null
-    return java.io.File(directory, name).absolutePath
+    return java.io.File(directory, name)
 }
 
 @Composable
