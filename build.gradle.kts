@@ -1,7 +1,11 @@
+import java.io.DataInputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 /*
@@ -133,6 +137,108 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+}
+
+/*
+ * Material's extended icons, cut down to the ones Noctorium draws.
+ *
+ * The extended set is every Material icon in five styles, 37 MB of classes in one jar, and the application
+ * draws a few hundred of them. Carried whole it was 36 MB of the 347 MB Windows package of 0.17.1 -- twice
+ * the size of yt-dlp -- and of every Linux package and Mac disk image as well, downloaded and written out by
+ * every install and every update. The code is still compiled against the whole set; what is run, tested and
+ * packaged is a copy of the jar holding only the icon classes the compiled application refers to, found by
+ * reading the class names out of its class files, so an icon used anywhere comes along without anybody
+ * listing it, and one nothing uses any more is left behind: 501 of its 11,105 classes, 1.6 MB. Built here
+ * with the same mpv and yt-dlp, the .msi went from 346.2 MB to 311.7 MB. IconSetsTest draws every icon the
+ * application has in every set against that copy, so an icon that went missing from it would fail the tests
+ * rather than a window.
+ */
+val usedIcons by tasks.registering {
+    description = "Copies Material's extended icons jar with only the icons the application uses."
+    val whole = configurations.compileClasspath.get().incoming.artifactView {
+        componentFilter {
+            it is org.gradle.api.artifacts.component.ModuleComponentIdentifier &&
+                it.module == "material-icons-extended-desktop"
+        }
+    }.files
+    val classes = sourceSets["main"].output.classesDirs
+    val used = layout.buildDirectory.file("usedIcons/material-icons-extended-desktop-used.jar")
+    inputs.files(whole).withPropertyName("whole")
+    inputs.files(classes).withPropertyName("classes")
+    outputs.file(used)
+
+    doLast {
+        // Every string in a class file's constant pool, which is where the names of the classes it uses are.
+        fun strings(bytes: ByteArray): List<String> {
+            val input = DataInputStream(bytes.inputStream())
+            check(input.readInt() == 0xCAFEBABE.toInt()) { "Not a class file" }
+            input.skipBytes(4)
+            val count = input.readUnsignedShort()
+            val found = mutableListOf<String>()
+            var index = 1
+            while (index < count) {
+                when (val tag = input.readUnsignedByte()) {
+                    1 -> found += input.readUTF()
+                    3, 4, 9, 10, 11, 12, 17, 18 -> input.skipBytes(4)
+                    5, 6 -> { input.skipBytes(8); index++ }
+                    7, 8, 16, 19, 20 -> input.skipBytes(2)
+                    15 -> input.skipBytes(3)
+                    else -> error("Unknown constant pool tag $tag")
+                }
+                index++
+            }
+            return found
+        }
+        val iconName = Regex("""androidx/compose/material/icons/[\w/$]+""")
+        fun named(bytes: ByteArray): Sequence<String> =
+            strings(bytes).asSequence().flatMap { text -> iconName.findAll(text).map { it.value } }
+
+        val jar = whole.singleFile
+        ZipFile(jar).use { zip ->
+            val inJar = zip.entries().asSequence().map { it.name }
+                .filter { it.endsWith(".class") }.map { it.removeSuffix(".class") }.toSet()
+            // What the application names, and then whatever those name in turn, until nothing new turns up.
+            val wanted = ArrayDeque<String>()
+            classes.asFileTree.matching { include("**/*.class") }.forEach { file ->
+                named(file.readBytes()).filterTo(wanted) { it in inJar }
+            }
+            val kept = mutableSetOf<String>()
+            while (wanted.isNotEmpty()) {
+                val name = wanted.removeFirst()
+                if (!kept.add(name)) continue
+                val bytes = zip.getInputStream(zip.getEntry("$name.class")).use { it.readBytes() }
+                named(bytes).filterTo(wanted) { it in inJar && it !in kept }
+            }
+            check(kept.isNotEmpty()) { "No icon from ${jar.name} is used, which is not believable" }
+
+            val out = used.get().asFile.apply { parentFile.mkdirs(); delete() }
+            ZipOutputStream(out.outputStream().buffered()).use { copy ->
+                zip.entries().asSequence()
+                    .filter { !it.name.endsWith(".class") || it.name.removeSuffix(".class") in kept }
+                    .forEach { entry ->
+                        copy.putNextEntry(ZipEntry(entry.name).apply { time = entry.time })
+                        zip.getInputStream(entry).use { it.copyTo(copy) }
+                        copy.closeEntry()
+                    }
+            }
+            println(
+                "Icons: kept ${kept.size} of ${inJar.size} classes, ${out.length() / 1024} KB of " +
+                    "${jar.length() / 1_048_576} MB",
+            )
+        }
+    }
+}
+
+listOf("runtimeClasspath", "testRuntimeClasspath").forEach { name ->
+    configurations.named(name) {
+        exclude(group = "org.jetbrains.compose.material", module = "material-icons-extended-desktop")
+    }
+}
+dependencies {
+    runtimeOnly(files(usedIcons))
+    // The few icons Compose has always carried, and the code every icon is drawn with, which came along
+    // only as part of the extended set: at the version that set asks for.
+    runtimeOnly(compose.materialIconsExtended.replace("material-icons-extended", "material-icons-core"))
 }
 
 compose.desktop {
