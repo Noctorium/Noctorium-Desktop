@@ -907,7 +907,7 @@ private fun Transport(
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         if (PlayerButton.SHUFFLE in shown) {
-            IconButton(state::toggleShuffle, Modifier.size(buttonSize)) {
+            IconButton(state::toggleShuffle, Modifier.size(buttonSize).litMark(queue.shuffleEnabled)) {
                 Icon(Icons.Default.Shuffle, "Shuffle", Modifier.size(18.dp), tint = if (queue.shuffleEnabled) lit else quiet)
             }
         }
@@ -932,7 +932,7 @@ private fun Transport(
             Icon(Icons.Default.SkipNext, "Next track", Modifier.size(buttonSize * .58f))
         }
         if (PlayerButton.REPEAT in shown) {
-            IconButton(state::cycleRepeat, Modifier.size(buttonSize)) {
+            IconButton(state::cycleRepeat, Modifier.size(buttonSize).litMark(queue.repeatMode != RepeatMode.OFF)) {
                 Icon(
                     if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
                     when (queue.repeatMode) {
@@ -1089,6 +1089,8 @@ internal fun PlayerBarStylePicker(selected: PlayerBarStyle, choose: (PlayerBarSt
 @Composable
 internal fun PlayerBarPicture(style: PlayerBarStyle, selected: Boolean, modifier: Modifier = Modifier) {
     val accent = MaterialTheme.colorScheme.primary
+    // What is written on the accent: the start button's label, which was white and vanished on a white accent.
+    val onAccent = MaterialTheme.colorScheme.onPrimary
     val writing = MaterialTheme.colorScheme.onSurface
     val lightPage = MaterialTheme.colorScheme.background.luminance() > .5f
     Canvas(modifier) {
@@ -1271,7 +1273,7 @@ internal fun PlayerBarPicture(style: PlayerBarStyle, selected: Boolean, modifier
                 val cy = top + h * .085f
                 // The start button at the left end, in the accent and written on.
                 drawRoundRect(accent.copy(alpha = if (selected) .9f else .6f), Offset(w * .02f, cy - h * .05f), Size(w * .14f, h * .1f), CornerRadius(h * .05f))
-                bar(w * .05f, cy, w * .07f, alpha = .85f, colour = Color.White)
+                bar(w * .05f, cy, w * .07f, alpha = .85f, colour = onAccent)
                 transport(w * .23f, cy, h * .06f, h * .032f)
                 // The song as the window in front: a button held in, with the cover and the title on it.
                 drawRoundRect(writing.copy(alpha = .12f), Offset(w * .31f, cy - h * .055f), Size(w * .28f, h * .11f), CornerRadius(h * .015f))

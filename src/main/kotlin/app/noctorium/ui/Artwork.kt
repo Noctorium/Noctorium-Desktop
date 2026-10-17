@@ -20,10 +20,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import app.noctorium.domain.ProviderType
+import app.noctorium.settings.ArtworkColour
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Image as SkiaImage
@@ -93,71 +94,101 @@ fun RemoteArtwork(
 /** Colours sampled from a cover, used to tint the Now Playing backdrop the way the artwork does. */
 data class ArtworkPalette(val primary: Color, val secondary: Color)
 
+/**
+ * What a cover's pixels were found to hold: [colour], the colour the cover is known by, as core's
+ * [ArtworkColour.of] finds it on every player; and [companion], the runner-up, for the far end of a backdrop's
+ * gradient. Both null for a cover with nothing vivid in it.
+ */
+internal data class ArtworkSample(val colour: Long?, val companion: Long?)
+
 private object PaletteCache {
-    val palettes = ConcurrentHashMap<String, ArtworkPalette>()
+    val samples = ConcurrentHashMap<String, ArtworkSample>()
 }
 
 /**
- * Pulls the two colours that carry a cover: the most common vivid hue, and a deeper companion for the far end
- * of the gradient. Washed-out and near-black pixels are ignored, since they describe the background of the
- * artwork rather than its character.
- *
- * [fallback] is what is answered while nothing has been sampled and for a track with no cover at all. It is
- * handed in rather than fixed because this is what "Match the artwork" follows, and a constant violet meant
- * that choosing it with nothing playing painted the interface Noctorium's own colour whatever theme was on.
- * The caller knows the theme; this does not.
+ * The colours a cover was found to hold, sampled once and kept by address; null with no cover, and until a new
+ * one has been sampled the last one stays, so a song changing eases from one colour to the next rather than
+ * flashing through the theme's.
  */
 @Composable
-fun rememberArtworkPalette(url: String?, provider: ProviderType, fallback: ArtworkPalette): ArtworkPalette {
-    val palette by produceState(
-        initialValue = url?.let { PaletteCache.palettes[it] } ?: fallback,
-        key1 = url,
-        key2 = fallback,
-    ) {
-        val key = url ?: run { value = fallback; return@produceState }
-        PaletteCache.palettes[key]?.let { value = it; return@produceState }
+private fun rememberArtworkSample(url: String?): ArtworkSample? {
+    val sample by produceState(initialValue = url?.let { PaletteCache.samples[it] }, key1 = url) {
+        val key = url ?: run { value = null; return@produceState }
+        PaletteCache.samples[key]?.let { value = it; return@produceState }
         // Hue sampling needs no detail, so a small decode is both enough and quick — and it means the backdrop
         // no longer waits for the full-size cover to arrive.
         val image = ArtworkLoader.cached(key) ?: ArtworkLoader.load(key, 128) ?: return@produceState
         value = withContext(Dispatchers.Default) {
-            runCatching { extractPalette(image, fallback) }.getOrDefault(fallback)
-        }.also { PaletteCache.palettes[key] = it }
+            runCatching { sampleArtwork(image) }.getOrDefault(ArtworkSample(null, null))
+        }.also { PaletteCache.samples[key] = it }
     }
-    return palette
+    return sample
 }
 
-private fun extractPalette(image: ImageBitmap, fallback: ArtworkPalette): ArtworkPalette {
-    val pixels = image.toPixelMap()
-    val step = maxOf(1, minOf(image.width, image.height) / 48)
-    // Twelve hue buckets is enough to separate "pink cover" from "teal cover" without chasing gradients.
-    val buckets = Array(12) { floatArrayOf(0f, 0f, 0f, 0f) }
-    var y = 0
-    while (y < image.height) {
-        var x = 0
-        while (x < image.width) {
-            val colour = pixels[x, y]
-            val max = maxOf(colour.red, colour.green, colour.blue)
-            val min = minOf(colour.red, colour.green, colour.blue)
-            val saturation = if (max <= 0f) 0f else (max - min) / max
-            if (max > 0.15f && max < 0.97f && saturation > 0.22f) {
-                val bucket = buckets[(hueOf(colour.red, colour.green, colour.blue) / 30f).toInt().coerceIn(0, 11)]
-                bucket[0] += colour.red
-                bucket[1] += colour.green
-                bucket[2] += colour.blue
-                bucket[3] += 1f
-            }
-            x += step
-        }
-        y += step
-    }
-    val ranked = buckets.filter { it[3] > 0f }.sortedByDescending { it[3] }
+/**
+ * The colour a cover is known by, as core's [ArtworkColour.of] finds it: what "Match the artwork" paints the
+ * accent and what Afterglow lights the page with, which are the same colour on every player because they are the
+ * same sums. Null with no cover, before it has been sampled, and for a cover with nothing vivid in it.
+ */
+@Composable
+fun rememberArtworkColour(url: String?): Long? = rememberArtworkSample(url)?.colour
+
+/**
+ * The two colours that carry a cover: the colour it is known by, and a deeper companion for the far end of the
+ * gradient -- the next most common vivid hue, or the first taken most of the way to black.
+ *
+ * [fallback] is what is answered while nothing has been sampled and for a track with no cover at all. It is
+ * handed in rather than fixed because a constant violet meant that a backdrop with nothing playing was
+ * Noctorium's own colour whatever theme was on. The caller knows the theme; this does not.
+ */
+@Composable
+fun rememberArtworkPalette(url: String?, provider: ProviderType, fallback: ArtworkPalette): ArtworkPalette {
+    val sample = rememberArtworkSample(url)
     // A cover with no colour in it at all -- a black-and-white photograph, a plain sleeve. The theme's
     // own colours are a better answer than a violet nobody chose.
-    if (ranked.isEmpty()) return fallback
-    val primary = ranked.first().let { Color(it[0] / it[3], it[1] / it[3], it[2] / it[3]) }
-    val secondary = ranked.getOrNull(1)?.let { Color(it[0] / it[3], it[1] / it[3], it[2] / it[3]) }
-        ?: Color(primary.red * .45f, primary.green * .45f, primary.blue * .45f)
+    val colour = sample?.colour ?: return fallback
+    val primary = Color(colour)
+    val secondary = sample.companion?.let(::Color) ?: Color(primary.red * .45f, primary.green * .45f, primary.blue * .45f)
     return ArtworkPalette(primary, secondary)
+}
+
+/** [image]'s colour as core finds it, and its runner-up. */
+internal fun sampleArtwork(image: ImageBitmap): ArtworkSample {
+    val pixels = IntArray(image.width * image.height)
+    image.readPixels(pixels)
+    return ArtworkSample(ArtworkColour.of(pixels, image.width, image.height), artworkCompanion(pixels, image.width, image.height))
+}
+
+/**
+ * The second most common vivid hue in a cover, counted as [ArtworkColour.of] counts the first: the same pixels,
+ * the same twelve hues, the same passing over of the nearly black, the nearly white and the washed out. Only the
+ * desktop's backdrops have a far end to colour, so the runner-up is counted here rather than in core; the colour
+ * that matters -- the one the accent and the glow agree on -- is core's.
+ */
+internal fun artworkCompanion(pixels: IntArray, width: Int, height: Int): Long? {
+    val step = maxOf(1, minOf(width, height) / 48)
+    // Twelve hue buckets is enough to separate "pink cover" from "teal cover" without chasing gradients.
+    val buckets = Array(12) { floatArrayOf(0f, 0f, 0f, 0f) }
+    for (y in 0 until height step step) {
+        for (x in 0 until width step step) {
+            val pixel = pixels[y * width + x]
+            val red = (pixel shr 16 and 0xFF) / 255f
+            val green = (pixel shr 8 and 0xFF) / 255f
+            val blue = (pixel and 0xFF) / 255f
+            val max = maxOf(red, green, blue)
+            val min = minOf(red, green, blue)
+            val saturation = if (max <= 0f) 0f else (max - min) / max
+            if (max > 0.15f && max < 0.97f && saturation > 0.22f) {
+                val bucket = buckets[(hueOf(red, green, blue) / 30f).toInt().coerceIn(0, 11)]
+                bucket[0] += red
+                bucket[1] += green
+                bucket[2] += blue
+                bucket[3] += 1f
+            }
+        }
+    }
+    val runnerUp = buckets.filter { it[3] > 0f }.sortedByDescending { it[3] }.getOrNull(1) ?: return null
+    return Color(runnerUp[0] / runnerUp[3], runnerUp[1] / runnerUp[3], runnerUp[2] / runnerUp[3]).toArgb().toLong() and 0xFFFFFFFFL
 }
 
 private fun hueOf(red: Float, green: Float, blue: Float): Float {

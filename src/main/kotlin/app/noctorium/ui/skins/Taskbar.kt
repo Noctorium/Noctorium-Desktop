@@ -85,6 +85,7 @@ import app.noctorium.ui.DevicesButton
 import app.noctorium.ui.LikeButton
 import app.noctorium.ui.LocalInGlass
 import app.noctorium.ui.PlayPauseIcon
+import app.noctorium.ui.litMark
 import app.noctorium.ui.PlaybackProgressBar
 import app.noctorium.ui.RemoteArtwork
 import app.noctorium.ui.SongMenuArea
@@ -480,12 +481,12 @@ private fun TrayIcons(skin: ThemeSkin, queue: QueueState, playback: PlaybackStat
     val quiet = LocalContentColor.current.copy(alpha = if (skin.isWindows) 1f else .7f)
     if (PlayerButton.LIKE in shown && current != null) LikeButton(current, state, size = button)
     if (PlayerButton.SHUFFLE in shown) {
-        IconButton(state::toggleShuffle, Modifier.size(button)) {
+        IconButton(state::toggleShuffle, Modifier.size(button).litMark(queue.shuffleEnabled)) {
             Icon(Icons.Default.Shuffle, "Shuffle", Modifier.size(icon), tint = if (queue.shuffleEnabled) lit else quiet)
         }
     }
     if (PlayerButton.REPEAT in shown) {
-        IconButton(state::cycleRepeat, Modifier.size(button)) {
+        IconButton(state::cycleRepeat, Modifier.size(button).litMark(queue.repeatMode != RepeatMode.OFF)) {
             Icon(
                 if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
                 "Repeat",

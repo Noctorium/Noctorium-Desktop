@@ -6,12 +6,18 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import app.noctorium.settings.FontChoice
 import app.noctorium.settings.ThemeColours
 import app.noctorium.settings.ThemePreset
+import app.noctorium.settings.onAccent
 
 /** Noctorium's own violet, for the places that are the brand rather than the theme: the mark, the icon. */
 val NoctoriumPurpleStrong = Color(0xFF8B5CF6)
@@ -59,8 +65,8 @@ fun noctoriumColorScheme(theme: ThemeColours, accent: Color): ColorScheme {
     val card = Color(theme.card)
     val text = Color(theme.text)
     val subtext = Color(theme.subtext)
-    // Writing on the accent itself: dark on a bright accent, light on a deep one.
-    val onAccent = if (accent.luminance() > .35f) accent.mix(Color.Black, .84f) else Color.White
+    // Writing on the accent itself, as every player works it out: dark on a bright accent, white on a deep one.
+    val onAccent = accent.onAccent()
     val error = if (theme.light) Color(0xFFB3261E) else Color(0xFFFF6B81)
     val errorContainer = if (theme.light) Color(0xFFFFDAD6) else Color(0xFF3D0713)
     val scheme = if (theme.light) ::lightColorScheme else ::darkColorScheme
@@ -103,6 +109,67 @@ fun noctoriumColorScheme(theme: ThemeColours, accent: Color): ColorScheme {
         /* surfaceContainerLowest = */ background,
     )
 }
+
+/**
+ * The colour of writing and icons laid on this accent: core's [onAccent], which the phone, the web and the
+ * terminal take as well.
+ *
+ * It was worked out here, inline, with the same sums, so nothing written on an accent Noctorium already had
+ * changes. It matters now because three of the Glow themes have a white accent, and anything that still wrote
+ * white on the accent wrote nothing at all.
+ */
+fun Color.onAccent(): Color = Color(onAccent(toArgb().toLong() and 0xFFFFFFFFL))
+
+/**
+ * Whether this accent has no colour to speak of: a white, a grey or a black, as Afterglow's, Velvet's and
+ * Smoke's white is. Saturation, as a hue wheel has it, under [PLAIN_ACCENT_SATURATION].
+ */
+internal fun Color.isPlainAccent(): Boolean {
+    val brightest = maxOf(red, green, blue)
+    val darkest = minOf(red, green, blue)
+    return brightest <= 0f || (brightest - darkest) / brightest < PLAIN_ACCENT_SATURATION
+}
+
+/**
+ * Below this, an accent reads as a white or a grey rather than as a colour. The palest accent a theme shipped
+ * with before the Glow themes, Rosé Pine's, is near twice it, and a cover's colour is never under it, since
+ * "Match the artwork" only ever takes a vivid one.
+ */
+internal const val PLAIN_ACCENT_SATURATION = .15f
+
+/**
+ * Whether the accent in force is plain -- see [isPlainAccent] -- and so cannot be told from the writing beside
+ * it by its colour.
+ *
+ * Much of what is on, chosen or playing in Noctorium was shown by the accent against the writing: a lit shuffle
+ * button against the quiet ones beside it. A white accent beside near-white writing leaves that a brighter grey
+ * against a grey, so where the accent was the only sign, this asks for a second one, and an accent with a
+ * colour, which never needed it, does not get it.
+ */
+@Composable
+@ReadOnlyComposable
+fun plainAccent(): Boolean = MaterialTheme.colorScheme.primary.isPlainAccent()
+
+/**
+ * A dot under a toggle that is on -- shuffle, repeat, Devices -- while the accent in force is [plainAccent].
+ *
+ * The music players that draw their controls white mark a lit one the same way, and it needs no explaining.
+ * Nothing is drawn under an accent with a colour, which says it already.
+ */
+@Composable
+fun Modifier.litMark(lit: Boolean): Modifier {
+    if (!lit || !plainAccent()) return this
+    val colour = MaterialTheme.colorScheme.primary
+    return drawWithContent {
+        drawContent()
+        val radius = LIT_MARK_RADIUS.dp.toPx()
+        drawCircle(colour, radius, Offset(size.width / 2f, size.height - radius - LIT_MARK_INSET.dp.toPx()))
+    }
+}
+
+/** The lit dot's size, and how far it sits above the foot of its button. */
+private const val LIT_MARK_RADIUS = 1.75f
+private const val LIT_MARK_INSET = 1.5f
 
 /** The typeface a [FontChoice] means here, or null for the system's own, which is what Material uses unasked. */
 fun FontChoice.fontFamily(): FontFamily? = when (this) {

@@ -261,6 +261,9 @@ private fun DrawScope.drawGlassFace(radius: Float, tint: Color) {
  * Not glass itself, and not trying to be. It is what the page is made of, so that what scrolls beneath
  * the panes carries the colour of the record. Toward the background rather than toward black, which
  * leaves a light theme with a bruise on it. With nothing playing there is no wash, only the page.
+ *
+ * A Glow theme's page is its light, here as everywhere else, and the wash would only hide it -- as on the now
+ * playing screen, where the wash gives way to it too. Afterglow's light is the colour of the record already.
  */
 @Composable
 fun GlassWash(
@@ -269,6 +272,10 @@ fun GlassWash(
     background: Color,
     modifier: Modifier = Modifier,
 ) {
+    if (LocalPageGlow.current != null) {
+        Box(modifier.fillMaxSize().background(background).pageGlow())
+        return
+    }
     val palette = rememberArtworkPalette(artworkUrl, provider, fallback = ArtworkPalette(background, background))
     val near by animateColorAsState(palette.primary.mix(background, Glass.BACKDROP_TOWARD_BACKGROUND), tween(700), label = "washNear")
     val far by animateColorAsState(palette.secondary.mix(background, Glass.BACKDROP_TOWARD_BACKGROUND), tween(700), label = "washFar")

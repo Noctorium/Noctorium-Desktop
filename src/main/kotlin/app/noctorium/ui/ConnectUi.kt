@@ -121,7 +121,7 @@ internal fun DevicesButton(
     val connect by state.connect.collectAsState()
     if (!devicesButtonShown(connect)) return
     val lit = connect.target != null || connect.controlledBy != null
-    IconButton({ state.navigate(Destination.CONNECT) }, modifier) {
+    IconButton({ state.navigate(Destination.CONNECT) }, modifier.litMark(lit)) {
         Icon(
             Icons.Default.Devices,
             devicesButtonLabel(connect),

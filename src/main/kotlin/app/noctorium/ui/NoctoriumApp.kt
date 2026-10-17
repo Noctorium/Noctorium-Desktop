@@ -54,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -64,7 +65,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
@@ -203,22 +203,22 @@ fun NoctoriumApp(
     }
 
     // The theme decides the page, the panels and the writing; the accent is chosen separately and may be
-    // the theme's own, one of the named ones, or -- "Match the artwork" -- the palette already sampled
-    // for the now playing backdrop, so the whole interface drifts with whatever is on.
+    // the theme's own, one of the named ones, or -- "Match the artwork" -- the colour of the cover playing,
+    // so the whole interface drifts with whatever is on.
     val theme = preferences.themeColours()
-    // Nothing playing, or a cover with no colour in it, leaves the theme's own accent in force rather
-    // than a fixed violet: "Match the artwork" should never paint a Gruvbox window lilac.
-    val artworkPalette = rememberArtworkPalette(
-        queue.current?.artworkUrl,
-        queue.current?.provider ?: ProviderType.LOCAL,
-        fallback = ArtworkPalette(Color(theme.accent), Color(theme.card)),
-    )
+    // The cover's colour as core finds it, which the accent and Afterglow's light both take, so the two agree.
+    // Nothing playing, or a cover with no colour in it, leaves the theme's own accent in force rather than a
+    // fixed violet: "Match the artwork" should never paint a Gruvbox window lilac.
+    val artworkColour = rememberArtworkColour(queue.current?.artworkUrl)
     // A colour being dragged to in the accent picker wins while the pointer is down, and is followed at once
     // rather than eased towards: easing would leave the window trailing behind the pointer.
     val previewAccent = accentPreview.value
-    val accentTarget = previewAccent
-        ?: if (preferences.accent == AccentPreset.ARTWORK) artworkPalette.primary else Color(preferences.resolvedAccent(null))
+    val accentTarget = previewAccent ?: Color(preferences.resolvedAccent(artworkColour))
     val accent by animateColorAsState(accentTarget, if (previewAccent != null) snap() else tween(600), label = "accent")
+    // A Glow theme's light, in the cover's colour for Afterglow and eased from one song's to the next as the
+    // accent is, or the light would jump while everything else glides.
+    val glow = preferences.themeGlow
+    val glowColour by animateColorAsState(Color(glow?.resolvedColour(artworkColour) ?: 0xFF000000L), tween(600), label = "glow")
     // Beyond the colours: 98's bevels and Luna's blue, for the Windows themes, and nothing for the rest -- and the
     // colours the 98 skin draws them in, 98's own grey or Noctorium 98's night.
     val skin = preferences.themeSkin
@@ -339,6 +339,7 @@ fun NoctoriumApp(
           LocalIconSet provides preferences.iconSet.onDesktop(),
           LocalServiceBadgeStyle provides preferences.serviceBadgeStyle,
           LocalGlobalShortcuts provides desktop.globalShortcuts,
+          LocalPageGlow provides glow?.let { PageGlow(it, glowColour) },
       ) {
         if (shortcutsOpen) ShortcutsSheet(shortcuts) { shortcutsOpen = false }
         if (quickSearchOpen) {
@@ -360,7 +361,9 @@ fun NoctoriumApp(
                 .focusable()
                 .onKeyEvent(::handle),
         ) {
-            Row {
+            // A Glow theme's light on the page, under everything on it: the sidebar and the player bar are drawn
+            // in the page's colour over it and stay dark, the screens leave it showing between what they hold.
+            Row(Modifier.pageGlow()) {
                 if (skin.isWindows) {
                     SkinRail(ui.destination, preferences.desktop.hiddenDestinations, queue.current, appState::navigate)
                 } else {
@@ -1141,7 +1144,7 @@ internal fun localPlaylistLine(playlist: LocalPlaylist): String {
 
 @Composable
 private fun LocalPlaylistRow(playlist: LocalPlaylist, state: AppState, open: () -> Unit) {
-    ListRow(onClick = open, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(13.dp)) {
+    ListRow(onClick = open, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f).solidOnGlow(), shape = RoundedCornerShape(13.dp)) {
         Row(Modifier.fillMaxWidth().padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.size(52.dp).clip(skinShape(RoundedCornerShape(9.dp)))
@@ -1441,7 +1444,7 @@ private fun ImportLinkDialog(finish: (String?) -> Unit) {
 private fun SoundCloudNamePrompt(state: AppState) {
     var username by remember { mutableStateOf("") }
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f).solidOnGlow(),
         shape = RoundedCornerShape(14.dp),
         modifier = Modifier.widthIn(max = 620.dp),
     ) {
@@ -1485,7 +1488,7 @@ private fun SoundCloudNamePrompt(state: AppState) {
 
 @Composable
 private fun PlaylistRow(playlist: Playlist, open: () -> Unit) {
-    ListRow(onClick = open, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(13.dp)) {
+    ListRow(onClick = open, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f).solidOnGlow(), shape = RoundedCornerShape(13.dp)) {
         Row(Modifier.fillMaxWidth().padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(52.dp).clip(skinShape(RoundedCornerShape(9.dp))), contentAlignment = Alignment.Center) {
                 if (playlist.artworkUrl != null) {
@@ -1897,7 +1900,7 @@ private fun SearchModePicker(selected: SearchMode, select: (SearchMode) -> Unit)
 private fun TrackRow(track: Track, sourceQueue: List<Track>, state: AppState, fromSearch: Boolean = false) {
     ListRow(
         onClick = { if (fromSearch) state.playFromSearch(track, sourceQueue) else state.play(track, PlaybackOrigin.SEARCH, sourceQueue) },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .36f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .36f).solidOnGlow(),
         shape = RoundedCornerShape(12.dp),
     ) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -2233,7 +2236,7 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (PlayerButton.SHUFFLE in shown) {
-                        IconButton(state::toggleShuffle, Modifier.size(34.dp)) {
+                        IconButton(state::toggleShuffle, Modifier.size(34.dp).litMark(queue.shuffleEnabled)) {
                             Icon(
                                 Icons.Default.Shuffle,
                                 "Shuffle",
@@ -2268,7 +2271,7 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                         Icon(Icons.Default.SkipNext, "Next track", Modifier.size(20.dp))
                     }
                     if (PlayerButton.REPEAT in shown) {
-                        IconButton(state::cycleRepeat, Modifier.size(34.dp)) {
+                        IconButton(state::cycleRepeat, Modifier.size(34.dp).litMark(queue.repeatMode != RepeatMode.OFF)) {
                             Icon(
                                 if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
                                 "Repeat",
@@ -2486,7 +2489,7 @@ private fun PlayerBarLayout(queue: QueueState, playback: PlaybackState, state: A
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (PlayerButton.SHUFFLE in shown) {
-                            IconButton(state::toggleShuffle, Modifier.size(36.dp)) {
+                            IconButton(state::toggleShuffle, Modifier.size(36.dp).litMark(queue.shuffleEnabled)) {
                                 Icon(
                                     Icons.Default.Shuffle,
                                     "Shuffle",
@@ -2518,7 +2521,7 @@ private fun PlayerBarLayout(queue: QueueState, playback: PlaybackState, state: A
                             Icon(Icons.Default.SkipNext, "Next track")
                         }
                         if (PlayerButton.REPEAT in shown) {
-                            IconButton(state::cycleRepeat, Modifier.size(36.dp)) {
+                            IconButton(state::cycleRepeat, Modifier.size(36.dp).litMark(queue.repeatMode != RepeatMode.OFF)) {
                                 Icon(
                                     if (queue.repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
                                     when (queue.repeatMode) {
@@ -2711,6 +2714,9 @@ private fun NowPlayingArranged(
 /**
  * Translucent rounded container that lets the ambient backdrop show through; under a Windows skin a window on
  * the desktop, titled [title].
+ *
+ * On a Glow theme the light is the backdrop, and the lyrics are set straight on it, as the look the themes came
+ * from has them: no veil of grey over the light, only the panel's edge.
  */
 @Composable
 private fun GlassPanel(modifier: Modifier = Modifier, title: String = "Noctorium", content: @Composable BoxScope.() -> Unit) {
@@ -2721,7 +2727,7 @@ private fun GlassPanel(modifier: Modifier = Modifier, title: String = "Noctorium
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(22.dp),
-        color = ink(.055f),
+        color = if (LocalPageGlow.current != null) Color.Transparent else ink(.055f),
         border = BorderStroke(1.dp, ink(.08f)),
         content = { Box(Modifier.fillMaxSize(), content = content) },
     )
@@ -3739,7 +3745,7 @@ private fun QueueTrackRow(track: Track, index: Int, queue: QueueState, state: Ap
     val playing = index == queue.currentIndex
     ListRow(
         onClick = { state.jumpToQueueItem(index) },
-        color = if (playing) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .58f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .28f),
+        color = (if (playing) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .58f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .28f)).solidOnGlow(),
         shape = RoundedCornerShape(12.dp),
         selected = playing,
     ) {
@@ -4196,7 +4202,8 @@ internal fun ThemeSettingsPanel(preferences: NoctoriumPreferences, state: AppSta
             CardHeading(Icons.Default.Palette, "Theme")
             Spacer(Modifier.height(6.dp))
             Text(
-                "Noctorium's own, and the palettes you may already know from your editor and terminal. " +
+                "Noctorium's own; the Glow themes, near-black lit by a soft light, Afterglow's in the colour of the " +
+                    "cover playing; and the palettes you may already know from your editor and terminal. " +
                     "The desktop and the phone share the choice.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
@@ -4464,6 +4471,9 @@ internal fun BrowsingSettingsCard(preferences: NoctoriumPreferences, state: AppS
     }
 }
 
+/** What Plain is on a Glow theme, where it is also what the colour wash becomes. */
+private const val GLOW_BACKDROP = "The theme's own background and its light, which on a Glow theme takes the colour wash's place."
+
 /** The now playing screen: its layout, the cover, what is behind it and what sits beside it. */
 @Composable
 internal fun NowPlayingSettingsCard(preferences: NoctoriumPreferences, state: AppState) {
@@ -4497,7 +4507,13 @@ internal fun NowPlayingSettingsCard(preferences: NoctoriumPreferences, state: Ap
         Spacer(Modifier.height(16.dp))
         ChoiceRow("Backdrop", NowPlayingBackdrop.entries, backdrop, { it.displayName }, state::setNowPlayingBackdrop)
         Spacer(Modifier.height(6.dp))
-        Text(backdrop.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+        // On a Glow theme the wash gives way to the theme's own light, so Plain is drawn whichever of the two was
+        // chosen. Said here, or choosing the wash would seem to do nothing.
+        Text(
+            if (preferences.themeGlow != null && backdrop == NowPlayingBackdrop.PLAIN) GLOW_BACKDROP else backdrop.description,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
         Spacer(Modifier.height(16.dp))
         ChoiceRow("Panel width", NowPlayingPanelWidth.entries, look.panelWidth, { it.displayName }) { width ->
             state.updateNowPlaying { copy(panelWidth = width) }
@@ -4632,7 +4648,10 @@ internal fun ToggleRow(title: String, description: String, checked: Boolean, ena
 @Composable
 private fun ThemeSwatch(preset: ThemePreset, colours: ThemeColours, selected: Boolean, choose: () -> Unit) {
     // A miniature of the theme itself: the page, a card on it, a line of writing and the accent. The name
-    // underneath is for the ones that look alike at this size.
+    // underneath is for the ones that look alike at this size. A Glow theme's page has its light on it, laid out
+    // on the miniature as on the window -- Afterglow's in the red it has until a cover gives it another -- since
+    // the light is most of what tells those four apart.
+    val glow = preset.glow?.let { PageGlow(it, Color(it.colour)) }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(84.dp)) {
         Surface(
             onClick = choose,
@@ -4644,7 +4663,10 @@ private fun ThemeSwatch(preset: ThemePreset, colours: ThemeColours, selected: Bo
             ),
             modifier = Modifier.size(84.dp, 56.dp),
         ) {
-            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Column(
+                Modifier.drawBehind { if (glow != null) drawGlow(glow) }.padding(8.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
                 Box(
                     Modifier.fillMaxWidth().height(18.dp).clip(RoundedCornerShape(5.dp)).background(Color(colours.card)),
                     contentAlignment = Alignment.CenterStart,
@@ -4762,7 +4784,9 @@ private fun AccentSwatch(option: AccentPreset, themeAccent: Color, customAccent:
                         Icons.Default.Colorize,
                         "Your own colour",
                         Modifier.size(14.dp),
-                        tint = if (colour.luminance() > .45f) Color.Black.copy(alpha = .7f) else Color.White,
+                        // Written on the colour as anything on an accent is, so a pale one of your own has a
+                        // dark dropper on it and a white one is not a white circle.
+                        tint = colour.onAccent(),
                     )
                 }
             } else {
@@ -6341,7 +6365,8 @@ internal fun SettingsPanelCard(content: @Composable ColumnScope.() -> Unit) {
         SettingsGroup(content)
         return
     }
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f), shape = RoundedCornerShape(16.dp), modifier = Modifier.widthIn(max = 720.dp)) {
+    // Solid on a Glow theme, as a card is: the light is the page's, round the cards rather than through them.
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .42f).solidOnGlow(), shape = RoundedCornerShape(16.dp), modifier = Modifier.widthIn(max = 720.dp)) {
         Column(Modifier.fillMaxWidth().padding(22.dp), content = content)
     }
 }

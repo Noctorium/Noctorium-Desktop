@@ -140,6 +140,15 @@ class SettingsIndexTest {
     }
 
     @Test
+    fun `the Glow themes are found by their names, the family's, and the black they are`() {
+        listOf("glow", "afterglow", "cinder", "velvet", "smoke").forEach { word ->
+            assertEquals("Theme", first(word).entry.title, "\"$word\" does not find the themes first")
+        }
+        // After Backdrop, whose name "black" begins with a letter forgiven, which the search puts before a word.
+        assertTrue(SettingsIndex.search("black").any { it.setting.entry.title == "Theme" }, "\"black\" does not find the themes")
+    }
+
+    @Test
     fun `a name is found before a description, and a typo in a long word is forgiven`() {
         val found = SettingsIndex.search("autoplay")
         assertEquals("Autoplay", found.first().setting.entry.title)

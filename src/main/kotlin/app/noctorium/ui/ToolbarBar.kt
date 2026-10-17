@@ -255,7 +255,7 @@ private fun ToolbarButton(
         }
         return
     }
-    IconButton(onClick, Modifier.size(size), enabled = enabled) {
+    IconButton(onClick, Modifier.size(size).litMark(lit), enabled = enabled) {
         picture?.invoke() ?: Icon(icon, description, Modifier.size(glyph), tint = if (lit) MaterialTheme.colorScheme.primary else LocalContentColor.current)
     }
 }

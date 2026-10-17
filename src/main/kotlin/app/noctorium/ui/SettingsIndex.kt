@@ -136,10 +136,11 @@ internal object SettingsIndex {
 
         page(SettingsPage.THEME) {
             setting(
-                "Theme", "Noctorium's own palettes, your editor's and terminal's favourites, and Windows 98 and XP.",
+                "Theme", "Noctorium's own palettes, the Glow themes' lit black, your editor's and terminal's favourites, " +
+                    "and Windows 98 and XP.",
                 "dark mode", "light mode", "night mode", "dark theme", "light theme", "colour scheme", "color scheme", "colours",
                 "colors", "palette", "skin", "appearance", "look", "catppuccin", "dracula", "nord", "gruvbox", "tokyo night",
-                "windows 98", "windows xp", "retro", "classic",
+                "windows 98", "windows xp", "retro", "classic", "glow", "afterglow", "cinder", "velvet", "smoke", "black",
             )
             setting(
                 "Your own colours", "Six colours of your own, for the Custom theme: the page, the panels, the writing and the accent.",

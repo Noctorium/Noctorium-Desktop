@@ -641,7 +641,7 @@ private fun SettingsTile(page: SettingsPage, settings: SettingsState, state: App
         ControlPanelItem(text.title, text.subtitle, page.icon(), action, text.active)
         return
     }
-    Surface(onClick = action, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .5f), shape = RoundedCornerShape(15.dp), modifier = Modifier.fillMaxSize()) {
+    Surface(onClick = action, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .5f).solidOnGlow(), shape = RoundedCornerShape(15.dp), modifier = Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(page.icon(), null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(15.dp))
