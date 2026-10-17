@@ -455,7 +455,7 @@ internal object SettingsIndex {
             )
             setting(
                 "Widget looks", "Seven of them, each at its own address to copy into OBS: Glass, Minimal, Vinyl, Neon, Ticker, Afterglow and Windows 98.",
-                "widget themes", "widget styles", "glass", "vinyl", "neon", "ticker", "afterglow", "windows 98 widget", "default look",
+                "widget themes", "widget styles", "glass", "vinyl", "neon", "ticker", "afterglow", "afterglow widget", "windows 98 widget", "default look",
                 "copy address", "widget address", "url", "obs size", "width and height",
             )
             setting(

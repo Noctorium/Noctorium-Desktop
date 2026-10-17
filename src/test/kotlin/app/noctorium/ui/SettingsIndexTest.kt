@@ -269,7 +269,9 @@ class SettingsIndexTest {
         assertEquals("Adding it to OBS", first("refresh browser when scene becomes active").entry.title)
         assertEquals(STREAM_WIDGET_PORT, first("widget port").anchor)
         assertEquals(STREAM_WIDGET_OVERRIDES, first("url parameters").anchor)
-        assertEquals("Widget looks", first("afterglow").entry.title)
+        // Afterglow is a theme as well as a widget look, and the theme is what most people mean by the word alone.
+        assertEquals(SettingsPage.THEME, first("afterglow").page)
+        assertEquals("Widget looks", first("afterglow widget").entry.title)
         assertEquals("Allow other devices on the network", first("second pc").entry.title)
         // Its options say what they are without taking words the other pages are found by.
         assertEquals("Seek bar", first("progress bar").entry.title)
