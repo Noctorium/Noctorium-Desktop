@@ -24,6 +24,23 @@ class DesktopBridge : SystemBridge {
      */
     override fun openUrl(url: String) {
         require(url.startsWith("https://")) { "Only secure links can be opened" }
+        browse(url)
+    }
+
+    /**
+     * Opens a page Noctorium serves from this computer itself -- a stream widget -- in the browser, and throws when
+     * nothing did.
+     *
+     * [openUrl] takes secure links only, and rightly, since everything it opens is somewhere on the web. A page served
+     * from this computer is never https, and is not on the web either, so it comes here instead -- and only an address
+     * on 127.0.0.1 does, so that this is no way round that rule for anywhere else.
+     */
+    fun openOwnPage(url: String) {
+        require(url.startsWith("http://127.0.0.1:")) { "Only Noctorium's own pages on this computer open this way" }
+        browse(url)
+    }
+
+    private fun browse(url: String) {
         val os = System.getProperty("os.name").orEmpty()
         val linux = !os.startsWith("Windows", ignoreCase = true) && !os.startsWith("Mac", ignoreCase = true)
         if (linux && LinuxLinks.open(url)) return
