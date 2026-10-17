@@ -441,6 +441,54 @@ internal object SettingsIndex {
             setting("Hide what I am listening to", "Replaces every line with one fixed message and drops the cover and buttons.", "private", "privacy", "incognito", "hide song")
         }
 
+        page(SettingsPage.STREAM_WIDGETS) {
+            // Found by what a streamer calls it -- an overlay, a browser source -- and by the programs it goes into.
+            setting(
+                "Stream widgets", "What Noctorium is playing, over your stream: a page on this computer that OBS or Streamlabs shows as a browser source.",
+                "obs", "obs studio", "streamlabs", "streamlabs obs", "slobs", "widget", "overlay", "stream overlay", "browser source",
+                "now playing overlay", "now playing widget", "song overlay", "twitch", "kick", "streaming", "streamer", "live stream",
+                "going live", "on stream", anchor = null,
+            )
+            setting(
+                STREAM_WIDGETS_SWITCH, "Switches the stream widgets on: a small server on this computer for OBS to read. Off until you switch it on.",
+                "enable widgets", "turn on widgets", "widgets on", "start widgets", "server",
+            )
+            setting(
+                "Widget looks", "Seven of them, each at its own address to copy into OBS: Glass, Minimal, Vinyl, Neon, Ticker, Afterglow and Windows 98.",
+                "widget themes", "widget styles", "glass", "vinyl", "neon", "ticker", "afterglow", "windows 98 widget", "default look",
+                "copy address", "widget address", "url", "obs size", "width and height",
+            )
+            setting(
+                "What the widgets show", "The cover, how far into the song, the service it comes from, and hiding while the music is paused.",
+                "widget options",
+            )
+            setting("Show the cover", "The song's cover in a widget, in the looks with room for one.", "widget cover", "widget artwork")
+            setting("Show how far into the song", "A thin bar of the song's progress in a widget.", "widget progress bar", "widget progress")
+            setting(
+                "Show the service it comes from", "The service's logo in a widget: Spotify's for a Spotify song.",
+                "widget logo", "service logo", "spotify logo",
+            )
+            setting("Hide while paused", "A widget fades away once the music has been paused, and comes back with it.", "widget paused", "hide widget")
+            setting(STREAM_WIDGET_HIDE_AFTER, "How long the music is paused before a widget hides: from a second to a minute.", "hide after", "seconds", "delay", "timeout")
+            setting("Where they are served", "The port the widgets are on, and whether another computer on the network can open them.", "widget server")
+            setting(
+                STREAM_WIDGET_PORT, "The port the widgets are served on, 4851 unless another program on this computer has it.",
+                "widget port", "port in use", "4851", "address in use",
+            )
+            setting(
+                "Allow other devices on the network", "For a second computer that does the streaming, on the same network. Off until switched on.",
+                "second pc", "two pc", "dual pc", "streaming pc", "lan", "other computer", "firewall",
+            )
+            setting(
+                "Adding it to OBS", "Sources, then +, then Browser; the address, the size, and refreshing when the scene becomes active.",
+                "obs setup", "add browser source", "refresh browser when scene becomes active", "streamlabs browser source", "how to",
+            )
+            setting(
+                STREAM_WIDGET_OVERRIDES, "Settings for one widget alone, in its address: ?cover=0, ?accent=ff3366, ?align=left and the rest.",
+                "url parameters", "query", "per widget", "accent", "align", "two widgets", "cover=0",
+            )
+        }
+
         page(SettingsPage.STARTUP) {
             setting("Closing the window", "What the close button does.", "close", "exit", "quit")
             setting(

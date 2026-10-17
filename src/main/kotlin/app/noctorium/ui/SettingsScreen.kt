@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.WarningAmber
 import app.noctorium.ui.icons.Icon
 import androidx.compose.material3.MaterialTheme
@@ -84,6 +85,7 @@ import app.noctorium.settings.AccountConnectionStatus
 import app.noctorium.settings.ScrobbleConnectionStatus
 import app.noctorium.settings.SettingsState
 import app.noctorium.settings.nowPlayingBackdrop
+import app.noctorium.widgets.StreamWidgetStatus
 import app.noctorium.ui.skins.BrowsingPane
 import app.noctorium.ui.skins.ControlPanelItem
 import app.noctorium.ui.skins.HeadingRule
@@ -143,6 +145,7 @@ internal enum class SettingsPage(val title: String, val section: SettingsSection
     TIDAL("Tidal", SettingsSection.SERVICES),
     SCROBBLING("Scrobbling", SettingsSection.SERVICES),
     DISCORD("Discord Rich Presence", SettingsSection.SERVICES),
+    STREAM_WIDGETS("Stream widgets", SettingsSection.SERVICES),
     STARTUP("Startup and tray", SettingsSection.DEVICE),
     SHORTCUTS("Keyboard shortcuts", SettingsSection.DEVICE),
     DOWNLOADS("Saving music", SettingsSection.DEVICE),
@@ -346,6 +349,7 @@ private fun SettingsPagePanel(page: SettingsPage, settings: SettingsState, state
         SettingsPage.TIDAL -> TidalSettingsPanel(settings, state)
         SettingsPage.SCROBBLING -> ScrobblingSettingsPanel(settings, state)
         SettingsPage.DISCORD -> DiscordSettingsPanel(settings.preferences, state)
+        SettingsPage.STREAM_WIDGETS -> StreamWidgetsSettingsPanel(settings.preferences.streamWidgets, state)
         SettingsPage.STARTUP -> StartupSettingsPanel(settings.preferences, state)
         SettingsPage.SHORTCUTS -> ShortcutsSettingsPanel(settings.preferences, state)
         SettingsPage.DOWNLOADS -> SettingsPageColumn { SettingsPanelCard { SaveMusicSetting(settings.preferences, state, boxed = true) } }
@@ -505,6 +509,7 @@ internal fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.TIDAL -> Icons.Default.Radio
     SettingsPage.SCROBBLING -> Icons.Default.History
     SettingsPage.DISCORD -> Icons.Default.SportsEsports
+    SettingsPage.STREAM_WIDGETS -> Icons.Default.Tv
     SettingsPage.STARTUP -> Icons.Default.PowerSettingsNew
     SettingsPage.SHORTCUTS -> Icons.Default.Keyboard
     SettingsPage.DOWNLOADS -> Icons.Default.SaveAlt
@@ -593,6 +598,12 @@ private fun tileText(page: SettingsPage, settings: SettingsState, state: AppStat
             // from an older build, which is never written and so always said Disabled however it was set.
             val discord = preferences.discord
             TileText(page.title, if (discord.enabled) "Enabled · ${discord.timestamps.displayName}" else "Disabled", discord.enabled)
+        }
+        SettingsPage.STREAM_WIDGETS -> {
+            // What the server is doing, not only the switch: on, but unable to start, is not the same as on.
+            val status by state.streamWidgets.collectAsState()
+            val widgets = preferences.streamWidgets
+            TileText(page.title, streamWidgetsSummary(widgets, status), widgets.enabled && status is StreamWidgetStatus.Running)
         }
         SettingsPage.STARTUP -> TileText(page.title, startupSubtitle(preferences))
         SettingsPage.SHORTCUTS -> TileText(page.title, shortcutsSubtitle(preferences.desktop.shortcuts), preferences.desktop.shortcuts.globalEnabled)

@@ -256,4 +256,24 @@ class SettingsIndexTest {
         first("discoverable").openWith({ page, anchor -> opened = page to anchor }, { went = null })
         assertEquals(SettingsPage.ACCOUNT to "Noctorium Connect", opened)
     }
+
+    @Test
+    fun `what a streamer types finds the stream widgets, and what they share words with is found as before`() {
+        listOf("stream", "obs", "streamlabs", "widget", "overlay", "browser source", "now playing overlay", "twitch").forEach { query ->
+            assertEquals(SettingsPage.STREAM_WIDGETS, first(query).page, query)
+        }
+        // The page itself for its name, at its top.
+        assertEquals("Stream widgets", first("stream").entry.title)
+        assertEquals(null, first("stream widgets").anchor)
+        assertEquals("Adding it to OBS", first("obs").entry.title)
+        assertEquals("Adding it to OBS", first("refresh browser when scene becomes active").entry.title)
+        assertEquals(STREAM_WIDGET_PORT, first("widget port").anchor)
+        assertEquals(STREAM_WIDGET_OVERRIDES, first("url parameters").anchor)
+        assertEquals("Widget looks", first("afterglow").entry.title)
+        assertEquals("Allow other devices on the network", first("second pc").entry.title)
+        // Its options say what they are without taking words the other pages are found by.
+        assertEquals("Seek bar", first("progress bar").entry.title)
+        assertEquals("Cover", first("cover").entry.title)
+        assertEquals(SettingsPage.THEME, first("windows 98").page)
+    }
 }
