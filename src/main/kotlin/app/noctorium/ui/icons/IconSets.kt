@@ -352,6 +352,15 @@ internal val ICON_VARIANTS: Map<String, IconVariants> = listOf(
         "cloud",
     ),
     v(
+        "Filled.CloudDone",
+        { Icons.Filled.CloudDone },
+        { Icons.Outlined.CloudDone },
+        { Icons.Rounded.CloudDone },
+        { Icons.Sharp.CloudDone },
+        { Icons.TwoTone.CloudDone },
+        "cloud",
+    ),
+    v(
         "Filled.CloudOff",
         { Icons.Filled.CloudOff },
         { Icons.Outlined.CloudOff },
@@ -368,6 +377,15 @@ internal val ICON_VARIANTS: Map<String, IconVariants> = listOf(
         { Icons.Sharp.CloudUpload },
         { Icons.TwoTone.CloudUpload },
         "cloud-upload",
+    ),
+    v(
+        "Filled.CloudSync",
+        { Icons.Filled.CloudSync },
+        { Icons.Outlined.CloudSync },
+        { Icons.Rounded.CloudSync },
+        { Icons.Sharp.CloudSync },
+        { Icons.TwoTone.CloudSync },
+        "cloud",
     ),
     v(
         "Filled.Colorize",
@@ -539,6 +557,15 @@ internal val ICON_VARIANTS: Map<String, IconVariants> = listOf(
         { Icons.Sharp.FavoriteBorder },
         { Icons.TwoTone.FavoriteBorder },
         "heart",
+    ),
+    v(
+        "Filled.Folder",
+        { Icons.Filled.Folder },
+        { Icons.Outlined.Folder },
+        { Icons.Rounded.Folder },
+        { Icons.Sharp.Folder },
+        { Icons.TwoTone.Folder },
+        "folder-open",
     ),
     v(
         "Filled.FolderOpen",

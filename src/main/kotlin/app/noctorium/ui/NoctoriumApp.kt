@@ -988,15 +988,18 @@ private fun LibraryScreen(state: AppState) {
 
     if (newPlaylistOpen) {
         val likes by state.likes.collectAsState()
+        val sync by state.playlistSyncState.collectAsState()
         NewPlaylistDialog(
             title = "New playlist",
             confirmLabel = "Create",
             soundCloudReady = likes.soundCloudReady,
             youTubeReady = likes.youTubeReady,
+            noctoriumNote = noctoriumPlaylistNote(sync),
         ) { name, destination ->
             newPlaylistOpen = false
             if (name != null) {
                 when (destination) {
+                    PlaylistDestination.NOCTORIUM -> state.createPlaylist(name, noctorium = true)
                     PlaylistDestination.SPICE -> state.createPlaylist(name)
                     PlaylistDestination.SOUNDCLOUD -> state.createSoundCloudPlaylist(name)
                     PlaylistDestination.YOUTUBE -> state.createYouTubePlaylist(name)
@@ -1144,7 +1147,9 @@ internal fun localPlaylistLine(playlist: LocalPlaylist): String {
         app.noctorium.playlists.PlaylistImport.SPOTIFY_DATA -> "imported from Spotify"
         else -> "imported"
     }
-    return "${playlist.trackCount} ${if (playlist.trackCount == 1) "track" else "tracks"} • $made"
+    // Said of a Noctorium playlist only: a local one is what every playlist was before, and still is unless chosen.
+    val kind = if (playlist.synced) " • Noctorium playlist" else ""
+    return "${playlist.trackCount} ${if (playlist.trackCount == 1) "track" else "tracks"}$kind • $made"
 }
 
 @Composable
@@ -1158,7 +1163,13 @@ private fun LocalPlaylistRow(playlist: LocalPlaylist, state: AppState, open: () 
             ) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, Modifier.size(24.dp), tint = Color.White) }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(playlist.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(playlist.title, Modifier.weight(1f, fill = false), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (playlist.synced) {
+                        Spacer(Modifier.width(6.dp))
+                        Icon(Icons.Default.CloudSync, "Noctorium playlist: on every device", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
                 Text(
                     localPlaylistLine(playlist),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1189,7 +1200,12 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, notice
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete \"${playlist.title}\"?") },
-            text = { Text("The playlist is removed from Noctorium. The tracks themselves are untouched.") },
+            text = {
+                Text(
+                    if (playlist.synced) "The playlist is removed from Noctorium on every device. The tracks themselves are untouched."
+                    else "The playlist is removed from Noctorium. The tracks themselves are untouched.",
+                )
+            },
             confirmButton = {
                 Button({ confirmDelete = false; state.deletePlaylist(playlist.id) }) { Text("Delete") }
             },
@@ -1242,6 +1258,16 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, notice
             }
             OutlinedButton({ renameOpen = true }) { Text("Rename") }
             OutlinedButton({ confirmDelete = true }) { Text("Delete") }
+            // Which kind it is, and the way to make it the other.
+            if (playlist.synced) {
+                OutlinedButton({ state.setPlaylistNoctorium(playlist.id, false) }) {
+                    Icon(Icons.Default.PhoneAndroid, null, Modifier.size(17.dp)); Spacer(Modifier.width(7.dp)); Text("Keep on this computer only")
+                }
+            } else {
+                OutlinedButton({ state.setPlaylistNoctorium(playlist.id, true) }) {
+                    Icon(Icons.Default.CloudSync, null, Modifier.size(17.dp)); Spacer(Modifier.width(7.dp)); Text("Make it a Noctorium playlist")
+                }
+            }
             if (forSoundCloud.isNotEmpty()) {
                 OutlinedButton({ state.publishPlaylistToSoundCloud(playlist.copy(tracks = forSoundCloud)) }) {
                     Icon(Icons.Default.CloudUpload, null, Modifier.size(17.dp))
@@ -1286,7 +1312,10 @@ private fun LocalPlaylistDetail(playlist: LocalPlaylist, notice: String?, notice
 
 /** Where a new playlist should live. Noctorium always works; the services need a signed-in account. */
 private enum class PlaylistDestination(val label: String) {
-    SPICE("In Noctorium"),
+    /** On every Noctorium the listener uses, through the place chosen in Settings › Noctorium playlists. */
+    NOCTORIUM("Noctorium playlist"),
+    /** On this computer only. */
+    SPICE("Local playlist"),
     SOUNDCLOUD("On SoundCloud"),
     YOUTUBE("On YouTube Music"),
 }
@@ -1311,10 +1340,12 @@ private fun NewPlaylistDialog(
      * cost me a detour on an account that was working perfectly.
      */
     unavailableNote: String = "Sign in under Settings to use this.",
+    /** What a Noctorium playlist would be: where it is kept, or that somewhere has yet to be chosen. */
+    noctoriumNote: String = "On every device you use Noctorium on.",
     finish: (String?, PlaylistDestination) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
-    var destination by remember { mutableStateOf(PlaylistDestination.SPICE) }
+    var destination by remember { mutableStateOf(PlaylistDestination.NOCTORIUM) }
 
     AlertDialog(
         onDismissRequest = { finish(null, destination) },
@@ -1334,13 +1365,14 @@ private fun NewPlaylistDialog(
                 Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     PlaylistDestination.entries.forEach { option ->
                         val available = when (option) {
-                            PlaylistDestination.SPICE -> true
+                            PlaylistDestination.NOCTORIUM, PlaylistDestination.SPICE -> true
                             PlaylistDestination.SOUNDCLOUD -> soundCloudReady
                             PlaylistDestination.YOUTUBE -> youTubeReady
                         }
                         val selected = destination == option
                         val note = when {
-                            option == PlaylistDestination.SPICE -> "Stays on this computer, any service."
+                            option == PlaylistDestination.NOCTORIUM -> noctoriumNote
+                            option == PlaylistDestination.SPICE -> "Stays on this computer only, any service."
                             available && option == PlaylistDestination.SOUNDCLOUD ->
                                 "Made on your account, private until you change it."
                             available -> "Made on your YouTube account, private until you change it."
@@ -2057,8 +2089,10 @@ internal fun AddToPlaylistDialog(
     var creating by remember { mutableStateOf(playlists.isEmpty() && servicePlaylists.isEmpty()) }
     if (creating) {
         val likes by state.likes.collectAsState()
+        val sync by state.playlistSyncState.collectAsState()
         NewPlaylistDialog(
             title = "New playlist for ${track.title}",
+            noctoriumNote = noctoriumPlaylistNote(sync),
             confirmLabel = "Create and add",
             // A SoundCloud playlist can only hold SoundCloud tracks, so the option is offered only when the
             // track being added could actually go in one -- and the same for YouTube, which used to be offered
@@ -2074,6 +2108,7 @@ internal fun AddToPlaylistDialog(
                 when (destination) {
                     PlaylistDestination.SOUNDCLOUD -> state.createSoundCloudPlaylist(name, listOf(track))
                     PlaylistDestination.YOUTUBE -> state.createYouTubePlaylist(name, listOf(track))
+                    PlaylistDestination.NOCTORIUM -> state.createPlaylist(name, firstTrack = track, noctorium = true)
                     else -> state.createPlaylist(name, firstTrack = track)
                 }
             }
@@ -3200,6 +3235,7 @@ internal fun LyricsPanel(track: Track, state: AppState, large: Boolean = false) 
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .18f))
+        CloseMatchNote(selectedResult, track.queueKey, state)
 
         // Read into a local before the branch below tests it. A public property from another module is
         // never smart-cast — nothing there stops it becoming a computed one that answers differently on
@@ -5903,6 +5939,19 @@ internal fun LyricsSettingsPanel(preferences: NoctoriumPreferences, state: AppSt
                     "Every source is still asked. A song your choice has nothing for opens on the best of the others.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+        item {
+            SettingsPanelCard {
+                // The close match is looked for either way; this is only the note that says so.
+                ToggleRow(
+                    CLOSE_MATCH_WARNING,
+                    "When a song has no lyrics under its own name -- uploaded by somebody else, or \"slowed + reverb\" -- " +
+                        "the closest song that has some is shown, with a small note that they may not be right. Off hides the note.",
+                    preferences.lyricsCloseMatchWarning,
+                    change = state::setLyricsCloseMatchWarning,
                 )
             }
             Spacer(Modifier.height(8.dp))

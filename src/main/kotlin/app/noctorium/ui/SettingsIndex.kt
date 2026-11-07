@@ -114,6 +114,12 @@ internal object SettingsIndex {
                 anchor = "Noctorium Connect", onlyWhen = "once you are signed in",
             )
         }
+        page(SettingsPage.NOCTORIUM_PLAYLISTS) {
+            setting(
+                "Noctorium playlists", "Playlists on every device you use Noctorium on, kept in a synced folder or your Google Drive.",
+                "sync", "cloud", "google drive", "onedrive", "dropbox", "backup", "phone", "every device", "cross platform",
+            )
+        }
         page(SettingsPage.PROFILE) {
             setting(
                 "Profile name", "The name this computer's Noctorium goes by. It stays on this computer.",
@@ -311,6 +317,10 @@ internal object SettingsIndex {
             )
         }
         page(SettingsPage.LYRICS) {
+            setting(
+                CLOSE_MATCH_WARNING, "The note above lyrics found for a song under another name, that they may not be its own.",
+                "close match", "wrong lyrics", "lyrics warning", "approximate", "fuzzy", "reupload", "uploaded",
+            )
             setting(
                 "Open lyrics on", "Which source the lyrics open on. Every source is still asked.",
                 "lyrics provider", "lyrics source", "lrclib", "genius", "musixmatch", "synced lyrics", "lyrics",

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GraphicEq
@@ -127,6 +128,7 @@ internal enum class SettingsSection(val title: String, val description: String) 
 internal enum class SettingsPage(val title: String, val section: SettingsSection) {
     ACCOUNT("Noctorium account", SettingsSection.YOU),
     PROFILE("Your Noctorium profile", SettingsSection.YOU),
+    NOCTORIUM_PLAYLISTS("Noctorium playlists", SettingsSection.YOU),
     THEME("Theme and colours", SettingsSection.LOOK),
     TEXT("Typeface and text", SettingsSection.LOOK),
     PLAYER_BAR("Player bar", SettingsSection.LOOK),
@@ -325,6 +327,7 @@ private fun SettingsPagePanel(page: SettingsPage, settings: SettingsState, state
     when (page) {
         SettingsPage.ACCOUNT -> NoctoriumAccountPanel(state)
         SettingsPage.PROFILE -> ProfileSettingsPanel(settings.preferences, state)
+        SettingsPage.NOCTORIUM_PLAYLISTS -> NoctoriumPlaylistsSettingsPanel(settings.preferences, state)
         SettingsPage.THEME -> ThemeSettingsPanel(settings.preferences, state)
         SettingsPage.TEXT -> TextSettingsPanel(settings.preferences, state)
         SettingsPage.PLAYER_BAR -> PlayerBarSettingsPanel(settings.preferences, state)
@@ -491,6 +494,7 @@ private fun SectionHeading(section: SettingsSection) {
 internal fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.ACCOUNT -> Icons.Default.Insights
     SettingsPage.PROFILE -> Icons.Default.AccountCircle
+    SettingsPage.NOCTORIUM_PLAYLISTS -> Icons.Default.CloudSync
     SettingsPage.THEME -> Icons.Default.Palette
     SettingsPage.TEXT -> Icons.Default.TextFields
     SettingsPage.PLAYER_BAR -> Icons.Default.Tune
@@ -538,6 +542,10 @@ private fun tileText(page: SettingsPage, settings: SettingsState, state: AppStat
         }
         // The history is on the profile's page, so the tile says so: it is where somebody looks for what they played.
         SettingsPage.PROFILE -> TileText(preferences.profileName, "Your local profile and history")
+        SettingsPage.NOCTORIUM_PLAYLISTS -> {
+            val sync by state.playlistSyncState.collectAsState()
+            TileText(page.title, noctoriumPlaylistsSubtitle(sync), sync.kind != app.noctorium.playlists.PlaylistCloudKind.NONE && sync.problem == null)
+        }
         SettingsPage.THEME -> TileText(page.title, "${preferences.theme.displayName} · accent: ${preferences.accent.displayName.lowercase()}")
         SettingsPage.TEXT -> TileText(page.title, "${preferences.font.displayName} typeface · ${preferences.textSize.displayName.lowercase()} size")
         SettingsPage.PLAYER_BAR -> TileText(

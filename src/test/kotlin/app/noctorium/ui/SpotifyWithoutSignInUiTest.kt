@@ -101,6 +101,7 @@ class SpotifyWithoutSignInUiTest {
         val liked = LocalPlaylist("liked", "Liked Songs from Spotify", importedFrom = PlaylistImport(PlaylistImport.SPOTIFY_DATA, "liked-songs"))
         assertEquals("0 tracks • made in Noctorium", localPlaylistLine(own))
         assertEquals("0 tracks • imported from Spotify", localPlaylistLine(liked))
+        assertEquals("0 tracks • Noctorium playlist • made in Noctorium", localPlaylistLine(own.copy(synced = true)))
         assertEquals("0 tracks • imported", localPlaylistLine(own.copy(importedFrom = PlaylistImport("somewhere-else", "1"))))
     }
 

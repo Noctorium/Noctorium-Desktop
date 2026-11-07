@@ -81,6 +81,13 @@ class SidePanelRenderCheck {
             SidePanelState.shown = SidePanel.QUEUE
             draw(folder, "queue-panel.png", state, longer, playback)
             draw(folder, "queue-panel-empty.png", state, QueueState(), PlaybackState())
+            // A re-upload no source knows by its name: its lyrics are found by a close match, with the note.
+            val reupload = song("reup1", "Daft Punk - Get Lucky (slowed + reverb) [lyrics]", "Chill Vibes Music").copy(durationMs = 310_000)
+            SidePanelState.shown = SidePanel.LYRICS
+            draw(folder, "lyrics-panel-close-match.png", state, QueueState(listOf(reupload), 0), playback.copy(track = reupload))
+            state.setLyricsCloseMatchWarning(false)
+            draw(folder, "lyrics-panel-close-match-note-off.png", state, QueueState(listOf(reupload), 0), playback.copy(track = reupload))
+            state.setLyricsCloseMatchWarning(true)
             SidePanelState.shown = null
             draw(folder, "side-panel-closed.png", state, queue, playback)
         } finally {
