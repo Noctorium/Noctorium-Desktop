@@ -958,8 +958,8 @@ private fun BarTools(queue: QueueState, playback: PlaybackState, state: AppState
     if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
     if (PlayerButton.QUEUE in shown) QueueButton(queue, state, 34.dp)
     if (PlayerButton.LYRICS in shown) {
-        IconButton(LyricsSidePanelState::toggle, Modifier.size(34.dp)) {
-            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = lyricsButtonTint())
+        IconButton({ SidePanelState.toggle(SidePanel.LYRICS) }, Modifier.size(34.dp)) {
+            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = sidePanelButtonTint(SidePanel.LYRICS))
         }
     }
     if (PlayerButton.SPEED in shown) SpeedButton(playback, state, size = 34.dp)
@@ -969,8 +969,8 @@ private fun BarTools(queue: QueueState, playback: PlaybackState, state: AppState
 @Composable
 private fun QueueButton(queue: QueueState, state: AppState, size: Dp) {
     BadgedBox(badge = { if (queue.tracks.isNotEmpty()) Badge { Text(queue.tracks.size.toString()) } }) {
-        IconButton({ state.navigate(Destination.QUEUE) }, Modifier.size(size)) {
-            Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", Modifier.size(19.dp))
+        IconButton({ SidePanelState.toggle(SidePanel.QUEUE) }, Modifier.size(size)) {
+            Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", Modifier.size(19.dp), tint = sidePanelButtonTint(SidePanel.QUEUE, androidx.compose.material3.LocalContentColor.current))
         }
     }
 }

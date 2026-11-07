@@ -29,13 +29,13 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Draws the lyrics panel beside a page, with the player bar under them and its lyrics button lit, to a picture,
- * off screen, for looking at. The lyrics are asked for as the window asks for them, so it needs the network.
- * Off unless a folder is named:
+ * Draws the side panel beside a page -- the lyrics, and the queue -- with the player bar under them and the button
+ * for the one open lit, to pictures, off screen, for looking at. The lyrics are asked for as the window asks for
+ * them, so it needs the network. Off unless a folder is named:
  *
- *     ./gradlew :test --tests "*LyricsSidePanelRenderCheck*" -Dnoctorium.renderBars=build/bars
+ *     ./gradlew :test --tests "*SidePanelRenderCheck*" -Dnoctorium.renderBars=build/bars
  */
-class LyricsSidePanelRenderCheck {
+class SidePanelRenderCheck {
 
     private val track = Track(
         provider = ProviderType.YOUTUBE_MUSIC,
@@ -46,6 +46,15 @@ class LyricsSidePanelRenderCheck {
         sourceUrl = "https://music.youtube.com/watch?v=5NV6Rdv1a3I",
     )
 
+    private fun song(id: String, title: String, artist: String) = Track(
+        provider = ProviderType.YOUTUBE_MUSIC,
+        id = id,
+        title = title,
+        artists = listOf(Artist(artist.lowercase(), artist, ProviderType.YOUTUBE_MUSIC)),
+        durationMs = 215_000,
+        sourceUrl = "https://music.youtube.com/watch?v=$id",
+    )
+
     @Test
     fun `the panel draws beside a page`() {
         val folder = System.getProperty("noctorium.renderBars")?.let(::File) ?: return
@@ -54,13 +63,28 @@ class LyricsSidePanelRenderCheck {
         val queue = QueueState(tracks = listOf(track), currentIndex = 0)
         val playback = PlaybackState(status = PlaybackStatus.PAUSED, track = track, positionMs = 61_000, durationMs = 248_000)
         try {
-            LyricsSidePanelState.open = true
+            SidePanelState.shown = SidePanel.LYRICS
             draw(folder, "lyrics-panel.png", state, queue, playback)
             draw(folder, "lyrics-panel-nothing-playing.png", state, QueueState(), PlaybackState())
-            LyricsSidePanelState.open = false
-            draw(folder, "lyrics-panel-closed.png", state, queue, playback)
+            // The queue: the song playing, and what follows it.
+            val longer = QueueState(
+                tracks = listOf(
+                    track,
+                    song("a1", "Instant Crush", "Daft Punk"),
+                    song("a2", "Midnight City", "M83"),
+                    song("a3", "Digital Love", "Daft Punk"),
+                    song("a4", "Strobe", "deadmau5"),
+                    song("a5", "Teardrop", "Massive Attack"),
+                ),
+                currentIndex = 0,
+            )
+            SidePanelState.shown = SidePanel.QUEUE
+            draw(folder, "queue-panel.png", state, longer, playback)
+            draw(folder, "queue-panel-empty.png", state, QueueState(), PlaybackState())
+            SidePanelState.shown = null
+            draw(folder, "side-panel-closed.png", state, queue, playback)
         } finally {
-            LyricsSidePanelState.open = false
+            SidePanelState.shown = null
             Thread.sleep(300)
             state.close()
         }
@@ -74,7 +98,7 @@ class LyricsSidePanelRenderCheck {
               Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f)) {
-                        WithLyricsPanel(queue, state) {
+                        WithSidePanel(queue, state) {
                             Box(Modifier.fillMaxSize().padding(30.dp), contentAlignment = Alignment.TopStart) {
                                 Text("A page of the window", fontSize = 30.sp)
                             }

@@ -34,8 +34,9 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
-import app.noctorium.ui.LyricsSidePanelState
-import app.noctorium.ui.lyricsButtonTint
+import app.noctorium.ui.SidePanel
+import app.noctorium.ui.SidePanelState
+import app.noctorium.ui.sidePanelButtonTint
 import app.noctorium.ui.icons.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -498,13 +499,13 @@ private fun TrayIcons(skin: ThemeSkin, queue: QueueState, playback: PlaybackStat
         }
     }
     if (PlayerButton.QUEUE in shown) {
-        IconButton({ state.navigate(Destination.QUEUE) }, Modifier.size(button)) {
-            Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", Modifier.size(icon), tint = quiet)
+        IconButton({ SidePanelState.toggle(SidePanel.QUEUE) }, Modifier.size(button)) {
+            Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", Modifier.size(icon), tint = sidePanelButtonTint(SidePanel.QUEUE, quiet))
         }
     }
     if (PlayerButton.LYRICS in shown) {
-        IconButton(LyricsSidePanelState::toggle, Modifier.size(button)) {
-            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(icon), tint = lyricsButtonTint(quiet))
+        IconButton({ SidePanelState.toggle(SidePanel.LYRICS) }, Modifier.size(button)) {
+            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(icon), tint = sidePanelButtonTint(SidePanel.LYRICS, quiet))
         }
     }
     if (PlayerButton.SPEED in shown) SpeedButton(playback, state, size = button)

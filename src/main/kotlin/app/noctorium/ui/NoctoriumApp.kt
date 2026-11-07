@@ -277,7 +277,8 @@ fun NoctoriumApp(
             }
             Shortcut.QuickSearch -> quickSearchOpen = true
             Shortcut.Help -> shortcutsOpen = true
-            Shortcut.ToggleLyrics -> LyricsSidePanelState.toggle()
+            Shortcut.ToggleLyrics -> SidePanelState.toggle(SidePanel.LYRICS)
+            Shortcut.ToggleQueue -> SidePanelState.toggle(SidePanel.QUEUE)
             // The clipboard read at the moment of pressing, and the link screen shown so what happened to
             // it is visible: playing, or why not.
             Shortcut.PasteLink -> clipboardText()?.let { copied ->
@@ -374,8 +375,8 @@ fun NoctoriumApp(
                     PlaybackToolsBanner { openSettingsPage(appState, SettingsPage.PLAYBACK_TOOLS) }
                     val playerAtTop = preferences.playerBarPosition == PlayerBarPosition.TOP
                     val screens: @Composable () -> Unit = {
-                      // The lyrics panel down the right of every screen while it is open.
-                      WithLyricsPanel(queue, appState) {
+                      // The lyrics or the queue down the right of every screen while one is open.
+                      WithSidePanel(queue, appState) {
                         // One screen easing in over the last rather than the window cutting between them.
                         MotionContent(ui.destination, Modifier.fillMaxSize()) { destination ->
                             // The pages for browsing sit in a folder's white pane under a Windows skin.
@@ -2346,14 +2347,14 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                     if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
                     if (PlayerButton.QUEUE in shown) {
                         BadgedBox(badge = { if (queue.tracks.isNotEmpty()) Badge { Text(queue.tracks.size.toString()) } }) {
-                            IconButton({ state.navigate(Destination.QUEUE) }, Modifier.size(34.dp)) {
-                                Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", Modifier.size(19.dp))
+                            IconButton({ SidePanelState.toggle(SidePanel.QUEUE) }, Modifier.size(34.dp)) {
+                                Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue", Modifier.size(19.dp), tint = sidePanelButtonTint(SidePanel.QUEUE, androidx.compose.material3.LocalContentColor.current))
                             }
                         }
                     }
                     if (PlayerButton.LYRICS in shown) {
-                        IconButton(LyricsSidePanelState::toggle, Modifier.size(34.dp)) {
-                            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = lyricsButtonTint())
+                        IconButton({ SidePanelState.toggle(SidePanel.LYRICS) }, Modifier.size(34.dp)) {
+                            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = sidePanelButtonTint(SidePanel.LYRICS))
                         }
                     }
                     if (PlayerButton.SPEED in shown) SpeedButton(playback, state, size = 34.dp)
@@ -2560,8 +2561,8 @@ private fun PlayerBarLayout(queue: QueueState, playback: PlaybackState, state: A
                                     if (queue.tracks.isNotEmpty()) Badge { Text(queue.tracks.size.toString()) }
                                 },
                             ) {
-                                IconButton({ state.navigate(Destination.QUEUE) }) {
-                                    Icon(Icons.AutoMirrored.Filled.QueueMusic, "Open queue")
+                                IconButton({ SidePanelState.toggle(SidePanel.QUEUE) }) {
+                                    Icon(Icons.AutoMirrored.Filled.QueueMusic, "Open queue", tint = sidePanelButtonTint(SidePanel.QUEUE, androidx.compose.material3.LocalContentColor.current))
                                 }
                             }
                         }
@@ -3454,40 +3455,55 @@ private fun LyricsNotFound(outcomes: List<LyricsProviderOutcome>, errorMessage: 
 }
 
 @Composable
-private fun UpNextPanel(queue: QueueState, state: AppState) {
+internal fun UpNextPanel(queue: QueueState, state: AppState, compact: Boolean = false) {
     val settings by state.settings.collectAsState()
     var savedAs by remember { mutableStateOf<String?>(null) }
     // Another device's queue while this computer is its remote control: playing a song from it, taking one out
     // and shuffle reach that device, and what only this computer's own queue can do is left off.
     val remote = state.connect.collectAsState().value.target
+    val where: @Composable (Modifier) -> Unit = { modifier ->
+        Column(modifier) {
+            Text(
+                remote?.let { "On ${it.name}" } ?: queue.context?.originType?.name?.lowercase()?.replaceFirstChar(Char::uppercase) ?: "Queue",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+            )
+            Text(
+                "${queue.currentIndex + 1} of ${queue.tracks.size}",
+                color = ink(.5f),
+                fontSize = 11.sp,
+            )
+        }
+    }
+    val pills: @Composable () -> Unit = {
+        // Pills rather than icon buttons, so the two destructive-ish actions read clearly.
+        QueueActionPill("Shuffle", Icons.Default.Shuffle, queue.shuffleEnabled, state::toggleShuffle)
+        if (remote == null) {
+            // Autoplay's switch where its songs are: lit while it lines songs up after the queue.
+            val autoplay = settings.preferences.autoplay
+            QueueActionPill("Autoplay", Icons.Default.AllInclusive, autoplay) { state.setAutoplay(!autoplay) }
+            QueueActionPill("Clear", Icons.Default.Close, false, state::clearQueue)
+            if (queue.tracks.isNotEmpty()) QueueActionsMenu(queue, state) { savedAs = it }
+        }
+    }
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    remote?.let { "On ${it.name}" } ?: queue.context?.originType?.name?.lowercase()?.replaceFirstChar(Char::uppercase) ?: "Queue",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                )
-                Text(
-                    "${queue.currentIndex + 1} of ${queue.tracks.size}",
-                    color = ink(.5f),
-                    fontSize = 11.sp,
-                )
+        if (compact) {
+            // In the narrow panel beside the page the pills take a row of their own: beside them, what the
+            // queue is and how far into it was squeezed to a letter a line.
+            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                where(Modifier.fillMaxWidth())
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { pills() }
             }
-            // Pills rather than icon buttons, so the two destructive-ish actions read clearly.
-            QueueActionPill("Shuffle", Icons.Default.Shuffle, queue.shuffleEnabled, state::toggleShuffle)
-            if (remote == null) {
-                // Autoplay's switch where its songs are: lit while it lines songs up after the queue.
-                val autoplay = settings.preferences.autoplay
-                QueueActionPill("Autoplay", Icons.Default.AllInclusive, autoplay) { state.setAutoplay(!autoplay) }
-                QueueActionPill("Clear", Icons.Default.Close, false, state::clearQueue)
-                if (queue.tracks.isNotEmpty()) QueueActionsMenu(queue, state) { savedAs = it }
+        } else {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                where(Modifier.weight(1f))
+                pills()
             }
         }
         savedAs?.let { name ->

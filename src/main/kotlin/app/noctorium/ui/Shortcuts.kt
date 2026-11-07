@@ -52,6 +52,9 @@ sealed interface Shortcut {
     /** Opens or closes the lyrics beside the page. */
     data object ToggleLyrics : Shortcut
 
+    /** Opens or closes the queue beside the page. */
+    data object ToggleQueue : Shortcut
+
     /** Goes to the Search page and puts the caret in its box. */
     data object Search : Shortcut
 
@@ -137,6 +140,8 @@ enum class ShortcutAction(
     HELP("help", "The list of shortcuts", ShortcutGroup.PLACES, Shortcut.Help, listOf("Shift+Slash")),
     // Ctrl+L, as Noctorium Rust has it.
     TOGGLE_LYRICS("toggleLyrics", "Show or hide the lyrics", ShortcutGroup.PLACES, Shortcut.ToggleLyrics, listOf("Mod+L")),
+    // U for up next: Q quits on a Mac.
+    TOGGLE_QUEUE("toggleQueue", "Show or hide the queue beside the page", ShortcutGroup.PLACES, Shortcut.ToggleQueue, listOf("Mod+U")),
 
     TOGGLE_WINDOW("toggleWindow", "Show or hide Noctorium", ShortcutGroup.WINDOW, Shortcut.ToggleWindow, global = true),
     ;

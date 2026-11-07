@@ -35,7 +35,7 @@ fun AppState.perform(shortcut: Shortcut): Boolean {
         Shortcut.ClearAllButCurrent -> clearAllButCurrent()
         is Shortcut.Go -> navigate(shortcut.destination)
         Shortcut.Search, Shortcut.QuickSearch, Shortcut.PasteLink, Shortcut.Help, Shortcut.ToggleWindow, Shortcut.Dismiss,
-        Shortcut.ToggleLyrics -> return false
+        Shortcut.ToggleLyrics, Shortcut.ToggleQueue -> return false
     }
     return true
 }

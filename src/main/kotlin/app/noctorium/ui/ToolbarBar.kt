@@ -198,10 +198,10 @@ internal fun ToolbarPlayerBar(queue: QueueState, playback: PlaybackState, state:
                     if (more && (PlayerButton.LIKE in shown || PlayerButton.LYRICS in shown || PlayerButton.QUEUE in shown)) {
                         if (PlayerButton.LIKE in shown) ToolbarLike(current, state, button, glyph)
                         if (PlayerButton.LYRICS in shown) {
-                            ToolbarButton(Icons.Default.Lyrics, "Lyrics", button, glyph, lit = LyricsSidePanelState.open, onClick = LyricsSidePanelState::toggle)
+                            ToolbarButton(Icons.Default.Lyrics, "Lyrics", button, glyph, lit = SidePanelState.shows(SidePanel.LYRICS)) { SidePanelState.toggle(SidePanel.LYRICS) }
                         }
                         if (PlayerButton.QUEUE in shown) {
-                            ToolbarButton(Icons.AutoMirrored.Filled.QueueMusic, "Queue", button, glyph) { state.navigate(Destination.QUEUE) }
+                            ToolbarButton(Icons.AutoMirrored.Filled.QueueMusic, "Queue", button, glyph, lit = SidePanelState.shows(SidePanel.QUEUE)) { SidePanelState.toggle(SidePanel.QUEUE) }
                         }
                         ToolbarSeparator()
                     }
