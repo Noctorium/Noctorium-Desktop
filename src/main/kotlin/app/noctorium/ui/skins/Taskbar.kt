@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
+import app.noctorium.ui.LyricsSidePanelState
+import app.noctorium.ui.lyricsButtonTint
 import app.noctorium.ui.icons.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -501,8 +503,8 @@ private fun TrayIcons(skin: ThemeSkin, queue: QueueState, playback: PlaybackStat
         }
     }
     if (PlayerButton.LYRICS in shown) {
-        IconButton({ state.navigate(Destination.NOW_PLAYING) }, Modifier.size(button)) {
-            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(icon), tint = quiet)
+        IconButton(LyricsSidePanelState::toggle, Modifier.size(button)) {
+            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(icon), tint = lyricsButtonTint(quiet))
         }
     }
     if (PlayerButton.SPEED in shown) SpeedButton(playback, state, size = button)

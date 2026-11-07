@@ -277,6 +277,7 @@ fun NoctoriumApp(
             }
             Shortcut.QuickSearch -> quickSearchOpen = true
             Shortcut.Help -> shortcutsOpen = true
+            Shortcut.ToggleLyrics -> LyricsSidePanelState.toggle()
             // The clipboard read at the moment of pressing, and the link screen shown so what happened to
             // it is visible: playing, or why not.
             Shortcut.PasteLink -> clipboardText()?.let { copied ->
@@ -373,6 +374,8 @@ fun NoctoriumApp(
                     PlaybackToolsBanner { openSettingsPage(appState, SettingsPage.PLAYBACK_TOOLS) }
                     val playerAtTop = preferences.playerBarPosition == PlayerBarPosition.TOP
                     val screens: @Composable () -> Unit = {
+                      // The lyrics panel down the right of every screen while it is open.
+                      WithLyricsPanel(queue, appState) {
                         // One screen easing in over the last rather than the window cutting between them.
                         MotionContent(ui.destination, Modifier.fillMaxSize()) { destination ->
                             // The pages for browsing sit in a folder's white pane under a Windows skin.
@@ -388,6 +391,7 @@ fun NoctoriumApp(
                                 Destination.CONNECT -> BrowsingPane { ConnectScreen(playback, appState) }
                             }
                         }
+                      }
                     }
                     // Glass belongs to the standard look: a 98 window had no panes of it to float a player in.
                     if (preferences.surfaceStyle.isGlass && !skin.isWindows) {
@@ -2348,8 +2352,8 @@ private fun InlinePlayerBar(queue: QueueState, playback: PlaybackState, state: A
                         }
                     }
                     if (PlayerButton.LYRICS in shown) {
-                        IconButton({ state.navigate(Destination.NOW_PLAYING) }, Modifier.size(34.dp)) {
-                            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        IconButton(LyricsSidePanelState::toggle, Modifier.size(34.dp)) {
+                            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = lyricsButtonTint())
                         }
                     }
                     if (PlayerButton.SPEED in shown) SpeedButton(playback, state, size = 34.dp)

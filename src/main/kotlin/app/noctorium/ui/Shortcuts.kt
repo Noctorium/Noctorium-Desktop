@@ -49,6 +49,9 @@ sealed interface Shortcut {
 
     data class Go(val destination: Destination) : Shortcut
 
+    /** Opens or closes the lyrics beside the page. */
+    data object ToggleLyrics : Shortcut
+
     /** Goes to the Search page and puts the caret in its box. */
     data object Search : Shortcut
 
@@ -132,6 +135,8 @@ enum class ShortcutAction(
     GO_CONNECT("goConnect", "Go to Connect", ShortcutGroup.PLACES, Shortcut.Go(Destination.CONNECT), listOf("9")),
     PASTE_LINK("pasteLink", "Play the link you copied", ShortcutGroup.PLACES, Shortcut.PasteLink, listOf("Mod+V")),
     HELP("help", "The list of shortcuts", ShortcutGroup.PLACES, Shortcut.Help, listOf("Shift+Slash")),
+    // Ctrl+L, as Noctorium Rust has it.
+    TOGGLE_LYRICS("toggleLyrics", "Show or hide the lyrics", ShortcutGroup.PLACES, Shortcut.ToggleLyrics, listOf("Mod+L")),
 
     TOGGLE_WINDOW("toggleWindow", "Show or hide Noctorium", ShortcutGroup.WINDOW, Shortcut.ToggleWindow, global = true),
     ;

@@ -958,8 +958,8 @@ private fun BarTools(queue: QueueState, playback: PlaybackState, state: AppState
     if (PlayerButton.SLEEP_TIMER in shown) SleepTimerButton(state)
     if (PlayerButton.QUEUE in shown) QueueButton(queue, state, 34.dp)
     if (PlayerButton.LYRICS in shown) {
-        IconButton({ state.navigate(Destination.NOW_PLAYING) }, Modifier.size(34.dp)) {
-            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        IconButton(LyricsSidePanelState::toggle, Modifier.size(34.dp)) {
+            Icon(Icons.Default.Lyrics, "Lyrics", Modifier.size(18.dp), tint = lyricsButtonTint())
         }
     }
     if (PlayerButton.SPEED in shown) SpeedButton(playback, state, size = 34.dp)
