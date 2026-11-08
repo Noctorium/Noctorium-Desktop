@@ -51,6 +51,33 @@ internal fun Color.mix(other: Color, ratio: Float): Color = Color(
 )
 
 /**
+ * The theme as panes of glass over the desktop, for a window that is see-through: the page let almost all the
+ * way through, so the blurred desktop behind is what it looks like, the panels a little more frosted and the
+ * cards more again, since writing sits on those. The writing and the accent stay solid -- glass that cost the
+ * words would be no use.
+ *
+ * Only the opacity changes. Every colour derived from these is mixed with its opacity along with the rest
+ * (see [mix]), so outlines and containers come out glass as well.
+ */
+fun ThemeColours.glazed(blurred: Boolean = true): ThemeColours = copy(
+    background = background.withAlpha(if (blurred) GLASS_PAGE else CLEAR_GLASS_PAGE),
+    panel = panel.withAlpha(if (blurred) GLASS_PANEL else CLEAR_GLASS_PANEL),
+    card = card.withAlpha(if (blurred) GLASS_CARD else CLEAR_GLASS_CARD),
+)
+
+/** How much of the page, the panels and the cards is drawn over the blurred desktop, out of 255. */
+internal const val GLASS_PAGE = 0x8C
+internal const val GLASS_PANEL = 0xB3
+internal const val GLASS_CARD = 0xD1
+
+/** The same over a desktop nothing blurs, whose icons and windows would otherwise be read through the writing. */
+internal const val CLEAR_GLASS_PAGE = 0xD0
+internal const val CLEAR_GLASS_PANEL = 0xE0
+internal const val CLEAR_GLASS_CARD = 0xEB
+
+private fun Long.withAlpha(alpha: Int): Long = (this and 0xFFFFFFL) or (alpha.toLong() shl 24)
+
+/**
  * Material's palette, worked out from a theme's six colours and the accent in force.
  *
  * The theme says where the page, a panel and a card sit and what writing looks like on them; the accent

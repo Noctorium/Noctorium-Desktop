@@ -61,6 +61,8 @@ data class DesktopHooks(
     val toggleWindow: (() -> Unit)? = null,
     /** Quits Noctorium as the tray's Quit does: for Settings › Experimental's "crash". */
     val quit: (() -> Unit)? = null,
+    /** The title bar, for a window without the system's frame: see FramelessTitleBar. Null for every other window. */
+    val titleBar: (@androidx.compose.runtime.Composable () -> Unit)? = null,
 )
 
 /**

@@ -236,7 +236,15 @@ fun NoctoriumApp(
     // The title bar is Windows', not ours, so it has to be told the colour separately — and told again
     // whenever the theme changes, or a switch to a light theme would leave a black strip above it. Under a
     // Windows skin it is that desktop's own title bar colour, with white writing, as the windows inside are.
-    LaunchedEffect(window, theme, skin, classicPalette) {
+    //
+    // The Glass theme takes the title bar too: the window is see-through from its top edge to its foot, and its
+    // pages are drawn as tinted glass over the desktop rather than in the theme's solid colours. Turned off again,
+    // the window is put back and the title bar coloured as before. Where the window cannot be see-through, the
+    // theme is its colours and nothing more -- see SeeThroughWindow.
+    var glazing by remember { mutableStateOf(SeeThroughWindow.Glazing.NONE) }
+    LaunchedEffect(window, theme, skin, classicPalette, preferences.seeThrough) {
+        if (preferences.seeThrough || glazing != SeeThroughWindow.Glazing.NONE) glazing = SeeThroughWindow.apply(window, preferences.seeThrough)
+        if (glazing != SeeThroughWindow.Glazing.NONE) return@LaunchedEffect
         val caption = skin.caption(classicPalette)
         WindowChrome.applyDarkTitleBar(
             window,
@@ -335,7 +343,12 @@ fun NoctoriumApp(
     }
 
     val density = LocalDensity.current
-    SkinnedMaterialTheme(skin, theme, accent, preferences.font, preferences.cornerStyle, classicPalette) {
+    val drawnTheme = when (glazing) {
+        SeeThroughWindow.Glazing.NONE -> theme
+        SeeThroughWindow.Glazing.CLEAR -> theme.glazed(blurred = false)
+        SeeThroughWindow.Glazing.BLURRED -> theme.glazed()
+    }
+    SkinnedMaterialTheme(skin, drawnTheme, accent, preferences.font, preferences.cornerStyle, classicPalette) {
       // Text size, applied to the density rather than to the typography.
       //
       // Almost every size in this application is written at the call site as a literal `.sp`, so scaling
@@ -374,9 +387,13 @@ fun NoctoriumApp(
                 .focusable()
                 .onKeyEvent(::handle),
         ) {
+          // A window without the system's frame -- Glass on Linux -- has its title bar drawn here, on the glass, and a
+          // hairline round its edge where the frame would have shown where the window ends.
+          Column(if (desktop.titleBar != null) Modifier.border(1.dp, ink(.16f)) else Modifier) {
+            desktop.titleBar?.invoke()
             // A Glow theme's light on the page, under everything on it: the sidebar and the player bar are drawn
             // in the page's colour over it and stay dark, the screens leave it showing between what they hold.
-            Row(Modifier.pageGlow()) {
+            Row(Modifier.weight(1f).pageGlow()) {
                 if (skin.isWindows) {
                     SkinRail(ui.destination, preferences.desktop.hiddenDestinations, queue.current, appState::navigate)
                 } else {
@@ -408,7 +425,7 @@ fun NoctoriumApp(
                     // Glass belongs to the standard look: a 98 window had no panes of it to float a player in.
                     if (preferences.surfaceStyle.isGlass && !skin.isWindows) {
                         Box(Modifier.weight(1f)) {
-                            GlassContent(queue, playback, appState, Color(theme.background), playerAtTop, screens)
+                            GlassContent(queue, playback, appState, MaterialTheme.colorScheme.background, playerAtTop, screens)
                         }
                     } else if (preferences.playerBarStyle.floats) {
                         Box(Modifier.weight(1f)) { FloatingContent(queue, playback, appState, playerAtTop, screens) }
@@ -422,6 +439,7 @@ fun NoctoriumApp(
                     }
                 }
             }
+          }
         }
       }
     }
@@ -4270,8 +4288,8 @@ internal fun ThemeSettingsPanel(preferences: NoctoriumPreferences, state: AppSta
             Spacer(Modifier.height(6.dp))
             Text(
                 "Noctorium's own; the Glow themes, near-black lit by a soft light, Afterglow's in the colour of the " +
-                    "cover playing; and the palettes you may already know from your editor and terminal. " +
-                    "The desktop and the phone share the choice.",
+                    "cover playing; the palettes you may already know from your editor and terminal; and Glass, which lets the " +
+                    "desktop show through the window. The desktop and the phone share the choice.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
             )

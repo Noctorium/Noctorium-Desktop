@@ -30,6 +30,12 @@ import app.noctorium.ui.TrackAnnouncer
 import app.noctorium.ui.DesktopHooks
 import app.noctorium.ui.NoctoriumLook
 import app.noctorium.ui.QuickExit
+import app.noctorium.ui.FramelessTitleBar
+import app.noctorium.settings.seeThrough
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import java.awt.event.WindowEvent
+import app.noctorium.ui.SeeThroughWindow
 import app.noctorium.ui.QuickSearchWindowContent
 import app.noctorium.ui.Shortcut
 import app.noctorium.ui.ShortcutAction
@@ -52,6 +58,8 @@ fun main(args: Array<String>) {
     // beside a copy that is already open.
     if (SelfTest.ARGUMENT in args) SelfTest.run()
     MacBundle.tidy()
+    // Before AWT starts, which it does the moment anything asks it a question: see SeeThroughWindow.
+    SeeThroughWindow.prepareProcess()
     if (SelfTest.START_CHROMIUM in args) SelfTest.startChromium()
 
     // Started with the computer into the tray: no window until somebody asks for one.
@@ -238,6 +246,14 @@ fun main(args: Array<String>) {
             onDispose { }
         }
 
+        // Glass's window is drawn clear, which is settled as a window is first shown; so crossing between Glass and
+        // another theme builds the window again, in the same place and size, with the player carrying on underneath
+        // -- everything that lasts is held out here, not in it. On Linux it is also a window without the system's
+        // frame, since only that can be drawn clear there. See SeeThroughWindow.
+        val glass = settings.preferences.seeThrough && SeeThroughWindow.supported
+        val frameless = glass && SeeThroughWindow.frameless
+        SeeThroughWindow.clearNextWindow = glass && SeeThroughWindow.inPlace
+        key(glass) {
         Window(
             onCloseRequest = {
                 if (tray != null && desktop.closeToTray) {
@@ -262,13 +278,20 @@ fun main(args: Array<String>) {
             // smaller one and would otherwise scale this one down.
             icon = BitmapPainter(AppIcon.image(256).toComposeImageBitmap()),
             state = windowState,
+            undecorated = frameless,
+            transparent = frameless,
         ) {
             window.minimumSize = Dimension(760, 560)
             LaunchedEffect(window) { frame.set(window) }
             // Each size is drawn at its own size, so the taskbar's small icon is rendered rather than shrunk.
             window.iconImages = AppIcon.images()
             LaunchedEffect(raises) { if (raises > 0) raise(window) }
-            NoctoriumApp(appState, window, DesktopHooks(globalHotKeys.state, quickSearchAsked, toggleWindow, quit))
+            // The title bar's close button asks as the frame's would, so closing into the tray works the same.
+            val titleBar: (@Composable () -> Unit)? = if (!frameless) null else {
+                { FramelessTitleBar(windowState) { window.dispatchEvent(WindowEvent(window, WindowEvent.WINDOW_CLOSING)) } }
+            }
+            NoctoriumApp(appState, window, DesktopHooks(globalHotKeys.state, quickSearchAsked, toggleWindow, quit, titleBar))
+        }
         }
 
         // The quick search's own window, for its global shortcut from another program: small, always on top,
