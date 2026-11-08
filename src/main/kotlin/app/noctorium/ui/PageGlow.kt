@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -108,6 +109,7 @@ fun Color.solidOnGlow(): Color =
 @Composable
 fun Modifier.pageGlow(): Modifier {
     val glow = LocalPageGlow.current ?: return this
+    val shadow = LocalShadowBackdrop.current
     var origin by remember { mutableStateOf(Offset.Zero) }
     var window by remember { mutableStateOf(Size.Zero) }
     return onGloballyPositioned { coordinates ->
@@ -115,6 +117,9 @@ fun Modifier.pageGlow(): Modifier {
         window = coordinates.findRootCoordinates().size.toSize()
     }.drawBehind {
         val own = size
-        translate(-origin.x, -origin.y) { drawGlow(glow, window, at = origin, area = own) }
+        translate(-origin.x, -origin.y) {
+            drawGlow(glow, window, at = origin, area = own)
+            shadow?.let { clipRect(origin.x, origin.y, origin.x + own.width, origin.y + own.height) { drawShadowBackdrop(it, window) } }
+        }
     }
 }

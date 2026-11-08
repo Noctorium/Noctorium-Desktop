@@ -10,6 +10,8 @@ class ExperimentalCodeTest {
         assertEquals(ExperimentalCode.CRASH, ExperimentalCode.find("crash"))
         assertEquals(ExperimentalCode.CRASH, ExperimentalCode.find("  CRASH "))
         assertEquals(ExperimentalCode.CRASH, ExperimentalCode.find("Crash"))
+        assertEquals(ExperimentalCode.SHADOW, ExperimentalCode.find("sh@d0w"))
+        assertEquals(ExperimentalCode.SHADOW, ExperimentalCode.find(" SH@D0W "))
     }
 
     @Test
@@ -17,5 +19,6 @@ class ExperimentalCodeTest {
         assertNull(ExperimentalCode.find(""))
         assertNull(ExperimentalCode.find("crashes"))
         assertNull(ExperimentalCode.find("cr ash"))
+        assertNull(ExperimentalCode.find("shadow"), "the code is spelt as it is")
     }
 }

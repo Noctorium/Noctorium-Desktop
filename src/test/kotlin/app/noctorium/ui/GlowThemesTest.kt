@@ -41,7 +41,8 @@ import kotlin.test.assertTrue
  */
 class GlowThemesTest {
 
-    private val glowing = ThemePreset.entries.filter { it.glow != null }
+    // The Glow family; the secret theme has a light too, but is in no list of themes.
+    private val glowing = ThemePreset.entries.filter { it.glow != null && !it.hidden }
 
     // --- The light ---
 

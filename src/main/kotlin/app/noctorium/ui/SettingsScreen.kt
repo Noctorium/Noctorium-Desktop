@@ -360,7 +360,7 @@ private fun SettingsPagePanel(page: SettingsPage, settings: SettingsState, state
         SettingsPage.DOWNLOADS -> SettingsPageColumn { SettingsPanelCard { SaveMusicSetting(settings.preferences, state, boxed = true) } }
         SettingsPage.PLAYBACK_TOOLS -> PlaybackToolsPanel()
         SettingsPage.UPDATES -> UpdatePanel(state)
-        SettingsPage.EXPERIMENTAL -> ExperimentalSettingsPanel()
+        SettingsPage.EXPERIMENTAL -> ExperimentalSettingsPanel(settings.preferences, state)
         SettingsPage.DIAGNOSTICS -> DiagnosticsPanel(settings, state)
     }
 }

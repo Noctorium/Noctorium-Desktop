@@ -218,6 +218,9 @@ fun NoctoriumApp(
     // A Glow theme's light, in the cover's colour for Afterglow and eased from one song's to the next as the
     // accent is, or the light would jump while everything else glides.
     val glow = preferences.themeGlow
+    // The secret theme's picture and streaks, under the pages with its glow.
+    val shadowPicture = rememberShadowPicture(if (preferences.theme == ThemePreset.SHADOW) preferences.shadowPicture else "")
+    val shadowBackdrop = if (preferences.theme == ThemePreset.SHADOW) ShadowBackdrop(shadowPicture) else null
     val glowColour by animateColorAsState(Color(glow?.resolvedColour(artworkColour) ?: 0xFF000000L), tween(600), label = "glow")
     // Beyond the colours: 98's bevels and Luna's blue, for the Windows themes, and nothing for the rest -- and the
     // colours the 98 skin draws them in, 98's own grey or Noctorium 98's night.
@@ -343,6 +346,7 @@ fun NoctoriumApp(
           LocalGlobalShortcuts provides desktop.globalShortcuts,
           LocalQuit provides desktop.quit,
           LocalPageGlow provides glow?.let { PageGlow(it, glowColour) },
+          LocalShadowBackdrop provides shadowBackdrop,
       ) {
         if (shortcutsOpen) ShortcutsSheet(shortcuts) { shortcutsOpen = false }
         if (quickSearchOpen) {
@@ -4267,7 +4271,7 @@ internal fun ThemeSettingsPanel(preferences: NoctoriumPreferences, state: AppSta
             )
             Spacer(Modifier.height(12.dp))
             // Grouped by family, because "Mocha" on its own means nothing and "Catppuccin Mocha" does.
-            ThemePreset.entries.groupBy { it.family }.forEach { (family, presets) ->
+            offeredThemes.groupBy { it.family }.forEach { (family, presets) ->
                 Text(family, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(7.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
