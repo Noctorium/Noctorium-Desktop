@@ -220,7 +220,13 @@ fun NoctoriumApp(
     val glow = preferences.themeGlow
     // The secret theme's picture and streaks, under the pages with its glow.
     val shadowPicture = rememberShadowPicture(if (preferences.theme == ThemePreset.SHADOW) preferences.shadowPicture else "")
-    val shadowBackdrop = if (preferences.theme == ThemePreset.SHADOW) ShadowBackdrop(shadowPicture) else null
+    val chaos = preferences.theme == ThemePreset.SHADOW_CHAOS
+    val chaosPicture = rememberChaosPicture(chaos)
+    val shadowBackdrop = when {
+        chaos -> ShadowBackdrop(chaosPicture, chaos = true)
+        preferences.theme == ThemePreset.SHADOW -> ShadowBackdrop(shadowPicture)
+        else -> null
+    }
     val glowColour by animateColorAsState(Color(glow?.resolvedColour(artworkColour) ?: 0xFF000000L), tween(600), label = "glow")
     // Beyond the colours: 98's bevels and Luna's blue, for the Windows themes, and nothing for the rest -- and the
     // colours the 98 skin draws them in, 98's own grey or Noctorium 98's night.

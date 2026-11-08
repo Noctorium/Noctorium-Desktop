@@ -11,6 +11,9 @@ class ExperimentalCodeTest {
         assertEquals(ExperimentalCode.CRASH, ExperimentalCode.find("  CRASH "))
         assertEquals(ExperimentalCode.CRASH, ExperimentalCode.find("Crash"))
         assertEquals(ExperimentalCode.SHADOW, ExperimentalCode.find("sh@d0w"))
+        assertEquals(ExperimentalCode.SHADOW_CHAOS, ExperimentalCode.find("sh@d0w2"))
+        assertEquals(ExperimentalCode.SHADOW_CHAOS, ExperimentalCode.find(" SH@D0W2 "))
+        assertNull(ExperimentalCode.find("sh@d0w22"))
         assertEquals(ExperimentalCode.SHADOW, ExperimentalCode.find(" SH@D0W "))
     }
 
