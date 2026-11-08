@@ -268,7 +268,7 @@ fun main(args: Array<String>) {
             // Each size is drawn at its own size, so the taskbar's small icon is rendered rather than shrunk.
             window.iconImages = AppIcon.images()
             LaunchedEffect(raises) { if (raises > 0) raise(window) }
-            NoctoriumApp(appState, window, DesktopHooks(globalHotKeys.state, quickSearchAsked, toggleWindow))
+            NoctoriumApp(appState, window, DesktopHooks(globalHotKeys.state, quickSearchAsked, toggleWindow, quit))
         }
 
         // The quick search's own window, for its global shortcut from another program: small, always on top,

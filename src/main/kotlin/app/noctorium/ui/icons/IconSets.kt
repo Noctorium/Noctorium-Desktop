@@ -1207,6 +1207,15 @@ internal val ICON_VARIANTS: Map<String, IconVariants> = listOf(
         "tablet",
     ),
     v(
+        "Filled.Terminal",
+        { Icons.Filled.Terminal },
+        { Icons.Outlined.Terminal },
+        { Icons.Rounded.Terminal },
+        { Icons.Sharp.Terminal },
+        { Icons.TwoTone.Terminal },
+        "sparkles",
+    ),
+    v(
         "Filled.TextFields",
         { Icons.Filled.TextFields },
         { Icons.Outlined.TextFields },

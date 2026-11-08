@@ -59,6 +59,8 @@ data class DesktopHooks(
     val globalShortcuts: kotlinx.coroutines.flow.StateFlow<app.noctorium.hotkeys.GlobalHotKeysState>? = null,
     val quickSearchAsked: Int = 0,
     val toggleWindow: (() -> Unit)? = null,
+    /** Quits Noctorium as the tray's Quit does: for Settings › Experimental's "crash". */
+    val quit: (() -> Unit)? = null,
 )
 
 /**

@@ -341,6 +341,7 @@ fun NoctoriumApp(
           LocalIconSet provides preferences.iconSet.onDesktop(),
           LocalServiceBadgeStyle provides preferences.serviceBadgeStyle,
           LocalGlobalShortcuts provides desktop.globalShortcuts,
+          LocalQuit provides desktop.quit,
           LocalPageGlow provides glow?.let { PageGlow(it, glowColour) },
       ) {
         if (shortcutsOpen) ShortcutsSheet(shortcuts) { shortcutsOpen = false }

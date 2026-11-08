@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.SystemUpdateAlt
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Tv
@@ -153,6 +154,7 @@ internal enum class SettingsPage(val title: String, val section: SettingsSection
     DOWNLOADS("Saving music", SettingsSection.DEVICE),
     PLAYBACK_TOOLS("Playback tools", SettingsSection.DEVICE),
     UPDATES("Updates", SettingsSection.ABOUT),
+    EXPERIMENTAL("Experimental", SettingsSection.ABOUT),
     DIAGNOSTICS("Diagnostics", SettingsSection.ABOUT),
     ;
 
@@ -358,6 +360,7 @@ private fun SettingsPagePanel(page: SettingsPage, settings: SettingsState, state
         SettingsPage.DOWNLOADS -> SettingsPageColumn { SettingsPanelCard { SaveMusicSetting(settings.preferences, state, boxed = true) } }
         SettingsPage.PLAYBACK_TOOLS -> PlaybackToolsPanel()
         SettingsPage.UPDATES -> UpdatePanel(state)
+        SettingsPage.EXPERIMENTAL -> ExperimentalSettingsPanel()
         SettingsPage.DIAGNOSTICS -> DiagnosticsPanel(settings, state)
     }
 }
@@ -519,6 +522,7 @@ internal fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.DOWNLOADS -> Icons.Default.SaveAlt
     SettingsPage.PLAYBACK_TOOLS -> Icons.Default.Extension
     SettingsPage.UPDATES -> Icons.Default.SystemUpdateAlt
+    SettingsPage.EXPERIMENTAL -> Icons.Default.Terminal
     SettingsPage.DIAGNOSTICS -> Icons.Default.MonitorHeart
 }
 
@@ -621,6 +625,7 @@ private fun tileText(page: SettingsPage, settings: SettingsState, state: AppStat
         )
         SettingsPage.PLAYBACK_TOOLS -> TileText(page.title, playbackToolsSubtitle())
         SettingsPage.UPDATES -> TileText(page.title, updatesSubtitle(state))
+        SettingsPage.EXPERIMENTAL -> TileText(page.title, "Codes, for things that are not settings yet")
         SettingsPage.DIAGNOSTICS -> TileText(page.title, "Check yt-dlp, mpv and storage")
     }
 }

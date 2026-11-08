@@ -561,6 +561,9 @@ internal object SettingsIndex {
             setting("Updates", "Whether a newer Noctorium is out, and installing it.", "update", "upgrade", "new version", "check for updates", "release", anchor = null)
             setting("Look for updates when Noctorium starts", "One request to GitHub at start; nothing is downloaded without asking.", "auto update", "check for updates", "automatic updates")
         }
+        page(SettingsPage.EXPERIMENTAL) {
+            setting("Codes", "Things that are not settings yet: type a code and press Enter.", "experimental", "code", "codes", "easter egg", "secret", "cheat")
+        }
         page(SettingsPage.DIAGNOSTICS) {
             setting("Diagnostics", "Checks that yt-dlp, mpv and storage are working, for when something is not.", "troubleshoot", "problems", "debug", "logs", "help", anchor = null)
         }
