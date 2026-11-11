@@ -63,6 +63,7 @@ import app.noctorium.core.AppState
 import app.noctorium.core.AppUiState
 import app.noctorium.core.Destination
 import app.noctorium.core.SearchBangs
+import app.noctorium.core.SearchKind
 import app.noctorium.core.SearchMode
 import app.noctorium.domain.Track
 import app.noctorium.settings.resolvedAccent
@@ -120,8 +121,16 @@ internal fun serviceName(mode: SearchMode): String = if (mode == SearchMode.HYBR
  * The songs the bar lists for [text]: the application's search results, once they are the results for exactly
  * what is in the box -- not the ones from a few letters ago, still on their way out.
  */
-internal fun quickResults(text: String, ui: AppUiState, limit: Int = QUICK_RESULTS): List<Track> =
-    if (text.isBlank() || ui.searchQuery != text || SearchBangs.parse(text).query.isBlank()) emptyList() else ui.searchResults.tracks.take(limit)
+internal fun quickResults(text: String, ui: AppUiState, limit: Int = QUICK_RESULTS): List<Track> = when {
+    // Radio with nothing typed is still a list: the most listened-to stations, so Ctrl+F twice is something to pick from.
+    ui.searchKind == SearchKind.RADIO -> if (ui.searchQuery != text) emptyList() else ui.radioStations.take(limit)
+    text.isBlank() || ui.searchQuery != text || SearchBangs.parse(text).query.isBlank() -> emptyList()
+    else -> ui.searchResults.tracks.take(limit)
+}
+
+/** Ctrl+F (⌘F on a Mac) inside the bar: Music to Radio and back, as the menu at the start of the bar does. */
+internal fun isKindSwitch(key: Key, ctrl: Boolean, meta: Boolean, mac: Boolean = isMacPlatform): Boolean =
+    key == Key.F && (if (mac) meta else ctrl)
 
 /** Enough to choose from without scrolling, which a bar meant to be quick should not ask for. */
 internal const val QUICK_RESULTS = 7
@@ -150,14 +159,15 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
     LaunchedEffect(results.map { it.queueKey }) { chosen = 0 }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    val chip = bangChip(text)
+    val radio = ui.searchKind == SearchKind.RADIO
+    val chip = bangChip(text).takeIf { !radio }
     val command = if (isMacPlatform) "⌘" else "Ctrl"
 
     fun act(key: QuickKey) {
         when (key) {
             QuickKey.UP, QuickKey.DOWN -> chosen = quickChoice(chosen, key, results.size)
             QuickKey.PLAY -> results.getOrNull(chosen)?.let { track ->
-                state.playFromSearch(track, results)
+                if (radio) state.playStation(track) else state.playFromSearch(track, results)
                 leave(QuickExit.PLAYED)
             }
             QuickKey.QUEUE -> results.getOrNull(chosen)?.let { track ->
@@ -172,8 +182,19 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
         }
     }
 
+    fun switchKind(kind: SearchKind) {
+        state.setSearchKind(kind)
+        // The box's words, searched as the other kind: the page's own query may be from some other search.
+        state.search(text)
+        note = null
+    }
+
     val keys = Modifier.onPreviewKeyEvent { event ->
         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+        if (isKindSwitch(event.key, event.isCtrlPressed, event.isMetaPressed)) {
+            switchKind(if (radio) SearchKind.MUSIC else SearchKind.RADIO)
+            return@onPreviewKeyEvent true
+        }
         val key = quickSearchKey(event.key, event.isShiftPressed, if (isMacPlatform) event.isMetaPressed else event.isCtrlPressed) ?: return@onPreviewKeyEvent false
         act(key)
         true
@@ -184,32 +205,35 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
         state.search(typed)
     }
 
-    val searching = text.isNotBlank() && ui.searchQuery == text && ui.searchLoading
-    val where = chip?.service ?: serviceName(ui.searchMode)
+    val searching = (text.isNotBlank() || radio) && ui.searchQuery == text && ui.searchLoading
+    val where = if (radio) "radio" else chip?.service ?: serviceName(ui.searchMode)
+    val other = if (radio) "Music" else "Radio"
     val footer = when {
         note != null -> note!!
-        text.isBlank() -> "Start or end with !ytm, !sc, !sp, !bc, !vk, !am, !dz, !td or !all to search one service."
-        else -> "↑↓ choose  ·  Enter play  ·  Shift+Enter add to queue  ·  $command+Enter all results  ·  Esc close"
+        radio -> "↑↓ choose  ·  Enter tune in  ·  $command+F again for $other  ·  $command+Enter all stations  ·  Esc close"
+        text.isBlank() -> "$command+F again for Radio  ·  start or end with !ytm, !sc, !sp, !bc, !vk, !am, !dz, !td or !all for one service"
+        else -> "↑↓ choose  ·  Enter play  ·  Shift+Enter add to queue  ·  $command+F again for $other  ·  $command+Enter all results  ·  Esc close"
     }
 
     if (skinned()) {
         val window: @Composable () -> Unit = {
             SkinWindow(title = { Text("Quick search") }, modifier = modifier, onClose = { leave(QuickExit.CLOSED) }) {
                 Column(Modifier.padding(10.dp)) {
+                    SearchKindPicker(ui.searchKind, ::switchKind)
+                    Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value = text,
                         onValueChange = type,
                         label = { Text("Search for:") },
-                        leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(14.dp)) },
                         prefix = chip?.let { { SkinBangChip(it) } },
-                        placeholder = { Text("A song, an artist, an album") },
+                        placeholder = { Text(if (radio) "A station, a city, a kind of music" else "A song, an artist, an album") },
                         singleLine = true,
                         visualTransformation = BangHighlight(chip, MaterialTheme.colorScheme.primary),
                         modifier = Modifier.fillMaxWidth().focusRequester(focus).tracksTyping().then(keys),
                     )
                     Spacer(Modifier.height(8.dp))
                     Column(Modifier.fillMaxWidth().heightIn(min = 60.dp).listWell().padding(2.dp)) {
-                        QuickResultsList(results, chosen, searching, text, where, ui, { chosen = it; act(QuickKey.PLAY) })
+                        QuickResultsList(results, chosen, searching, text, where, ui, radio, { chosen = it; act(QuickKey.PLAY) })
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(footer, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -227,8 +251,10 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
         modifier = modifier.shadow(28.dp, RoundedCornerShape(20.dp)),
     ) {
         Column {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Search, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+            // Music or Radio, small, above the line you type on -- Ctrl+F again flips it.
+            SearchKindPicker(ui.searchKind, ::switchKind, Modifier.padding(start = 14.dp, top = 10.dp))
+            Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Search, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(12.dp))
                 if (chip != null) {
                     BangChipView(chip)
@@ -236,7 +262,7 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
                 }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     if (text.isEmpty()) {
-                        Text("Search, or try “!ytm daft punk”", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f))
+                        Text(if (radio) "A station, a city, or “jazz”" else "Search, or try “!ytm daft punk”", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .7f))
                     }
                     BasicTextField(
                         value = text,
@@ -253,7 +279,7 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
             }
             if (searching) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp)) else Box(Modifier.fillMaxWidth().height(2.dp).background(ink(.06f)))
             Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
-                QuickResultsList(results, chosen, searching, text, where, ui, { chosen = it; act(QuickKey.PLAY) })
+                QuickResultsList(results, chosen, searching, text, where, ui, radio, { chosen = it; act(QuickKey.PLAY) })
             }
             Text(
                 footer,
@@ -269,12 +295,15 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
 
 /** The songs found, the one chosen lit; or what is going on instead -- searching, nothing found, nothing typed. */
 @Composable
-private fun QuickResultsList(results: List<Track>, chosen: Int, searching: Boolean, text: String, where: String, ui: AppUiState, play: (Int) -> Unit) {
+private fun QuickResultsList(results: List<Track>, chosen: Int, searching: Boolean, text: String, where: String, ui: AppUiState, radio: Boolean, play: (Int) -> Unit) {
     val classic = skinned()
     when {
         results.isNotEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(if (classic) 0.dp else 2.dp)) {
             results.forEachIndexed { index, track -> QuickResultRow(track, index == chosen) { play(index) } }
         }
+        radio && (searching || ui.searchQuery != text) -> QuickLine("Tuning in to the world's stations…")
+        radio && ui.errorMessage != null -> QuickLine(ui.errorMessage.orEmpty(), error = true)
+        radio -> QuickLine("No station called “${text.trim()}”. Try a city, or a kind of music such as “jazz”.")
         text.isBlank() || SearchBangs.parse(text).query.isBlank() -> QuickLine(
             if (text.isBlank()) "Songs from every service you search, as you type." else "Searching $where. Now type what to look for.",
         )

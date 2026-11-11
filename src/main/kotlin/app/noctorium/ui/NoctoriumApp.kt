@@ -1716,7 +1716,7 @@ private fun ServicePlaylistActions(playlist: Playlist, state: AppState) {
         ProviderType.YOUTUBE_MUSIC, ProviderType.YOUTUBE_VIDEO -> YouTubePlaylistActions(playlist, state)
         // Read-only here: nothing of theirs is renamed, deleted or made public from Noctorium.
         ProviderType.SPOTIFY, ProviderType.BANDCAMP, ProviderType.VK, ProviderType.APPLE_MUSIC, ProviderType.DEEZER,
-        ProviderType.TIDAL, ProviderType.LOCAL -> Unit
+        ProviderType.TIDAL, ProviderType.LOCAL, ProviderType.RADIO -> Unit
     }
 }
 
@@ -1818,23 +1818,40 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
     LaunchedEffect(focusRequest) { if (focusRequest > 0) runCatching { box.requestFocus() } }
 
     Column(Modifier.fillMaxSize().padding(32.dp)) {
-        ScreenTitle("Search", 32.sp)
+        // Music or Radio sits beside the heading, above the box: it says what this page searches, and the box
+        // itself stays nothing but a box to type in.
+        Row(verticalAlignment = Alignment.Bottom) {
+            ScreenTitle("Search", 32.sp)
+            Spacer(Modifier.width(14.dp))
+            SearchKindPicker(ui.searchKind, state::setSearchKind, Modifier.padding(bottom = 7.dp))
+        }
         Spacer(Modifier.height(18.dp))
+        val radio = ui.searchKind == SearchKind.RADIO
         OutlinedTextField(
             value = ui.searchQuery,
             onValueChange = state::search,
             leadingIcon = { Icon(Icons.Default.Search, null) },
             // A bang -- !sc, !ytm -- sends this one search to its service, and says so beside the words.
-            prefix = ui.searchBang?.let { bang -> { Row(verticalAlignment = Alignment.CenterVertically) { BangChipView(BangChip(bang.typed, serviceName(bang.mode), bang.mode), compact = true); Spacer(Modifier.width(8.dp)) } } },
-            placeholder = { Text("Artists, songs, albums and playlists, or !ytm, !sc, !sp, !bc, !vk, !am, !dz, !td for one service") },
+            prefix = ui.searchBang?.takeIf { !radio }?.let { bang -> { Row(verticalAlignment = Alignment.CenterVertically) { BangChipView(BangChip(bang.typed, serviceName(bang.mode), bang.mode), compact = true); Spacer(Modifier.width(8.dp)) } } },
+            placeholder = {
+                Text(
+                    if (radio) "A station, a city or a kind of music: “jazz”, “BBC”, “Tokyo”"
+                    else "Artists, songs, albums and playlists, or !ytm, !sc, !sp, !bc, !vk, !am, !dz, !td for one service",
+                )
+            },
             singleLine = true,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth().widthIn(max = 860.dp).focusRequester(box).tracksTyping(),
         )
         Spacer(Modifier.height(12.dp))
-        SearchModePicker(ui.activeSearchMode, state::setSearchMode)
+        if (radio) RadioCountryPicker(ui, state::setRadioCountry) else SearchModePicker(ui.activeSearchMode, state::setSearchMode)
         Spacer(Modifier.height(18.dp))
         val settings by state.settings.collectAsState()
+        if (radio) {
+            val playback by state.playback.collectAsState()
+            RadioResults(ui, state, playback.track)
+            return@Column
+        }
         when {
             ui.searchLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
             ui.searchQuery.isBlank() -> EmptyScreen(

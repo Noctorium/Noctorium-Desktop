@@ -142,6 +142,7 @@ internal fun ProviderType.badgeColour(): Color = when (this) {
     ProviderType.DEEZER -> Color(0xFFA238FF)
     ProviderType.TIDAL -> Color(0xFF000000)
     ProviderType.LOCAL -> Color(0xFF4F46E5)
+    ProviderType.RADIO -> Color(ServiceMarks.colour(this))
 }
 
 /**
@@ -165,4 +166,5 @@ internal fun ProviderType.badgeLabel(compact: Boolean): String = when (this) {
     ProviderType.DEEZER -> if (compact) ServiceMarks.letters(this) else "DEEZER"
     ProviderType.TIDAL -> if (compact) ServiceMarks.letters(this) else "TIDAL"
     ProviderType.LOCAL -> "LOCAL"
+    ProviderType.RADIO -> if (compact) ServiceMarks.letters(this) else "RADIO"
 }

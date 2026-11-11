@@ -1026,6 +1026,8 @@ internal fun elapsedOverTotal(playback: PlaybackState, display: TimeDisplay): St
     val duration = playback.durationMs
     if (playback.track == null) return ""
     val elapsed = formatPlaybackTime(playback.positionMs)
+    // A station has no end to count towards; how long it has been on is all there is to say.
+    if (playback.track?.provider == ProviderType.RADIO) return "LIVE · $elapsed"
     if (duration <= 0) return "$elapsed / $UNKNOWN_PLAYBACK_TIME"
     val trailing = when (display) {
         TimeDisplay.REMAINING -> "-" + formatPlaybackTime((duration - playback.positionMs).coerceAtLeast(0))
