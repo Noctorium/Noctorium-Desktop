@@ -521,6 +521,12 @@ internal object LineIcons {
             "M12 6v6l4 2",
             "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
         ),
+        "joystick" to listOf(
+            "M21 17a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2Z",
+            "M6 15v-2",
+            "M12 15V9",
+            "M9 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0z",
+        ),
         "keyboard" to listOf(
             "M10 8h.01",
             "M12 12h.01",

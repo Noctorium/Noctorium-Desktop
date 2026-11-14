@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MonitorHeart
@@ -151,6 +152,7 @@ internal enum class SettingsPage(val title: String, val section: SettingsSection
     STREAM_WIDGETS("Stream widgets", SettingsSection.SERVICES),
     STARTUP("Startup and tray", SettingsSection.DEVICE),
     SHORTCUTS("Keyboard shortcuts", SettingsSection.DEVICE),
+    REMOTE_CONTROL("Remote control", SettingsSection.DEVICE),
     DOWNLOADS("Saving music", SettingsSection.DEVICE),
     PLAYBACK_TOOLS("Playback tools", SettingsSection.DEVICE),
     UPDATES("Updates", SettingsSection.ABOUT),
@@ -357,6 +359,7 @@ private fun SettingsPagePanel(page: SettingsPage, settings: SettingsState, state
         SettingsPage.STREAM_WIDGETS -> StreamWidgetsSettingsPanel(settings.preferences.streamWidgets, state)
         SettingsPage.STARTUP -> StartupSettingsPanel(settings.preferences, state)
         SettingsPage.SHORTCUTS -> ShortcutsSettingsPanel(settings.preferences, state)
+        SettingsPage.REMOTE_CONTROL -> RemoteControlSettingsPanel(settings.preferences.remoteControl, state)
         SettingsPage.DOWNLOADS -> SettingsPageColumn { SettingsPanelCard { SaveMusicSetting(settings.preferences, state, boxed = true) } }
         SettingsPage.PLAYBACK_TOOLS -> PlaybackToolsPanel()
         SettingsPage.UPDATES -> UpdatePanel(state)
@@ -519,6 +522,7 @@ internal fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.STREAM_WIDGETS -> Icons.Default.Tv
     SettingsPage.STARTUP -> Icons.Default.PowerSettingsNew
     SettingsPage.SHORTCUTS -> Icons.Default.Keyboard
+    SettingsPage.REMOTE_CONTROL -> Icons.Default.SettingsRemote
     SettingsPage.DOWNLOADS -> Icons.Default.SaveAlt
     SettingsPage.PLAYBACK_TOOLS -> Icons.Default.Extension
     SettingsPage.UPDATES -> Icons.Default.SystemUpdateAlt
@@ -619,6 +623,11 @@ private fun tileText(page: SettingsPage, settings: SettingsState, state: AppStat
         }
         SettingsPage.STARTUP -> TileText(page.title, startupSubtitle(preferences))
         SettingsPage.SHORTCUTS -> TileText(page.title, shortcutsSubtitle(preferences.desktop.shortcuts), preferences.desktop.shortcuts.globalEnabled)
+        SettingsPage.REMOTE_CONTROL -> {
+            val status by state.remoteControl.collectAsState()
+            val remote = preferences.remoteControl
+            TileText(page.title, remoteControlSummary(remote, status), remote.enabled && status is app.noctorium.remote.RemoteControlStatus.Running)
+        }
         SettingsPage.DOWNLOADS -> TileText(
             page.title,
             preferences.exportFolder.ifBlank { null }?.let { "Into $it" } ?: "Onto your desktop, as MP3 where it can",

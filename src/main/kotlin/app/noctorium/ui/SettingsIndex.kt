@@ -552,6 +552,27 @@ internal object SettingsIndex {
                 "downloads", "download folder", "export", "save as file", "mp3", "save location", "folder", anchor = null,
             )
         }
+        page(SettingsPage.REMOTE_CONTROL) {
+            setting(
+                "Remote control", "Control Noctorium from a browser or a script, at http://localhost:6932.",
+                "remote", "controller", "web controller", "web remote", "localhost", "6932", "api", "http api", "rest api",
+                "stream deck", "streamdeck", "hotkeys", "autohotkey", "control from phone", "browser", anchor = null,
+            )
+            setting(
+                REMOTE_CONTROL_SWITCH, "Switches the remote control on: a small server on this computer. Off until you switch it on.",
+                "enable remote", "turn on remote", "remote on", "server",
+            )
+            setting(
+                "What it can do", "Playback, the queue, search, lyrics, playlists, likes and the sleep timer, from the page or the API.",
+                "queue from browser", "lyrics in browser", "skip from browser",
+            )
+            setting(
+                "For scripts", "The HTTP API: GET reads and POST does, with JSON, at http://localhost:6932/api.",
+                "curl", "script", "json api", "endpoints", "automation",
+            )
+            setting(REMOTE_CONTROL_PORT, "Where the remote control listens: 6932 unless another program has it.", "port", "remote port")
+        }
+
         page(SettingsPage.PLAYBACK_TOOLS) {
             setting(
                 "Playback tools", "yt-dlp and mpv, the two programs Noctorium plays with: whether they are here, and installing them.",

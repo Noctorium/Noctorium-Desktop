@@ -1036,6 +1036,15 @@ internal val ICON_VARIANTS: Map<String, IconVariants> = listOf(
         "keyboard",
     ),
     v(
+        "Filled.SettingsRemote",
+        { Icons.Filled.SettingsRemote },
+        { Icons.Outlined.SettingsRemote },
+        { Icons.Rounded.SettingsRemote },
+        { Icons.Sharp.SettingsRemote },
+        { Icons.TwoTone.SettingsRemote },
+        "joystick",
+    ),
+    v(
         "Filled.LinearScale",
         { Icons.Filled.LinearScale },
         { Icons.Outlined.LinearScale },
