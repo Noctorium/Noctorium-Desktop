@@ -153,6 +153,8 @@ internal fun RemoteControlSettingsPanel(remote: RemoteControlPreferences, status
                 "Search music or radio, and play a result now, next or at the end of the queue; or paste a link.",
                 "The lyrics of the song playing, following along line by line when they are synced.",
                 "Your playlists and what you played lately, the like button, the sleep timer and stop after this song.",
+                "Its own look, from the ⚙ on the page: Noctorium's theme or its own colours, the accent or the cover's, " +
+                    "only the player, which buttons and tabs show, the lyrics' size, and a name of its own.",
             ).forEach { line ->
                 Row(Modifier.padding(vertical = 3.dp)) {
                     Text("•", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
