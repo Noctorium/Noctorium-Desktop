@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
@@ -113,6 +114,14 @@ private fun SongMenuItems(track: Track, state: AppState, close: () -> Unit, addT
         leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, null) },
         onClick = { state.addToQueue(track); close() },
     )
+    // The artist's page on the service the song came from: YouTube Music's artist, the SoundCloud profile, and so on.
+    if (track.provider != app.noctorium.domain.ProviderType.RADIO && track.provider != app.noctorium.domain.ProviderType.LOCAL && track.artistLine.isNotBlank()) {
+        DropdownMenuItem(
+            text = { Text("Go to ${track.artists.firstOrNull()?.name ?: track.artistLine}", maxLines = 1) },
+            leadingIcon = { Icon(Icons.Default.Person, null) },
+            onClick = { state.openArtistOf(track); close() },
+        )
+    }
     // Stop after this song is this computer's own player's, so it is not offered for a song playing elsewhere.
     if (driven == null && queue.current?.queueKey == track.queueKey) {
         DropdownMenuItem(

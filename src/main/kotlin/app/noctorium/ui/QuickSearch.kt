@@ -166,7 +166,11 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
     fun act(key: QuickKey) {
         when (key) {
             QuickKey.UP, QuickKey.DOWN -> chosen = quickChoice(chosen, key, results.size)
-            QuickKey.PLAY -> results.getOrNull(chosen)?.let { track ->
+            // Artists are pages, not songs: the bar hands them to the Search page, which lists them.
+            QuickKey.PLAY -> if (ui.searchKind == SearchKind.ARTISTS) {
+                state.navigate(Destination.SEARCH)
+                leave(QuickExit.SEARCH_PAGE)
+            } else results.getOrNull(chosen)?.let { track ->
                 if (radio) state.playStation(track) else state.playFromSearch(track, results)
                 leave(QuickExit.PLAYED)
             }
@@ -192,7 +196,7 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
     val keys = Modifier.onPreviewKeyEvent { event ->
         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
         if (isKindSwitch(event.key, event.isCtrlPressed, event.isMetaPressed)) {
-            switchKind(if (radio) SearchKind.MUSIC else SearchKind.RADIO)
+            switchKind(SearchKind.entries[(ui.searchKind.ordinal + 1) % SearchKind.entries.size])
             return@onPreviewKeyEvent true
         }
         val key = quickSearchKey(event.key, event.isShiftPressed, if (isMacPlatform) event.isMetaPressed else event.isCtrlPressed) ?: return@onPreviewKeyEvent false

@@ -542,6 +542,7 @@ internal fun PosterNowPlaying(
                         overflow = TextOverflow.Ellipsis,
                         fontSize = (titleSize.value * .26f).coerceIn(15f, 36f).sp,
                         fontWeight = FontWeight.Bold,
+                        modifier = Modifier.opensArtistOf(track, state),
                     )
                     track.album?.title?.takeIf { it.isNotBlank() && it != track.title }?.let { album ->
                         Text(album, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -590,6 +591,7 @@ internal fun PosterNowPlaying(
                         fontSize = (titleSize.value * .3f).coerceIn(17f, 44f).sp,
                         fontWeight = FontWeight.Light,
                         color = ink(.86f),
+                        modifier = Modifier.opensArtistOf(track, state),
                     )
                     track.album?.title?.takeIf { it.isNotBlank() && it != track.title }?.let { album ->
                         Spacer(Modifier.height(6.dp))
@@ -690,7 +692,7 @@ private fun SongHeading(
                     textAlign = if (centred) TextAlign.Center else TextAlign.Start,
                 )
                 Spacer(Modifier.height(3.dp))
-                Text(shown.artistLine, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.66f), fontSize = artistSize)
+                Text(shown.artistLine, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.66f), fontSize = artistSize, modifier = Modifier.opensArtistOf(track, state))
             }
         }
         if (look.followButton) FollowArtistChip(track, state, Modifier.padding(top = 8.dp))

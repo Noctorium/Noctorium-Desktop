@@ -663,7 +663,7 @@ private fun SongDisplay(current: Track?, playback: PlaybackState, state: AppStat
                                 color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 11.sp,
                                 lineHeight = 14.sp,
-                                modifier = Modifier.weight(1f, fill = false),
+                                modifier = Modifier.weight(1f, fill = false).opensArtistOf(track?.takeIf { playback.errorMessage == null }, state),
                             )
                             if (playsOnSpotify(track, spotify)) {
                                 Spacer(Modifier.width(6.dp))
@@ -868,7 +868,7 @@ private fun BarTitle(
                         color = if (playback.errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = detailSize,
                         lineHeight = if (snug) detailSize * 1.3f else TextUnit.Unspecified,
-                        modifier = Modifier.weight(1f, fill = false),
+                        modifier = Modifier.weight(1f, fill = false).opensArtistOf(track?.takeIf { playback.errorMessage == null }, state),
                     )
                     if (playsOnSpotify(track, spotify)) {
                         Spacer(Modifier.width(6.dp))

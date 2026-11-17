@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MusicNote
@@ -58,12 +59,17 @@ import app.noctorium.ui.skins.skinShape
  */
 
 /** The icon each kind is drawn with: a note for songs, a set for stations. */
-internal fun SearchKind.icon() = if (this == SearchKind.RADIO) Icons.Default.Radio else Icons.Default.MusicNote
+internal fun SearchKind.icon() = when (this) {
+    SearchKind.RADIO -> Icons.Default.Radio
+    SearchKind.ARTISTS -> Icons.Default.Person
+    SearchKind.MUSIC -> Icons.Default.MusicNote
+}
 
 /** What each kind of search finds, under its name in the menu. */
 internal fun SearchKind.about(): String = when (this) {
     SearchKind.MUSIC -> "Songs, artists and albums from your services"
     SearchKind.RADIO -> "Live stations from every country"
+    SearchKind.ARTISTS -> "Artists, each opening their page on their service"
 }
 
 /**
@@ -85,7 +91,7 @@ internal fun SearchKindPicker(kind: SearchKind, choose: (SearchKind) -> Unit, mo
             Icon(kind.icon(), null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(4.dp))
             Text(kind.displayName, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
-            Icon(Icons.Default.ArrowDropDown, "Music or radio", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(Icons.Default.ArrowDropDown, "Music, radio or artists", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
         }
         DropdownMenu(open, { open = false }) {
             SearchKind.entries.forEach { option ->

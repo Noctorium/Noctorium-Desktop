@@ -269,6 +269,10 @@ internal object SettingsIndex {
                 "home page", "home screen", "hide home rows", "shelves", "greeting", "recently played", "pinned", anchor = "On Home",
             )
             setting(
+                "Play links pasted into Search", "A music link pasted into the search box plays at once, with no Link page.",
+                "paste link", "link in search", "play link", "url", "links page",
+            )
+            setting(
                 "Hybrid search asks", "Which services a search of all of them asks.", "search all", "all services", "search services", "!all",
             )
             setting(

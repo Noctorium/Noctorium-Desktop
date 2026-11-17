@@ -1836,6 +1836,7 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
             placeholder = {
                 Text(
                     if (radio) "A station, a city or a kind of music: “jazz”, “BBC”, “Tokyo”"
+                    else if (ui.searchKind == SearchKind.ARTISTS) "An artist's name, on every service or with !ytm, !sc, !sp, !bc, !vk, !am, !dz, !td for one"
                     else "Artists, songs, albums and playlists, or !ytm, !sc, !sp, !bc, !vk, !am, !dz, !td for one service",
                 )
             },
@@ -1943,7 +1944,7 @@ private fun SearchResultsList(results: SearchResults, state: AppState) {
         if (shelf.isNotEmpty()) {
             item(key = "search:shelf") {
                 PlaylistRowSection(
-                    "Albums and artists",
+                    if (shelf.all { it.isArtistPage() }) "Artists" else "Albums and artists",
                     "From " + servicesLine(shelf.map { it.provider.displayName }.distinct()),
                     shelf,
                     state,
@@ -1991,7 +1992,7 @@ private fun TrackRow(track: Track, sourceQueue: List<Track>, state: AppState, fr
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(track.title, fontWeight = FontWeight.SemiBold)
-                Text(track.artistLine, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(track.artistLine, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.opensArtistOf(track, state))
             }
             ProviderBadge(track.provider)
             DownloadButton(track, state, size = 34.dp)
@@ -2844,7 +2845,7 @@ private fun NowPlayingHero(
             // Title and artist lead, above the cover, the way a record sleeve is captioned.
             Text(track.title, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 26.sp, fontWeight = FontWeight.Bold, lineHeight = 31.sp)
             Spacer(Modifier.height(3.dp))
-            Text(track.artistLine, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.62f), fontSize = 14.sp)
+            Text(track.artistLine, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.62f), fontSize = 14.sp, modifier = Modifier.opensArtistOf(track, state))
             follow(Modifier.padding(top = 8.dp))
             Spacer(Modifier.height(18.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2880,7 +2881,7 @@ private fun NowPlayingHero(
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
                 Spacer(Modifier.height(3.dp))
-                Text(track.artistLine, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.62f), fontSize = 14.sp)
+                Text(track.artistLine, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.62f), fontSize = 14.sp, modifier = Modifier.opensArtistOf(track, state))
                 follow(Modifier.padding(top = 8.dp))
                 Spacer(Modifier.height(14.dp))
                 seekBar(Modifier.fillMaxWidth())
@@ -2916,7 +2917,7 @@ private fun NowPlayingHero(
                     }
                     Text(track.title, maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = 32.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp)
                     Spacer(Modifier.height(5.dp))
-                    Text(track.artistLine, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.62f), fontSize = 16.sp)
+                    Text(track.artistLine, maxLines = 1, overflow = TextOverflow.Ellipsis, color = ink(.62f), fontSize = 16.sp, modifier = Modifier.opensArtistOf(track, state))
                     follow(Modifier.padding(top = 10.dp))
                     Spacer(Modifier.height(28.dp))
                     seekBar(Modifier.fillMaxWidth())
@@ -2941,7 +2942,7 @@ private fun NowPlayingHero(
                         overflow = TextOverflow.Ellipsis,
                         color = ink(.62f),
                         fontSize = 14.sp,
-                        modifier = Modifier.weight(1f, fill = false),
+                        modifier = Modifier.weight(1f, fill = false).opensArtistOf(track, state),
                     )
                     follow(Modifier.padding(start = 12.dp))
                 }
@@ -4552,6 +4553,13 @@ internal fun BrowsingSettingsCard(preferences: NoctoriumPreferences, state: AppS
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 11.sp,
         )
+        Spacer(Modifier.height(12.dp))
+        ToggleRow(
+            "Play links pasted into Search",
+            "A YouTube, YouTube Music, SoundCloud, Spotify or other music link pasted into the search box plays at once, " +
+                "with no need for the Link page. Off: a link is searched for like anything else.",
+            preferences.playLinksFromSearch,
+        ) { state.setPlayLinksFromSearch(it) }
         Spacer(Modifier.height(16.dp))
         val hiddenPages = preferences.desktop.hiddenDestinations
         ToggleChips(
