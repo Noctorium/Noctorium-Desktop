@@ -116,11 +116,23 @@ private fun SongMenuItems(track: Track, state: AppState, close: () -> Unit, addT
     )
     // The artist's page on the service the song came from: YouTube Music's artist, the SoundCloud profile, and so on.
     if (track.provider != app.noctorium.domain.ProviderType.RADIO && track.provider != app.noctorium.domain.ProviderType.LOCAL && track.artistLine.isNotBlank()) {
-        DropdownMenuItem(
-            text = { Text("Go to ${track.artists.firstOrNull()?.name ?: track.artistLine}", maxLines = 1) },
-            leadingIcon = { Icon(Icons.Default.Person, null) },
-            onClick = { state.openArtistOf(track); close() },
-        )
+        // Each artist of a song made by several -- "ODESZA, Theodore Shapiro" -- has their own page to go to.
+        val artists = track.artists.filter { it.name.isNotBlank() }.distinctBy { it.name }.take(4)
+        if (artists.size > 1) {
+            artists.forEach { artist ->
+                DropdownMenuItem(
+                    text = { Text("Go to ${artist.name}", maxLines = 1) },
+                    leadingIcon = { Icon(Icons.Default.Person, null) },
+                    onClick = { state.openArtist(artist, track); close() },
+                )
+            }
+        } else {
+            DropdownMenuItem(
+                text = { Text("Go to ${artists.firstOrNull()?.name ?: track.artistLine}", maxLines = 1) },
+                leadingIcon = { Icon(Icons.Default.Person, null) },
+                onClick = { state.openArtistOf(track); close() },
+            )
+        }
     }
     // Stop after this song is this computer's own player's, so it is not offered for a song playing elsewhere.
     if (driven == null && queue.current?.queueKey == track.queueKey) {

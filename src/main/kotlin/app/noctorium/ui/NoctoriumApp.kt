@@ -1591,6 +1591,11 @@ private fun PlaylistRow(playlist: Playlist, open: () -> Unit) {
 
 @Composable
 internal fun PlaylistDetail(playlist: Playlist, library: LibraryState, state: AppState) {
+    // An artist has a page of their own, not a playlist's.
+    library.openArtist?.let { artist ->
+        ArtistDetail(playlist, artist, library, state)
+        return
+    }
     val songs = rememberLazyListState()
     Column(Modifier.fillMaxSize().padding(horizontal = 30.dp)) {
         Spacer(Modifier.height(22.dp))
@@ -1977,6 +1982,159 @@ private fun SearchModePicker(selected: SearchMode, select: (SearchMode) -> Unit)
             )
         }
     }
+}
+
+/**
+ * An artist's page: their picture -- or their covers, four of them, where the service shows none -- "Artist" and their
+ * name, the service and how many songs and followers, what they say about themselves, Play, Shuffle and their page on
+ * the service; then their songs, numbered, as a playlist's are listed. Back goes to wherever their name was pressed.
+ */
+@Composable
+private fun ArtistDetail(playlist: Playlist, artist: app.noctorium.core.ArtistDetails, library: LibraryState, state: AppState) {
+    val songs = rememberLazyListState()
+    Column(Modifier.fillMaxSize().padding(horizontal = 30.dp)) {
+        Spacer(Modifier.height(18.dp))
+        IconButton(state::closePlaylist) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+        LazyColumn(
+            Modifier.classicScrollbar(songs),
+            state = songs,
+            verticalArrangement = Arrangement.spacedBy(7.dp),
+            contentPadding = chromePadding(bottom = 28.dp),
+        ) {
+            item(key = "artist:head") {
+                // Side by side where there is room; the picture above the words in a narrow window.
+                BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 22.dp)) {
+                val narrow = maxWidth < 620.dp
+                val words: @Composable (Modifier) -> Unit = { wordsModifier -> Column(wordsModifier) {
+                        Text(
+                            "ARTIST",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.6.sp,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        ScreenTitle(artist.name, if (narrow) 32.sp else 44.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            listOfNotNull(
+                                "On ${artist.provider.displayName}",
+                                playlist.tracks.size.takeIf { it > 0 && !library.openPlaylistLoading }?.let { if (it == 1) "1 song" else "$it songs" },
+                                artist.followers?.let { "${followersLine(it)} followers" },
+                            ).joinToString("  ·  "),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                        )
+                        artist.about?.let { about ->
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                about.replace(Regex("\\s+"), " "),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                lineHeight = 18.sp,
+                                modifier = Modifier.widthIn(max = 640.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Button({ state.playPlaylist(playlist) }, enabled = playlist.tracks.isNotEmpty()) {
+                                Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(7.dp)); Text(whereItPlays("Play", state))
+                            }
+                            Spacer(Modifier.width(9.dp))
+                            FilledTonalButton({ state.shufflePlaylist(playlist) }, enabled = playlist.tracks.size > 1) {
+                                Icon(Icons.Default.Shuffle, null, Modifier.size(18.dp)); Spacer(Modifier.width(7.dp)); Text("Shuffle")
+                            }
+                            artist.pageUrl?.takeIf { !narrow }?.let { page ->
+                                Spacer(Modifier.width(9.dp))
+                                OutlinedButton({ state.openExternalUrl(page) }) {
+                                    Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(17.dp))
+                                    Spacer(Modifier.width(7.dp))
+                                    Text(servicePageLabel(artist.provider), maxLines = 1)
+                                }
+                            }
+                        }
+                        // In a narrow window the link to the service gets a line of its own.
+                        artist.pageUrl?.takeIf { narrow }?.let { page ->
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton({ state.openExternalUrl(page) }) {
+                                Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(17.dp))
+                                Spacer(Modifier.width(7.dp))
+                                Text(servicePageLabel(artist.provider), maxLines = 1)
+                            }
+                        }
+                } }
+                if (narrow) {
+                    Column {
+                        ArtistPicture(artist.picture, playlist.tracks, artist.provider, Modifier.size(120.dp))
+                        Spacer(Modifier.height(16.dp))
+                        words(Modifier.fillMaxWidth())
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ArtistPicture(artist.picture, playlist.tracks, artist.provider, Modifier.size(176.dp))
+                        Spacer(Modifier.width(28.dp))
+                        words(Modifier.weight(1f))
+                    }
+                }
+                }
+            }
+            item(key = "artist:songs") {
+                Text("Songs", fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+            }
+            when {
+                library.openPlaylistLoading -> item(key = "artist:loading") { LoadingSection() }
+                library.openPlaylistError != null -> item(key = "artist:problem") { LibraryProblem(library.openPlaylistError!!, state) }
+                playlist.tracks.isEmpty() -> item(key = "artist:empty") {
+                    Text(
+                        "${artist.provider.displayName} has no songs to play by ${artist.name}.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                else -> itemsIndexed(playlist.tracks, key = { _, track -> track.queueKey }) { index, track ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${index + 1}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                            modifier = Modifier.width(30.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Box(Modifier.weight(1f)) { TrackRow(track, playlist.tracks, state) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** An artist's picture, round; or, where the service shows none, four of their covers in a circle. */
+@Composable
+private fun ArtistPicture(picture: String?, songs: List<Track>, provider: ProviderType, modifier: Modifier) {
+    val circle = androidx.compose.foundation.shape.CircleShape
+    Box(modifier.clip(circle).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+        val covers = remember(songs) { songs.mapNotNull { it.artworkUrl }.distinct().take(4) }
+        when {
+            picture != null -> RemoteArtwork(picture, provider, Modifier.fillMaxSize())
+            covers.size >= 4 -> Column(Modifier.fillMaxSize()) {
+                covers.chunked(2).forEach { pair ->
+                    Row(Modifier.weight(1f)) { pair.forEach { RemoteArtwork(it, provider, Modifier.weight(1f).fillMaxHeight()) } }
+                }
+            }
+            covers.isNotEmpty() -> RemoteArtwork(covers.first(), provider, Modifier.fillMaxSize())
+            else -> Icon(Icons.Default.Person, null, Modifier.size(72.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** 950, 12K, 1.2M: a number of followers as a page says it. */
+internal fun followersLine(count: Long): String = when {
+    count >= 1_000_000 -> String.format(java.util.Locale.ROOT, "%.1fM", count / 1_000_000.0).replace(".0M", "M")
+    count >= 10_000 -> "${count / 1_000}K"
+    count >= 1_000 -> String.format(java.util.Locale.ROOT, "%.1fK", count / 1_000.0).replace(".0K", "K")
+    else -> count.toString()
 }
 
 @Composable
