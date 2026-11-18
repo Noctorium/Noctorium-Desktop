@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MusicNote
@@ -62,6 +63,7 @@ import app.noctorium.ui.skins.skinShape
 internal fun SearchKind.icon() = when (this) {
     SearchKind.RADIO -> Icons.Default.Radio
     SearchKind.ARTISTS -> Icons.Default.Person
+    SearchKind.PLAYLISTS -> Icons.AutoMirrored.Filled.QueueMusic
     SearchKind.MUSIC -> Icons.Default.MusicNote
 }
 
@@ -70,6 +72,7 @@ internal fun SearchKind.about(): String = when (this) {
     SearchKind.MUSIC -> "Songs, artists and albums from your services"
     SearchKind.RADIO -> "Live stations from every country"
     SearchKind.ARTISTS -> "Artists, each opening their page on their service"
+    SearchKind.PLAYLISTS -> "Playlists from YouTube Music, SoundCloud and the rest"
 }
 
 /**

@@ -258,6 +258,7 @@ internal object SettingsIndex {
         }
         page(SettingsPage.BROWSING) {
             setting("Browsing", "Cards, badges, the buttons on them, what Home shows and what the sidebar offers.", "browse", "pages")
+            setting("Home layout", "How Home is laid out: Classic, with more layouts to come.", "home layout", "home style", "home design", "layouts", "home page look")
             setting("Card size", "How big the covers on Home and in the library are.", "tile size", "thumbnail size", "grid size", "covers")
             setting(
                 "Service badges", "Whether a cover carries the mark of the service it comes from.",

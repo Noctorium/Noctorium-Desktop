@@ -166,8 +166,8 @@ internal fun QuickSearchBar(state: AppState, leave: (QuickExit) -> Unit, modifie
     fun act(key: QuickKey) {
         when (key) {
             QuickKey.UP, QuickKey.DOWN -> chosen = quickChoice(chosen, key, results.size)
-            // Artists are pages, not songs: the bar hands them to the Search page, which lists them.
-            QuickKey.PLAY -> if (ui.searchKind == SearchKind.ARTISTS) {
+            // Artists and playlists are pages, not songs: the bar hands them to the Search page, which lists them.
+            QuickKey.PLAY -> if (ui.searchKind == SearchKind.ARTISTS || ui.searchKind == SearchKind.PLAYLISTS) {
                 state.navigate(Destination.SEARCH)
                 leave(QuickExit.SEARCH_PAGE)
             } else results.getOrNull(chosen)?.let { track ->

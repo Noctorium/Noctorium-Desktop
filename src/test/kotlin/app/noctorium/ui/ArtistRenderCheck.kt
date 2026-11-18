@@ -7,6 +7,7 @@ import app.noctorium.desktopAppState
 import app.noctorium.domain.Artist
 import app.noctorium.domain.ProviderType
 import app.noctorium.domain.Track
+import app.noctorium.domain.isArtistPage
 import app.noctorium.settings.ThemePreset
 import java.io.File
 import kotlin.test.Test
@@ -50,15 +51,38 @@ class ArtistRenderCheck {
             waitForPage(tour, state, "Flume")
             tour.capture("artist-soundcloud", frames = 20)
 
+            // An album from their page, and Back to their page.
+            state.library.value.openArtist?.sections?.firstOrNull()?.playlists?.firstOrNull()?.let { album ->
+                state.openPlaylist(album)
+                repeat(100) { if (!state.library.value.openPlaylistLoading) return@repeat; tour.settle(2) }
+                tour.capture("artist-album", frames = 20)
+                state.closePlaylist()
+                tour.capture("artist-album-back", frames = 10)
+            }
+
             state.closePlaylist()
             state.navigate(Destination.SEARCH)
             state.setSearchKind(SearchKind.ARTISTS)
             state.search("odesza")
-            repeat(150) {
-                if (!state.ui.value.searchLoading && state.ui.value.searchResults.playlists.isNotEmpty()) return@repeat
+            repeat(600) {
+                if (!state.ui.value.searchLoading && state.ui.value.searchResults.playlists.any { it.provider == ProviderType.SOUNDCLOUD && it.title == "ODESZA" }) return@repeat
                 tour.settle(2)
             }
             tour.capture("search-artists", frames = 20)
+
+            state.setSearchKind(SearchKind.PLAYLISTS)
+            state.search("lofi hip hop")
+            repeat(600) {
+                if (!state.ui.value.searchLoading && state.ui.value.searchResults.playlists.any { !it.isArtistPage() }) return@repeat
+                tour.settle(2)
+            }
+            tour.capture("search-playlists", frames = 20)
+            state.setSearchKind(SearchKind.ARTISTS)
+            state.search("odesza")
+            repeat(600) {
+                if (!state.ui.value.searchLoading && state.ui.value.searchResults.playlists.any { it.isArtistPage() && it.provider == ProviderType.SOUNDCLOUD }) return@repeat
+                tour.settle(2)
+            }
 
             // An artist opened from Search, and Back: Search again, not the library.
             // As a card does: the page, then the library it is shown in.
@@ -73,6 +97,13 @@ class ArtistRenderCheck {
             state.openArtistOf(youTubeSong)
             waitForPage(tour, state, "Daft Punk")
             tour.capture("artist-narrow", frames = 30)
+
+            // A whole page, Albums and Playlists included, in a tall window. Last: a window opened again stops
+            // Swing's timers, and with them the search's pause before it asks.
+            tour.open(1280, 1700)
+            state.openArtistOf(soundCloudSong)
+            waitForPage(tour, state, "Flume")
+            tour.capture("artist-soundcloud-whole", frames = 30)
         } finally {
             state.setSearchKind(SearchKind.MUSIC)
             state.closePlaylist()
@@ -82,9 +113,13 @@ class ArtistRenderCheck {
     }
 
     private fun waitForPage(tour: WindowTour, state: AppState, title: String) {
-        repeat(150) {
+        repeat(600) {
             val library = state.library.value
-            if (library.openPlaylist?.title == title && !library.openPlaylistLoading) return
+            if (library.openPlaylist?.title == title && !library.openPlaylistLoading) {
+                // What their page says about them arrives after their songs.
+                repeat(60) { if (state.library.value.openArtist?.sections?.isNotEmpty() == true) return; tour.settle(2) }
+                return
+            }
             tour.settle(2)
         }
     }

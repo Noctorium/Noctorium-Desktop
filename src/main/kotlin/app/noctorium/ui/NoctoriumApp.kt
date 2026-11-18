@@ -1094,6 +1094,14 @@ private fun LibraryList(library: LibraryState, state: AppState, newPlaylist: () 
             Spacer(Modifier.height(14.dp))
         }
         Spacer(Modifier.height(6.dp))
+        // Each service's liked songs first, as wide cards of their own: what is opened most, where it is found first.
+        val liked = remember(library.playlists) { library.playlists.filter { it.isLikedCollection() } }
+        if (liked.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                liked.forEach { playlist -> LikedCard(playlist, Modifier.weight(1f).widthIn(max = 520.dp)) { state.openPlaylist(playlist) } }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
         if (library.localPlaylists.isNotEmpty()) {
             LazyColumn(
                 Modifier.heightIn(max = 260.dp),
@@ -1130,9 +1138,47 @@ private fun LibraryList(library: LibraryState, state: AppState, newPlaylist: () 
                 if (library.needsSoundCloudUsername) {
                     item { SoundCloudNamePrompt(state) }
                 }
-                items(library.playlists, key = { it.playlistKey }) { playlist ->
+                items(library.playlists.filterNot { it.isLikedCollection() }, key = { it.playlistKey }) { playlist ->
                     PlaylistRow(playlist) { state.openPlaylist(playlist) }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A service's liked songs as the library heads them: a wide card in the theme's own colours, a heart, the collection's
+ * name as the service calls it -- Liked Music, Liked tracks, Liked Songs -- and whose it is.
+ */
+@Composable
+private fun LikedCard(playlist: Playlist, modifier: Modifier = Modifier, open: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        onClick = open,
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Transparent,
+        modifier = modifier.height(96.dp),
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(Brush.linearGradient(listOf(scheme.primary.copy(alpha = .85f), scheme.tertiary.copy(alpha = .6f), scheme.primaryContainer))),
+        ) {
+            Row(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(scheme.onPrimary.copy(alpha = .18f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Default.Favorite, null, Modifier.size(30.dp), tint = scheme.onPrimary)
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(playlist.title, color = scheme.onPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        listOfNotNull(playlist.provider.displayName, playlist.trackCount?.let { if (it == 1) "1 song" else "$it songs" }).joinToString("  ·  "),
+                        color = scheme.onPrimary.copy(alpha = .85f),
+                        fontSize = 13.sp,
+                    )
+                }
+                Icon(Icons.Default.PlayArrow, null, Modifier.size(26.dp), tint = scheme.onPrimary.copy(alpha = .9f))
             }
         }
     }
@@ -1842,6 +1888,7 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
                 Text(
                     if (radio) "A station, a city or a kind of music: “jazz”, “BBC”, “Tokyo”"
                     else if (ui.searchKind == SearchKind.ARTISTS) "An artist's name, on every service or with !ytm, !sc, !sp, !bc, !vk, !am, !dz, !td for one"
+                    else if (ui.searchKind == SearchKind.PLAYLISTS) "A playlist's name or a mood: “lofi”, “gym”, “90s hits”, or !ytm, !sc for one service"
                     else "Artists, songs, albums and playlists, or !ytm, !sc, !sp, !bc, !vk, !am, !dz, !td for one service",
                 )
             },
@@ -1859,6 +1906,11 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
             return@Column
         }
         when {
+            // Playlists arrive service by service: those already in are shown while the rest are still asked.
+            ui.searchKind == SearchKind.PLAYLISTS && ui.searchQuery.isNotBlank() && ui.searchResults.playlists.isNotEmpty() -> Column {
+                if (ui.searchLoading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(bottom = 10.dp))
+                PlaylistResultsGrid(ui.searchResults.playlists, state)
+            }
             ui.searchLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
             ui.searchQuery.isBlank() -> EmptyScreen(
                 "Search ${ui.searchMode.displayName}",
@@ -1875,6 +1927,7 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
                 "Tidal is not set up",
                 searchHint(ui.searchMode, settings.spotify, settings.vk, settings.preferences.hybridSearch, settings.tidal),
             )
+            ui.searchKind == SearchKind.PLAYLISTS -> PlaylistResultsGrid(ui.searchResults.playlists, state)
             else -> SearchResultsList(ui.searchResults, state)
         }
     }
@@ -1949,7 +2002,11 @@ private fun SearchResultsList(results: SearchResults, state: AppState) {
         if (shelf.isNotEmpty()) {
             item(key = "search:shelf") {
                 PlaylistRowSection(
-                    if (shelf.all { it.isArtistPage() }) "Artists" else "Albums and artists",
+                    when {
+                        shelf.all { it.isArtistPage() } -> "Artists"
+                        results.tracks.isEmpty() && shelf.none { it.isArtistPage() || it.isAlbumPage() } -> "Playlists"
+                        else -> "Albums and artists"
+                    },
                     "From " + servicesLine(shelf.map { it.provider.displayName }.distinct()),
                     shelf,
                     state,
@@ -1964,6 +2021,34 @@ private fun SearchResultsList(results: SearchResults, state: AppState) {
         items(results.tracks, key = { it.queueKey }) { track ->
             TrackRow(track, results.tracks, state, fromSearch = true)
         }
+    }
+}
+
+/** A Playlists search's answer: every playlist found, as cards filling the page row after row. */
+@Composable
+private fun PlaylistResultsGrid(found: List<Playlist>, state: AppState) {
+    val playlists = remember(found) { found.distinctBy { it.playlistKey } }
+    if (playlists.isEmpty()) {
+        Text("No playlists by that name.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    val cardWidth = state.settings.collectAsState().value.preferences.cardSize.widthDp.dp
+    val grid = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+        columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(cardWidth + 16.dp),
+        state = grid,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+        contentPadding = chromePadding(bottom = 28.dp),
+    ) {
+        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+            Text(
+                "Playlists from " + servicesLine(playlists.map { it.provider.displayName }.distinct()),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
+        }
+        items(playlists.size, key = { playlists[it].playlistKey }) { index -> PlaylistCard(playlists[index], cardWidth, state) }
     }
 }
 
@@ -2001,6 +2086,21 @@ private fun ArtistDetail(playlist: Playlist, artist: app.noctorium.core.ArtistDe
             verticalArrangement = Arrangement.spacedBy(7.dp),
             contentPadding = chromePadding(bottom = 28.dp),
         ) {
+            // A wide picture across the top, where the service has one (YouTube Music), fading into the page.
+            // Always an item, even before there is a banner: one arriving later then grows at the top rather than
+            // being put above where the list is held, out of sight.
+            item(key = "artist:banner") {
+                artist.banner?.let { banner ->
+                    Box(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(22.dp))) {
+                        RemoteArtwork(banner, artist.provider, Modifier.fillMaxSize())
+                        Box(
+                            Modifier.fillMaxSize().background(
+                                Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.background.copy(alpha = .55f))),
+                            ),
+                        )
+                    }
+                }
+            }
             item(key = "artist:head") {
                 // Side by side where there is room; the picture above the words in a narrow window.
                 BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 22.dp)) {
@@ -2020,7 +2120,7 @@ private fun ArtistDetail(playlist: Playlist, artist: app.noctorium.core.ArtistDe
                             listOfNotNull(
                                 "On ${artist.provider.displayName}",
                                 playlist.tracks.size.takeIf { it > 0 && !library.openPlaylistLoading }?.let { if (it == 1) "1 song" else "$it songs" },
-                                artist.followers?.let { "${followersLine(it)} followers" },
+                                artist.followersLine,
                             ).joinToString("  ·  "),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 13.sp,
@@ -2067,21 +2167,37 @@ private fun ArtistDetail(playlist: Playlist, artist: app.noctorium.core.ArtistDe
                 } }
                 if (narrow) {
                     Column {
-                        ArtistPicture(artist.picture, playlist.tracks, artist.provider, Modifier.size(120.dp))
+                        ArtistPicture(artist.picture ?: artist.banner, playlist.tracks, artist.provider, Modifier.size(120.dp))
                         Spacer(Modifier.height(16.dp))
                         words(Modifier.fillMaxWidth())
                     }
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        ArtistPicture(artist.picture, playlist.tracks, artist.provider, Modifier.size(176.dp))
+                        ArtistPicture(artist.picture ?: artist.banner, playlist.tracks, artist.provider, Modifier.size(176.dp))
                         Spacer(Modifier.width(28.dp))
                         words(Modifier.weight(1f))
                     }
                 }
                 }
             }
-            item(key = "artist:songs") {
-                Text("Songs", fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+            // Their most played first, then their albums and playlists row by row, then the rest of their songs.
+            val popular = if (library.openPlaylistLoading) 0 else artist.popular.coerceAtMost(playlist.tracks.size)
+            if (popular > 0) {
+                item(key = "artist:popular") {
+                    Text("Popular", fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                }
+                itemsIndexed(playlist.tracks.take(popular), key = { _, track -> "popular:" + track.queueKey }) { index, track ->
+                    NumberedTrack(index, track, playlist.tracks, state)
+                }
+            }
+            artist.sections.forEach { section ->
+                item(key = "artist:section:" + section.id) {
+                    PlaylistRowSection(section.title, null, section.playlists, state)
+                }
+            }
+            val rest = playlist.tracks.drop(popular)
+            if (popular == 0 || rest.isNotEmpty()) item(key = "artist:songs") {
+                Text(if (popular > 0) "More songs" else "Songs", fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = if (popular > 0) 10.dp else 0.dp, bottom = 4.dp))
             }
             when {
                 library.openPlaylistLoading -> item(key = "artist:loading") { LoadingSection() }
@@ -2092,21 +2208,27 @@ private fun ArtistDetail(playlist: Playlist, artist: app.noctorium.core.ArtistDe
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                else -> itemsIndexed(playlist.tracks, key = { _, track -> track.queueKey }) { index, track ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${index + 1}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 13.sp,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                            modifier = Modifier.width(30.dp),
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Box(Modifier.weight(1f)) { TrackRow(track, playlist.tracks, state) }
-                    }
+                else -> itemsIndexed(rest, key = { _, track -> track.queueKey }) { index, track ->
+                    NumberedTrack(index, track, playlist.tracks, state)
                 }
             }
         }
+    }
+}
+
+/** A song on an artist's page, with its place in the list before it. */
+@Composable
+private fun NumberedTrack(index: Int, track: Track, queue: List<Track>, state: AppState) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "${index + 1}",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.width(30.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Box(Modifier.weight(1f)) { TrackRow(track, queue, state) }
     }
 }
 
@@ -4510,7 +4632,40 @@ internal fun TextSettingsPanel(preferences: NoctoriumPreferences, state: AppStat
 @Composable
 internal fun BrowsingSettingsPanel(preferences: NoctoriumPreferences, state: AppState) {
     SettingsPageColumn {
+        HomeLayoutCard(preferences, state)
         BrowsingSettingsCard(preferences, state)
+    }
+}
+
+/** How Home is laid out: one layout so far, with room in the list for the ones to come. */
+@Composable
+internal fun HomeLayoutCard(preferences: NoctoriumPreferences, state: AppState) {
+    SettingsPanelCard {
+        CardHeading(Icons.Default.GridView, "Home layout")
+        Spacer(Modifier.height(8.dp))
+        SettingAnchor("Home layout") {
+            Column {
+                app.noctorium.settings.HomeLayout.entries.forEach { choice ->
+                    val selected = preferences.homeLayout == choice
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { state.setHomeLayout(choice) }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        RadioButton(selected, { state.setHomeLayout(choice) })
+                        Column(Modifier.weight(1f).padding(top = 11.dp, bottom = 6.dp)) {
+                            Text(choice.displayName, fontSize = 13.sp)
+                            Text(choice.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                        }
+                    }
+                }
+                Text(
+                    "More layouts are on their way.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(start = 12.dp, top = 2.dp),
+                )
+            }
+        }
     }
 }
 

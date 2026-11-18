@@ -379,6 +379,7 @@ tasks.test {
     System.getProperty("noctorium.renderConnect")?.let { systemProperty("noctorium.renderConnect", it) }
     // Where ArtistRenderCheck draws artists' pages and Artists in Search, from the real services.
     System.getProperty("noctorium.renderArtists")?.let { systemProperty("noctorium.renderArtists", it) }
+    System.getProperty("noctorium.renderLiked")?.let { systemProperty("noctorium.renderLiked", it) }
     // A live run wants the real programs, and the test folder above has none of its own. They are named
     // through the same variables a listener can set, so the lookup being tested is the real one.
     val installed = System.getenv("LOCALAPPDATA")?.let { file("$it/Noctorium/bin") }
