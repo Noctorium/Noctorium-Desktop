@@ -367,6 +367,11 @@ fun NoctoriumApp(
           LocalPageGlow provides glow?.let { PageGlow(it, glowColour) },
           LocalShadowBackdrop provides shadowBackdrop,
       ) {
+        // A first start: the setup, in place of everything else, until it is finished or skipped. See SetupStep.
+        if (!preferences.setupDone) {
+            Surface(Modifier.fillMaxSize()) { FirstTimeSetup(appState) }
+            return@CompositionLocalProvider
+        }
         if (shortcutsOpen) ShortcutsSheet(shortcuts) { shortcutsOpen = false }
         if (quickSearchOpen) {
             // Over the whole window, and holding the keyboard while it is open; closing hands the keyboard back
