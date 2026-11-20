@@ -316,6 +316,7 @@ private fun QuickResultsList(results: List<Track>, chosen: Int, searching: Boole
         )
         searching || ui.searchQuery != text -> QuickLine("Searching $where…")
         ui.errorMessage != null -> QuickLine(ui.errorMessage.orEmpty(), error = true)
+        app.noctorium.domain.hasMusicLink(text) -> QuickLine("A music link: Enter plays it.")
         else -> QuickLine("Nothing on $where for “${SearchBangs.parse(text).query}”.")
     }
 }
