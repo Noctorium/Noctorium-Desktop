@@ -21,6 +21,8 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.*
 import androidx.compose.foundation.Canvas
@@ -1899,7 +1901,9 @@ internal fun SearchScreen(ui: AppUiState, state: AppState, focusRequest: Int = 0
             },
             singleLine = true,
             shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth().widthIn(max = 860.dp).focusRequester(box).tracksTyping(),
+            modifier = Modifier.fillMaxWidth().widthIn(max = 860.dp).focusRequester(box).tracksTyping()
+                // Enter on a music link plays it, as the Link page would.
+                .onPreviewKeyEvent { it.type == KeyEventType.KeyDown && (it.key == Key.Enter || it.key == Key.NumPadEnter) && state.openSearchLink(ui.searchQuery) },
         )
         Spacer(Modifier.height(12.dp))
         if (radio) RadioCountryPicker(ui, state::setRadioCountry) else SearchModePicker(ui.activeSearchMode, state::setSearchMode)
