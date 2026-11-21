@@ -6967,6 +6967,25 @@ internal fun NoctoriumAccountPanel(state: AppState) {
                         Text(if (creating) "I already have one" else "Create an account")
                     }
                 }
+                Spacer(Modifier.height(14.dp))
+                val waiting = account.deviceSignIn
+                if (waiting == null) {
+                    OutlinedButton(state::startDeviceSignIn, enabled = !account.busy, modifier = Modifier.fillMaxWidth()) {
+                        Text("Sign in with Discord, Telegram or GitHub")
+                    }
+                } else {
+                    Text("Allow this app in your browser. Check it shows this code:", fontSize = 12.sp)
+                    Text(waiting.code, fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                    Text(
+                        "Waiting for you to allow it… or open ${waiting.url.substringBefore('?')} on another device.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        TextButton(state::openDeviceSignInPage) { Text("Open in browser") }
+                        TextButton(state::cancelDeviceSignIn) { Text("Cancel") }
+                    }
+                }
             }
         }
 
