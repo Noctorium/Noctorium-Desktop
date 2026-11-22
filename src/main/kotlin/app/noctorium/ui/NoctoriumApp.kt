@@ -6971,7 +6971,7 @@ internal fun NoctoriumAccountPanel(state: AppState) {
                 val waiting = account.deviceSignIn
                 if (waiting == null) {
                     OutlinedButton(state::startDeviceSignIn, enabled = !account.busy, modifier = Modifier.fillMaxWidth()) {
-                        Text("Sign in with Discord, Telegram or GitHub")
+                        Text("Sign in with Discord or Telegram")
                     }
                 } else {
                     Text("Allow this app in your browser. Check it shows this code:", fontSize = 12.sp)
