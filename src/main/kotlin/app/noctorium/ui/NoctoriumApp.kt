@@ -6901,6 +6901,8 @@ internal fun NoctoriumAccountPanel(state: AppState) {
             }
             Spacer(Modifier.height(14.dp))
             SettingsPanelCard { ConnectSettingsRows(state) }
+        } else if (account.verification != null) {
+            SettingsPanelCard { NoctoriumVerification(state, account.verification!!, account.busy) }
         } else {
             SettingsPanelCard {
                 Text(
@@ -7008,5 +7010,72 @@ private fun ListeningStat(value: String, label: String, modifier: Modifier = Mod
     Column(modifier) {
         Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+    }
+}
+
+/**
+ * Two-step verification, after the password: a code from the authenticator app, one the login bot sends on Telegram,
+ * or a backup code. With both ways on, either one this time; in strict mode, both.
+ */
+@Composable
+private fun NoctoriumVerification(state: AppState, asked: app.noctorium.account.VerificationChallenge, busy: Boolean) {
+    var chosen by remember(asked.ticket) { mutableStateOf(asked.methods.first()) }
+    var backup by remember(asked.ticket) { mutableStateOf(false) }
+    val codes = remember(asked.ticket) { mutableStateMapOf<String, String>() }
+    val wanted = when {
+        backup -> listOf("backup")
+        asked.strict -> asked.stillNeeded
+        else -> listOf(chosen)
+    }
+    fun label(way: String) = when (way) {
+        "totp" -> "The code your authenticator app shows"
+        "telegram" -> "The code Telegram sent you"
+        else -> "A backup code"
+    }
+
+    Text("Two-step verification", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+    Text(
+        if (asked.strict) "Strict mode is on: this sign-in needs both codes." else "Enter a code to finish signing in.",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 12.sp,
+    )
+    Spacer(Modifier.height(12.dp))
+    if (!asked.strict && asked.methods.size > 1 && !backup) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            asked.methods.forEach { way ->
+                FilterChip(
+                    selected = chosen == way,
+                    onClick = { chosen = way },
+                    label = { Text(if (way == "totp") "Authenticator app" else "Telegram") },
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+    wanted.forEach { way ->
+        OutlinedTextField(
+            codes[way].orEmpty(),
+            { codes[way] = it },
+            label = { Text(label(way)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().tracksTyping(),
+        )
+        if (way == "telegram") {
+            TextButton(state::sendNoctoriumTelegramCode) { Text("Send me a code on Telegram") }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(
+            {
+                state.verifyNoctorium(totp = codes["totp"], telegram = codes["telegram"], backup = codes["backup"])
+                codes.clear()
+            },
+            enabled = !busy && wanted.all { !codes[it].isNullOrBlank() },
+        ) {
+            if (busy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text("Continue")
+        }
+        TextButton({ backup = !backup; codes.clear() }) { Text(if (backup) "Use my app or Telegram" else "Use a backup code") }
+        TextButton(state::cancelNoctoriumVerification) { Text("Cancel") }
     }
 }
