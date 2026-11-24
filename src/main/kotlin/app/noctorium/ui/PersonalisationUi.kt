@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Check
@@ -321,6 +322,7 @@ internal fun Destination.sidebarLabel(): String = when (this) {
     Destination.QUEUE -> "Queue"
     Destination.SETTINGS -> "Settings"
     Destination.CONNECT -> "Connect"
+    Destination.ACCOUNT -> "Account"
 }
 
 internal fun Destination.sidebarIcon(): ImageVector = when (this) {
@@ -333,6 +335,7 @@ internal fun Destination.sidebarIcon(): ImageVector = when (this) {
     Destination.QUEUE -> Icons.AutoMirrored.Filled.QueueMusic
     Destination.SETTINGS -> Icons.Default.Settings
     Destination.CONNECT -> Icons.Default.Devices
+    Destination.ACCOUNT -> Icons.Default.AccountCircle
 }
 
 // --- Announcing tracks ---

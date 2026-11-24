@@ -524,6 +524,7 @@ internal object SettingsIndex {
             )
             setting("Opening", "The page Noctorium opens on.", "start page", "first page")
             setting("Open Noctorium on", "Which page Noctorium opens on: Home, Search, the library and more.", "start page", "home page", "default page", "launch page")
+            setting("Settings button", "Settings on Home beside your picture, or in the sidebar.", "gear", "settings gear", "toolbar", "sidebar", "cog")
         }
         page(SettingsPage.SHORTCUTS) {
             setting(

@@ -74,14 +74,14 @@ import app.noctorium.ui.sidebarShows
  * which is what is playing.
  */
 @Composable
-internal fun SkinRail(selected: Destination, hidden: Set<Destination>, playing: Track?, navigate: (Destination) -> Unit) {
-    if (skin() == ThemeSkin.WINDOWS_XP) TaskPane(selected, hidden, playing, navigate) else ToolbarRail(selected, hidden, navigate)
+internal fun SkinRail(selected: Destination, hidden: Set<Destination>, settings: Boolean, playing: Track?, navigate: (Destination) -> Unit) {
+    if (skin() == ThemeSkin.WINDOWS_XP) TaskPane(selected, hidden, settings, playing, navigate) else ToolbarRail(selected, hidden, settings, navigate)
 }
 
 // --- 98: the toolbar ---
 
 @Composable
-private fun ToolbarRail(selected: Destination, hidden: Set<Destination>, navigate: (Destination) -> Unit) = BoxWithConstraints(
+private fun ToolbarRail(selected: Destination, hidden: Set<Destination>, settings: Boolean, navigate: (Destination) -> Unit) = BoxWithConstraints(
     Modifier.width(86.dp).fillMaxHeight(),
 ) {
     // A window near its shortest keeps every button, Settings at the foot included, by making them a little shorter.
@@ -114,8 +114,10 @@ private fun ToolbarRail(selected: Destination, hidden: Set<Destination>, navigat
             item(Destination.CONNECT)
         }
         Spacer(Modifier.weight(1f))
-        EtchedSeparator(Modifier.padding(vertical = 5.dp))
-        item(Destination.SETTINGS)
+        if (settings) {
+            EtchedSeparator(Modifier.padding(vertical = 5.dp))
+            item(Destination.SETTINGS)
+        }
     }
 }
 
@@ -183,7 +185,7 @@ private fun ToolbarItem(destination: Destination, chosen: Boolean, height: Dp, a
 // --- XP: the task pane ---
 
 @Composable
-private fun TaskPane(selected: Destination, hidden: Set<Destination>, playing: Track?, navigate: (Destination) -> Unit) {
+private fun TaskPane(selected: Destination, hidden: Set<Destination>, settings: Boolean, playing: Track?, navigate: (Destination) -> Unit) {
     @Composable
     fun ColumnScope.link(destination: Destination) {
         if (sidebarShows(destination, hidden)) TaskLink(destination, selected == destination) { navigate(destination) }
@@ -211,7 +213,7 @@ private fun TaskPane(selected: Destination, hidden: Set<Destination>, playing: T
                 link(Destination.CONNECT)
             }
         }
-        TaskPanel("Other places") { link(Destination.SETTINGS) }
+        if (settings) TaskPanel("Other places") { link(Destination.SETTINGS) }
         TaskPanel("Details") {
             if (playing == null) {
                 Text("Nothing is playing.", fontSize = 11.sp, color = Luna.Text)

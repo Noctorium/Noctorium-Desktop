@@ -401,10 +401,12 @@ fun NoctoriumApp(
             // A Glow theme's light on the page, under everything on it: the sidebar and the player bar are drawn
             // in the page's colour over it and stay dark, the screens leave it showing between what they hold.
             Row(Modifier.weight(1f).pageGlow()) {
+                // With the Settings button on Home, the sidebar leaves Settings out.
+                val settingsInRail = preferences.settingsButton == SettingsButton.TOOLBAR
                 if (skin.isWindows) {
-                    SkinRail(ui.destination, preferences.desktop.hiddenDestinations, queue.current, appState::navigate)
+                    SkinRail(ui.destination, preferences.desktop.hiddenDestinations, settingsInRail, queue.current, appState::navigate)
                 } else {
-                    NavigationRail(ui.destination, preferences.desktop.hiddenDestinations, appState::navigate)
+                    NavigationRail(ui.destination, preferences.desktop.hiddenDestinations, settingsInRail, appState::navigate)
                 }
                 Column(Modifier.weight(1f)) {
                     PlaybackToolsBanner { openSettingsPage(appState, SettingsPage.PLAYBACK_TOOLS) }
@@ -425,6 +427,7 @@ fun NoctoriumApp(
                                 Destination.QUEUE -> BrowsingPane { QueueScreen(queue, appState) }
                                 Destination.SETTINGS -> SettingsScreen(appState)
                                 Destination.CONNECT -> BrowsingPane { ConnectScreen(playback, appState) }
+                                Destination.ACCOUNT -> BrowsingPane { AccountScreen(appState) }
                             }
                         }
                       }
@@ -549,7 +552,7 @@ internal fun BoxScope.FloatingContent(
  * it still go there, so a page somebody rarely visits costs them no room and is still a key away.
  */
 @Composable
-private fun NavigationRail(selected: Destination, hidden: Set<Destination>, navigate: (Destination) -> Unit) = BoxWithConstraints(
+private fun NavigationRail(selected: Destination, hidden: Set<Destination>, settings: Boolean, navigate: (Destination) -> Unit) = BoxWithConstraints(
     Modifier.width(RAIL_WIDTH).fillMaxHeight(),
 ) {
     // A window near its shortest keeps every item, Settings at the foot included, by spacing them a little closer.
@@ -609,7 +612,7 @@ private fun NavigationRail(selected: Destination, hidden: Set<Destination>, navi
             item(Destination.CONNECT)
         }
         Spacer(Modifier.weight(1f))
-        item(Destination.SETTINGS)
+        if (settings) item(Destination.SETTINGS)
     } }
 }
 
@@ -651,7 +654,16 @@ internal fun HomeScreen(ui: AppUiState, state: AppState) {
         item {
             Spacer(Modifier.height(28.dp))
             // The filter stays when the greeting goes: it is how the rest of the page is chosen.
-            HomeHeader(greeting().takeIf { home.greeting }) { FilterChips(ui.providerFilter, state::setFilter) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) {
+                    HomeHeader(greeting().takeIf { home.greeting }) { FilterChips(ui.providerFilter, state::setFilter) }
+                }
+                Spacer(Modifier.width(16.dp))
+                if (state.settings.collectAsState().value.preferences.settingsButton == SettingsButton.HOME) {
+                    IconButton({ state.navigate(Destination.SETTINGS) }) { Icon(Icons.Default.Settings, "Settings") }
+                }
+                AccountPicture(state, 36.dp) { state.navigate(Destination.ACCOUNT) }
+            }
             Spacer(Modifier.height(20.dp))
         }
         ui.errorMessage?.let { message ->
@@ -4701,6 +4713,7 @@ internal fun StartPageCard(preferences: NoctoriumPreferences, state: AppState) {
         CardHeading(Icons.Default.Start, "Opening")
         Spacer(Modifier.height(12.dp))
         ChoiceRow("Open Noctorium on", StartPage.entries, preferences.startPage, { it.displayName }, state::setStartPage)
+        ChoiceRow("Settings button", SettingsButton.entries, preferences.settingsButton, { it.displayName }, state::setSettingsButton)
     }
 }
 
@@ -6899,6 +6912,8 @@ internal fun NoctoriumAccountPanel(state: AppState) {
                 AccountFact("A song counts once you have heard 30 seconds of it, or half of it.")
                 AccountFact("The same figures are on the website, under your account.")
             }
+            Spacer(Modifier.height(14.dp))
+            NoctoriumProfileCards(state, user, account)
             Spacer(Modifier.height(14.dp))
             SettingsPanelCard { ConnectSettingsRows(state) }
         } else if (account.verification != null) {

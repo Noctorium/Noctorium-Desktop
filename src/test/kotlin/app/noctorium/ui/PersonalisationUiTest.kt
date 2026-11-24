@@ -211,7 +211,7 @@ class PersonalisationUiTest {
             assertFalse(sidebarShows(destination, setOf(destination)), "$destination was not hidden")
             assertTrue(sidebarShows(destination, emptySet()), "$destination was hidden unasked")
         }
-        assertEquals(Destination.entries - Destination.HOME - Destination.SETTINGS, HIDEABLE_DESTINATIONS)
+        assertEquals(Destination.entries - Destination.HOME - Destination.SETTINGS - Destination.ACCOUNT, HIDEABLE_DESTINATIONS)
     }
 
     // --- Announcing tracks ---
