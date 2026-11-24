@@ -280,6 +280,10 @@ internal object SettingsIndex {
                 "Pages in the sidebar", "Which pages the sidebar offers. Home and Settings always stay.",
                 "sidebar", "navigation", "menu", "hide pages", "rail", anchor = "In the sidebar",
             )
+            setting(
+                "Playlists in the sidebar", "Your library's playlists under the sidebar's pages, scrolling on their own.",
+                "sidebar playlists", "playlists", "rail", "spotify sidebar",
+            )
         }
 
         page(SettingsPage.SOUND) {

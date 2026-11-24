@@ -406,7 +406,9 @@ fun NoctoriumApp(
                 if (skin.isWindows) {
                     SkinRail(ui.destination, preferences.desktop.hiddenDestinations, settingsInRail, queue.current, appState::navigate)
                 } else {
-                    NavigationRail(ui.destination, preferences.desktop.hiddenDestinations, settingsInRail, appState::navigate)
+                    NavigationRail(ui.destination, preferences.desktop.hiddenDestinations, settingsInRail, appState::navigate) {
+                        if (preferences.desktop.sidebarPlaylists) SidebarPlaylists(appState, it)
+                    }
                 }
                 Column(Modifier.weight(1f)) {
                     PlaybackToolsBanner { openSettingsPage(appState, SettingsPage.PLAYBACK_TOOLS) }
@@ -552,7 +554,14 @@ internal fun BoxScope.FloatingContent(
  * it still go there, so a page somebody rarely visits costs them no room and is still a key away.
  */
 @Composable
-private fun NavigationRail(selected: Destination, hidden: Set<Destination>, settings: Boolean, navigate: (Destination) -> Unit) = BoxWithConstraints(
+private fun NavigationRail(
+    selected: Destination,
+    hidden: Set<Destination>,
+    settings: Boolean,
+    navigate: (Destination) -> Unit,
+    /** What fills the room between the pages and Settings -- the playlists, when asked for -- told whether it is compact. */
+    middle: @Composable ColumnScope.(Boolean) -> Unit = {},
+) = BoxWithConstraints(
     Modifier.width(RAIL_WIDTH).fillMaxHeight(),
 ) {
     // A window near its shortest keeps every item, Settings at the foot included, by spacing them a little closer.
@@ -611,9 +620,64 @@ private fun NavigationRail(selected: Destination, hidden: Set<Destination>, sett
             item(Destination.QUEUE)
             item(Destination.CONNECT)
         }
+        middle(compact)
         Spacer(Modifier.weight(1f))
         if (settings) item(Destination.SETTINGS)
     } }
+}
+
+/**
+ * The library's playlists under the sidebar's pages, liked songs first, scrolling on their own so a long library
+ * needs no taller window. A click opens the playlist in the library.
+ */
+@Composable
+private fun ColumnScope.SidebarPlaylists(state: AppState, compact: Boolean) {
+    val library by state.library.collectAsState()
+    LaunchedEffect(Unit) { state.refreshLibrary() }
+    val ordered = remember(library.playlists) { library.playlists.sortedBy { !it.isLikedCollection() } }
+    Spacer(Modifier.height(if (compact) 10.dp else 18.dp))
+    Text(
+        "PLAYLISTS",
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .6f),
+        fontSize = 10.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 12.dp, bottom = 6.dp),
+    )
+    val list = rememberLazyListState()
+    // As tall as its playlists, and never pushing Settings out of the window.
+    LazyColumn(Modifier.weight(1f, fill = false).classicScrollbar(list), state = list) {
+        items(library.localPlaylists, key = { "local:${it.id}" }) { playlist ->
+            SidebarPlaylist(playlist.title, compact) {
+                state.openLocalPlaylist(playlist)
+                state.navigate(Destination.LIBRARY)
+            }
+        }
+        items(ordered, key = { "playlist:${it.playlistKey}" }) { playlist ->
+            SidebarPlaylist(playlist.title, compact) {
+                state.openPlaylist(playlist)
+                state.navigate(Destination.LIBRARY)
+            }
+        }
+        if (library.loading && library.playlists.isEmpty() && library.localPlaylists.isEmpty()) {
+            item { Text("Loading…", Modifier.padding(start = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
+        }
+    }
+}
+
+@Composable
+private fun SidebarPlaylist(title: String, compact: Boolean, open: () -> Unit) {
+    Text(
+        title,
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = open)
+            .padding(horizontal = 12.dp, vertical = if (compact) 4.dp else 7.dp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 13.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 /**
@@ -4906,6 +4970,12 @@ internal fun BrowsingSettingsCard(preferences: NoctoriumPreferences, state: AppS
         ) { destination, shown ->
             state.updateDesktop { copy(hiddenDestinations = if (shown) hiddenDestinations - destination else hiddenDestinations + destination) }
         }
+        Spacer(Modifier.height(12.dp))
+        ToggleRow(
+            "Playlists in the sidebar",
+            "Your library's playlists under the sidebar's pages, scrolling on their own; a click opens one.",
+            preferences.desktop.sidebarPlaylists,
+        ) { on -> state.updateDesktop { copy(sidebarPlaylists = on) } }
         Spacer(Modifier.height(6.dp))
         Text(
             "Home and Settings are always there. A page left out is still a key away, since 1 to 8 go to each " +
