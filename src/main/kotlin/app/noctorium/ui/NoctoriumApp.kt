@@ -620,8 +620,8 @@ private fun NavigationRail(
             item(Destination.QUEUE)
             item(Destination.CONNECT)
         }
-        middle(compact)
-        Spacer(Modifier.weight(1f))
+        // All the room between the pages and Settings is the middle's: a spacer beside it took half.
+        Column(Modifier.weight(1f).fillMaxWidth()) { middle(compact) }
         if (settings) item(Destination.SETTINGS)
     } }
 }
