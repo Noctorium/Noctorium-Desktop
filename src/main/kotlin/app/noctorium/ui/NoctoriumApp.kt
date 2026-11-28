@@ -429,7 +429,7 @@ fun NoctoriumApp(
                                 Destination.QUEUE -> BrowsingPane { QueueScreen(queue, appState) }
                                 Destination.SETTINGS -> SettingsScreen(appState)
                                 Destination.CONNECT -> BrowsingPane { ConnectScreen(playback, appState) }
-                                Destination.ACCOUNT -> BrowsingPane { AccountScreen(appState) }
+                                Destination.ACCOUNT -> BrowsingPane { if (AccountView.stats) StatsScreen(appState) else AccountScreen(appState) }
                             }
                         }
                       }
@@ -726,7 +726,23 @@ internal fun HomeScreen(ui: AppUiState, state: AppState) {
                 if (state.settings.collectAsState().value.preferences.settingsButton == SettingsButton.HOME) {
                     IconButton({ state.navigate(Destination.SETTINGS) }) { Icon(Icons.Default.Settings, "Settings") }
                 }
-                AccountPicture(state, 36.dp) { state.navigate(Destination.ACCOUNT) }
+                // The picture opens a choice of the account or its Stats, as on the phone.
+                Box {
+                    var menu by remember { mutableStateOf(false) }
+                    AccountPicture(state, 36.dp) { menu = true }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Account") },
+                            leadingIcon = { Icon(Icons.Default.AccountCircle, null) },
+                            onClick = { menu = false; AccountView.stats = false; state.navigate(Destination.ACCOUNT) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Stats") },
+                            leadingIcon = { Icon(Icons.Default.Insights, null) },
+                            onClick = { menu = false; AccountView.stats = true; state.navigate(Destination.ACCOUNT) },
+                        )
+                    }
+                }
             }
             Spacer(Modifier.height(20.dp))
         }
